@@ -11,6 +11,7 @@ namespace UnderwaterGliderTwin.Visualization
     {
         private LineRenderer travelledLine;
         private PlaybackController playback;
+        private Vector3[] travelledBuffer = Array.Empty<Vector3>();
         private int lastTravelledCount = -1;
 
         public Vector3[] FullTrajectoryPoints { get; private set; } = Array.Empty<Vector3>();
@@ -19,6 +20,8 @@ namespace UnderwaterGliderTwin.Visualization
         {
             playback = playbackController;
             FullTrajectoryPoints = TrajectorySampler.Sample(frames, mapper, 8000);
+            travelledBuffer = new Vector3[FullTrajectoryPoints.Length];
+            Array.Copy(FullTrajectoryPoints, travelledBuffer, FullTrajectoryPoints.Length);
 
             var fullLine = CreateLine("FullTrajectory", new Color(0.18f, 0.45f, 0.65f, 0.55f), 0.08f);
             fullLine.positionCount = FullTrajectoryPoints.Length;
@@ -59,10 +62,7 @@ namespace UnderwaterGliderTwin.Visualization
             }
 
             travelledLine.positionCount = count;
-            for (var i = 0; i < count; i++)
-            {
-                travelledLine.SetPosition(i, FullTrajectoryPoints[i]);
-            }
+            travelledLine.SetPositions(travelledBuffer);
 
             lastTravelledCount = count;
         }

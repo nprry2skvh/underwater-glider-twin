@@ -41,7 +41,10 @@ namespace UnderwaterGliderTwin.Bootstrap
             var csvPath = RuntimePathResolver.ResolveCsvPath();
             Logger.AppendLoad($"Loading CSV: {csvPath}");
 
+            var loadTimer = System.Diagnostics.Stopwatch.StartNew();
             LoadResult = new CsvTelemetrySource(csvPath).Load();
+            loadTimer.Stop();
+            Logger.AppendLoad($"CSV load completed in {loadTimer.Elapsed.TotalSeconds:0.00} seconds.");
             Logger.AppendLoad($"Loaded {LoadResult.Frames.Count} frames; skipped {LoadResult.SkippedRows} rows.");
             foreach (var error in LoadResult.Errors)
             {

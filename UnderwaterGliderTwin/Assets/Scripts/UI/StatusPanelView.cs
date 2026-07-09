@@ -8,9 +8,11 @@ namespace UnderwaterGliderTwin.UI
 {
     public sealed class StatusPanelView : MonoBehaviour
     {
+        private const float MinUiUpdateIntervalSeconds = 1f / 15f;
         private PlaybackController playback;
         private AlarmEvaluator alarmEvaluator;
         private TwinLogger logger;
+        private float nextAllowedUiTime;
         private Image alarmBackground;
         private Text modeValue;
         private Text stateValue;
@@ -46,16 +48,33 @@ namespace UnderwaterGliderTwin.UI
             alarmBackground = alarmRect.GetComponent<Image>();
             alarmValue = UiFactory.Text("AlarmValue", alarmRect, "normal", 13, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(245f, 46f));
 
-            playback.FrameChanged += OnFrameChanged;
-            OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01);
+            playback.FrameChangedWithReason += OnFrameChanged;
+            OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
         }
 
         private void OnDestroy()
         {
             if (playback != null)
             {
-                playback.FrameChanged -= OnFrameChanged;
+                playback.FrameChangedWithReason -= OnFrameChanged;
             }
+        }
+
+        public bool ShouldUpdateForFrame(float timeSeconds, FrameUpdateReason reason)
+        {
+            if (reason == FrameUpdateReason.Initial || reason == FrameUpdateReason.Seek)
+            {
+                nextAllowedUiTime = timeSeconds + MinUiUpdateIntervalSeconds;
+                return true;
+            }
+
+            if (timeSeconds < nextAllowedUiTime)
+            {
+                return false;
+            }
+
+            nextAllowedUiTime = timeSeconds + MinUiUpdateIntervalSeconds;
+            return true;
         }
 
         private static Text AddRow(Transform panel, string label, string valueName, float y)
@@ -64,8 +83,13 @@ namespace UnderwaterGliderTwin.UI
             return UiFactory.Text(valueName, panel, "-", 13, TextAnchor.MiddleRight, Color.white, new Vector2(-82f, y), new Vector2(150f, 24f));
         }
 
-        private void OnFrameChanged(TelemetryFrame frame, int index, float progress01)
+        private void OnFrameChanged(TelemetryFrame frame, int index, float progress01, FrameUpdateReason reason)
         {
+            if (!ShouldUpdateForFrame(Time.unscaledTime, reason))
+            {
+                return;
+            }
+
             modeValue.text = frame.WorkMode;
             stateValue.text = frame.RunState;
             targetSegmentValue.text = $"{frame.TargetSegment:0}";

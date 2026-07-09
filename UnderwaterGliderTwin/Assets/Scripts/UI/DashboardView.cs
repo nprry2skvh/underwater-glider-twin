@@ -7,7 +7,9 @@ namespace UnderwaterGliderTwin.UI
 {
     public sealed class DashboardView : MonoBehaviour
     {
+        private const float MinUiUpdateIntervalSeconds = 1f / 15f;
         private PlaybackController playback;
+        private float nextAllowedUiTime;
         private Text depthValue;
         private Text headingValue;
         private Text pitchValue;
@@ -35,16 +37,33 @@ namespace UnderwaterGliderTwin.UI
             rpmValue = AddRow(panel, "RPM", "RpmValue", -114f);
             pistonValue = AddRow(panel, "Piston", "PistonValue", -144f);
 
-            playback.FrameChanged += OnFrameChanged;
-            OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01);
+            playback.FrameChangedWithReason += OnFrameChanged;
+            OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
         }
 
         private void OnDestroy()
         {
             if (playback != null)
             {
-                playback.FrameChanged -= OnFrameChanged;
+                playback.FrameChangedWithReason -= OnFrameChanged;
             }
+        }
+
+        public bool ShouldUpdateForFrame(float timeSeconds, FrameUpdateReason reason)
+        {
+            if (reason == FrameUpdateReason.Initial || reason == FrameUpdateReason.Seek)
+            {
+                nextAllowedUiTime = timeSeconds + MinUiUpdateIntervalSeconds;
+                return true;
+            }
+
+            if (timeSeconds < nextAllowedUiTime)
+            {
+                return false;
+            }
+
+            nextAllowedUiTime = timeSeconds + MinUiUpdateIntervalSeconds;
+            return true;
         }
 
         private static Text AddRow(Transform panel, string label, string valueName, float y)
@@ -53,8 +72,13 @@ namespace UnderwaterGliderTwin.UI
             return UiFactory.Text(valueName, panel, "-", 14, TextAnchor.MiddleRight, Color.white, new Vector2(156f, y), new Vector2(135f, 24f));
         }
 
-        private void OnFrameChanged(TelemetryFrame frame, int index, float progress01)
+        private void OnFrameChanged(TelemetryFrame frame, int index, float progress01, FrameUpdateReason reason)
         {
+            if (!ShouldUpdateForFrame(Time.unscaledTime, reason))
+            {
+                return;
+            }
+
             depthValue.text = $"{frame.DepthM:0.0} m";
             headingValue.text = $"{frame.HeadingDeg:0.0} deg";
             pitchValue.text = $"{frame.PitchDeg:0.0} deg";

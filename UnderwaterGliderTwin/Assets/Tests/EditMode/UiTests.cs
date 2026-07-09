@@ -35,6 +35,16 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void DashboardView_ThrottlesPlaybackButAllowsSeekUpdate()
+        {
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            Assert.That(dashboard.ShouldUpdateForFrame(0f, FrameUpdateReason.Initial), Is.True);
+            Assert.That(dashboard.ShouldUpdateForFrame(0.01f, FrameUpdateReason.Playback), Is.False);
+            Assert.That(dashboard.ShouldUpdateForFrame(0.01f, FrameUpdateReason.Seek), Is.True);
+        }
+
+        [Test]
         public void StatusPanelView_DisplaysAlarmAndWritesLog()
         {
             var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-log-" + System.Guid.NewGuid().ToString("N"));

@@ -30,6 +30,20 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(model.CurrentFrame.RowIndex, Is.EqualTo(model.CurrentIndex));
         }
 
+        [Test]
+        public void PlaybackController_ReportsSeekReason()
+        {
+            var controller = new UnityEngine.GameObject("Playback").AddComponent<PlaybackController>();
+            var receivedReason = FrameUpdateReason.Initial;
+            controller.Initialize(new PlaybackModel(Frames(10), rowsPerSecond: 10f));
+            controller.FrameChangedWithReason += (frame, index, progress, reason) => receivedReason = reason;
+
+            controller.Seek(0.5f);
+
+            Assert.That(receivedReason, Is.EqualTo(FrameUpdateReason.Seek));
+            UnityEngine.Object.DestroyImmediate(controller.gameObject);
+        }
+
         private static IReadOnlyList<TelemetryFrame> Frames(int count)
         {
             var frames = new List<TelemetryFrame>();
