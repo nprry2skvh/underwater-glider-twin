@@ -4,6 +4,7 @@ using UnderwaterGliderTwin.Logging;
 using UnderwaterGliderTwin.Mapping;
 using UnderwaterGliderTwin.Playback;
 using UnderwaterGliderTwin.Telemetry;
+using UnderwaterGliderTwin.UI;
 using UnderwaterGliderTwin.Visualization;
 
 namespace UnderwaterGliderTwin.Bootstrap
@@ -71,6 +72,11 @@ namespace UnderwaterGliderTwin.Bootstrap
             var camera = Camera.main != null ? Camera.main : CreateMainCamera();
             var cameraController = camera.gameObject.AddComponent<TwinCameraController>();
             cameraController.Initialize(glider.transform, trajectory.FullTrajectoryPoints);
+
+            var canvasRoot = new GameObject("RuntimeUI");
+            canvasRoot.AddComponent<DashboardView>().Initialize(PlaybackController);
+            canvasRoot.AddComponent<StatusPanelView>().Initialize(PlaybackController, AlarmEvaluator, Logger);
+            canvasRoot.AddComponent<PlaybackControlsView>().Initialize(PlaybackController, cameraController, environment, trajectory);
         }
 
         private static Camera CreateMainCamera()

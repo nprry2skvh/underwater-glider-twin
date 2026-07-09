@@ -1,7 +1,9 @@
 {
   "name": "UnderwaterGliderTwin.Runtime",
   "rootNamespace": "UnderwaterGliderTwin",
-  "references": [],
+  "references": [
+    "UnityEngine.UI"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
