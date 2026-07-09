@@ -29,6 +29,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(glider.transform.Find("LeftWing"), Is.Not.Null);
             Assert.That(glider.transform.Find("RightWing"), Is.Not.Null);
             Assert.That(glider.transform.Find("NoseMarker"), Is.Not.Null);
+            Assert.That(glider.transform.Find("Body").GetComponent<Renderer>().sharedMaterial.shader, Is.Not.Null);
         }
 
         [Test]

@@ -8,9 +8,9 @@ namespace UnderwaterGliderTwin.Visualization
         {
             var root = new GameObject("Glider");
 
-            var bodyMaterial = CreateMaterial("GliderBodyMaterial", new Color(0.63f, 0.71f, 0.74f));
-            var wingMaterial = CreateMaterial("GliderWingMaterial", new Color(0.0f, 0.75f, 0.9f));
-            var noseMaterial = CreateMaterial("GliderNoseMaterial", new Color(0.9f, 0.12f, 0.08f));
+            var bodyMaterial = RuntimeMaterialFactory.Opaque("GliderBodyMaterial", new Color(0.63f, 0.71f, 0.74f));
+            var wingMaterial = RuntimeMaterialFactory.Opaque("GliderWingMaterial", new Color(0.0f, 0.75f, 0.9f));
+            var noseMaterial = RuntimeMaterialFactory.Opaque("GliderNoseMaterial", new Color(0.9f, 0.12f, 0.08f));
 
             var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             body.name = "Body";
@@ -49,16 +49,6 @@ namespace UnderwaterGliderTwin.Visualization
             wing.transform.localScale = localScale;
             wing.GetComponent<Renderer>().sharedMaterial = material;
             return wing;
-        }
-
-        private static Material CreateMaterial(string name, Color color)
-        {
-            var material = new Material(Shader.Find("Standard"))
-            {
-                name = name,
-                color = color
-            };
-            return material;
         }
     }
 }

@@ -82,11 +82,7 @@ namespace UnderwaterGliderTwin.Visualization
 
         private static Material CreateLineMaterial(Color color)
         {
-            var material = new Material(Shader.Find("Sprites/Default"))
-            {
-                color = color
-            };
-            return material;
+            return RuntimeMaterialFactory.Line("TrajectoryLineMaterial", color);
         }
     }
 }

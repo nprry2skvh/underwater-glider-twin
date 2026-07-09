@@ -42,7 +42,7 @@ namespace UnderwaterGliderTwin.Visualization
             seabed.transform.SetParent(transform, false);
             seabed.transform.position = new Vector3(0f, -70f, 0f);
             seabed.transform.localScale = new Vector3(80f, 1f, 80f);
-            seabed.GetComponent<Renderer>().sharedMaterial = CreateMaterial("SeabedMaterial", new Color(0.08f, 0.16f, 0.15f));
+            seabed.GetComponent<Renderer>().sharedMaterial = RuntimeMaterialFactory.Opaque("SeabedMaterial", new Color(0.08f, 0.16f, 0.15f));
         }
 
         private void CreateDirectionalLight()
@@ -87,7 +87,7 @@ namespace UnderwaterGliderTwin.Visualization
                 beam.transform.position = new Vector3(-14f + i * 14f, 2f, 18f - i * 8f);
                 beam.transform.rotation = Quaternion.Euler(18f, 0f, 12f - i * 10f);
                 beam.transform.localScale = new Vector3(2.2f, 22f, 2.2f);
-                beam.GetComponent<Renderer>().sharedMaterial = CreateTransparentMaterial("GodRayMaterial", new Color(0.55f, 0.9f, 1f, 0.11f));
+                beam.GetComponent<Renderer>().sharedMaterial = RuntimeMaterialFactory.Transparent("GodRayMaterial", new Color(0.55f, 0.9f, 1f, 0.11f));
                 var collider = beam.GetComponent<Collider>();
                 if (collider != null)
                 {
@@ -106,29 +106,6 @@ namespace UnderwaterGliderTwin.Visualization
             {
                 DestroyImmediate(target);
             }
-        }
-
-        private static Material CreateMaterial(string name, Color color)
-        {
-            return new Material(Shader.Find("Standard"))
-            {
-                name = name,
-                color = color
-            };
-        }
-
-        private static Material CreateTransparentMaterial(string name, Color color)
-        {
-            var material = CreateMaterial(name, color);
-            material.SetFloat("_Mode", 3f);
-            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            material.SetInt("_ZWrite", 0);
-            material.DisableKeyword("_ALPHATEST_ON");
-            material.EnableKeyword("_ALPHABLEND_ON");
-            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-            material.renderQueue = 3000;
-            return material;
         }
     }
 }
