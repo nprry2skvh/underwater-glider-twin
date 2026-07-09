@@ -223,6 +223,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 955912057}
+  - component: {fileID: 955912058}
   m_Layer: 0
   m_Name: TwinBootstrap
   m_TagString: Untagged
@@ -245,6 +246,21 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &955912058
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 955912056}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 55601b837bf68244ea3e70dbf39af789, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rowsPerSecond: 120
+  horizontalScale: 0.0025
+  depthScale: 0.05
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

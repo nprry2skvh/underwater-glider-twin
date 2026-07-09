@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnderwaterGliderTwin.Bootstrap;
 
 namespace UnderwaterGliderTwin.Editor
 {
@@ -9,7 +10,7 @@ namespace UnderwaterGliderTwin.Editor
         public static void Create()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            new GameObject("TwinBootstrap");
+            new GameObject("TwinBootstrap").AddComponent<TwinBootstrap>();
             var cameraObject = new GameObject("Main Camera");
             cameraObject.tag = "MainCamera";
             cameraObject.transform.position = new Vector3(0f, 12f, -20f);
