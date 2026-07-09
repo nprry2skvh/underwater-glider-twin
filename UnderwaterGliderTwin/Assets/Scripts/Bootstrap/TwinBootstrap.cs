@@ -4,6 +4,7 @@ using UnderwaterGliderTwin.Logging;
 using UnderwaterGliderTwin.Mapping;
 using UnderwaterGliderTwin.Playback;
 using UnderwaterGliderTwin.Telemetry;
+using UnderwaterGliderTwin.Visualization;
 
 namespace UnderwaterGliderTwin.Bootstrap
 {
@@ -56,6 +57,30 @@ namespace UnderwaterGliderTwin.Bootstrap
 
             PlaybackController = gameObject.AddComponent<PlaybackController>();
             PlaybackController.Initialize(new PlaybackModel(LoadResult.Frames, rowsPerSecond));
+
+            var glider = GliderVisualBuilder.Build();
+            var driver = glider.AddComponent<GliderTransformDriver>();
+            driver.Initialize(PlaybackController, Mapper);
+
+            var trajectory = new GameObject("TrajectoryView").AddComponent<TrajectoryView>();
+            trajectory.Initialize(LoadResult.Frames, Mapper, PlaybackController);
+
+            var environment = new GameObject("UnderwaterEnvironment").AddComponent<UnderwaterEnvironmentBuilder>();
+            environment.Build();
+
+            var camera = Camera.main != null ? Camera.main : CreateMainCamera();
+            var cameraController = camera.gameObject.AddComponent<TwinCameraController>();
+            cameraController.Initialize(glider.transform, trajectory.FullTrajectoryPoints);
+        }
+
+        private static Camera CreateMainCamera()
+        {
+            var cameraObject = new GameObject("Main Camera");
+            cameraObject.tag = "MainCamera";
+            cameraObject.transform.position = new Vector3(0f, 12f, -20f);
+            cameraObject.transform.rotation = Quaternion.Euler(25f, 0f, 0f);
+            cameraObject.AddComponent<AudioListener>();
+            return cameraObject.AddComponent<Camera>();
         }
     }
 }
