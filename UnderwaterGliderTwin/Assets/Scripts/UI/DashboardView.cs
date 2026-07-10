@@ -24,18 +24,18 @@ namespace UnderwaterGliderTwin.UI
         {
             playback = playbackController;
             var canvas = UiFactory.EnsureCanvas(transform);
-            var panel = UiFactory.Panel("DashboardPanel", canvas.transform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(18f, 0f), new Vector2(250f, 330f), new Color(0.02f, 0.09f, 0.12f, 0.72f));
-            UiFactory.Text("DashboardTitle", panel, "Telemetry", 18, TextAnchor.MiddleLeft, Color.white, new Vector2(16f, 136f), new Vector2(210f, 28f));
+            var panel = UiFactory.Panel("DashboardPanel", canvas.transform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f, -24f), new Vector2(300f, 352f), new Color(0.02f, 0.09f, 0.12f, 0.78f));
+            UiFactory.Text("DashboardTitle", panel, "Telemetry", 18, TextAnchor.MiddleLeft, Color.white, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -20f), new Vector2(220f, 28f));
 
-            depthValue = AddRow(panel, "Depth", "DepthValue", 96f);
-            headingValue = AddRow(panel, "Heading", "HeadingValue", 66f);
-            pitchValue = AddRow(panel, "Pitch", "PitchValue", 36f);
-            rollValue = AddRow(panel, "Roll", "RollValue", 6f);
-            batteryValue = AddRow(panel, "Battery", "BatteryValue", -24f);
-            voltageValue = AddRow(panel, "24V", "VoltageValue", -54f);
-            currentValue = AddRow(panel, "Current", "CurrentValue", -84f);
-            rpmValue = AddRow(panel, "RPM", "RpmValue", -114f);
-            pistonValue = AddRow(panel, "Piston", "PistonValue", -144f);
+            depthValue = AddRow(panel, "Depth", "DepthValue", 64f);
+            headingValue = AddRow(panel, "Heading", "HeadingValue", 94f);
+            pitchValue = AddRow(panel, "Pitch", "PitchValue", 124f);
+            rollValue = AddRow(panel, "Roll", "RollValue", 154f);
+            batteryValue = AddRow(panel, "Battery", "BatteryValue", 184f);
+            voltageValue = AddRow(panel, "24V", "VoltageValue", 214f);
+            currentValue = AddRow(panel, "Current", "CurrentValue", 244f);
+            rpmValue = AddRow(panel, "RPM", "RpmValue", 274f);
+            pistonValue = AddRow(panel, "Piston", "PistonValue", 304f);
 
             playback.FrameChangedWithReason += OnFrameChanged;
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
@@ -66,10 +66,10 @@ namespace UnderwaterGliderTwin.UI
             return true;
         }
 
-        private static Text AddRow(Transform panel, string label, string valueName, float y)
+        private static Text AddRow(Transform panel, string label, string valueName, float topOffset)
         {
-            UiFactory.Text(label + "Label", panel, label, 13, TextAnchor.MiddleLeft, new Color(0.68f, 0.88f, 0.92f), new Vector2(16f, y), new Vector2(95f, 24f));
-            return UiFactory.Text(valueName, panel, "-", 14, TextAnchor.MiddleRight, Color.white, new Vector2(156f, y), new Vector2(135f, 24f));
+            UiFactory.Text(label + "Label", panel, label, 13, TextAnchor.MiddleLeft, new Color(0.68f, 0.88f, 0.92f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -topOffset), new Vector2(96f, 24f));
+            return UiFactory.Text(valueName, panel, "-", 14, TextAnchor.MiddleRight, Color.white, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-16f, -topOffset), new Vector2(156f, 24f));
         }
 
         private void OnFrameChanged(TelemetryFrame frame, int index, float progress01, FrameUpdateReason reason)

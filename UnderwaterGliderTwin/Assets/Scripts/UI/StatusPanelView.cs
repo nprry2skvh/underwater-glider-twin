@@ -32,21 +32,21 @@ namespace UnderwaterGliderTwin.UI
             logger = twinLogger;
 
             var canvas = UiFactory.EnsureCanvas(transform);
-            var panel = UiFactory.Panel("StatusPanel", canvas.transform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-18f, 0f), new Vector2(295f, 360f), new Color(0.02f, 0.09f, 0.12f, 0.72f));
-            UiFactory.Text("StatusTitle", panel, "Status", 18, TextAnchor.MiddleLeft, Color.white, new Vector2(-260f, 150f), new Vector2(240f, 28f));
+            var panel = UiFactory.Panel("StatusPanel", canvas.transform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-24f, -24f), new Vector2(332f, 388f), new Color(0.02f, 0.09f, 0.12f, 0.78f));
+            UiFactory.Text("StatusTitle", panel, "Status", 18, TextAnchor.MiddleLeft, Color.white, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -20f), new Vector2(220f, 28f));
 
-            modeValue = AddRow(panel, "Mode", "ModeValue", 112f);
-            stateValue = AddRow(panel, "State", "StateValue", 82f);
-            targetSegmentValue = AddRow(panel, "Segment", "TargetSegmentValue", 52f);
-            targetHeadingValue = AddRow(panel, "Target Hdg", "TargetHeadingValue", 22f);
-            targetDepthValue = AddRow(panel, "Target Dep", "TargetDepthValue", -8f);
-            targetAltitudeValue = AddRow(panel, "Target Alt", "TargetAltitudeValue", -38f);
-            rowValue = AddRow(panel, "Row", "RowValue", -68f);
-            rawTimeValue = AddRow(panel, "Time", "RawTimeValue", -98f);
+            modeValue = AddRow(panel, "Mode", "ModeValue", 64f);
+            stateValue = AddRow(panel, "State", "StateValue", 94f);
+            targetSegmentValue = AddRow(panel, "Segment", "TargetSegmentValue", 124f);
+            targetHeadingValue = AddRow(panel, "Target Hdg", "TargetHeadingValue", 154f);
+            targetDepthValue = AddRow(panel, "Target Dep", "TargetDepthValue", 184f);
+            targetAltitudeValue = AddRow(panel, "Target Alt", "TargetAltitudeValue", 214f);
+            rowValue = AddRow(panel, "Row", "RowValue", 244f);
+            rawTimeValue = AddRow(panel, "Time", "RawTimeValue", 274f);
 
-            var alarmRect = UiFactory.Panel("AlarmPanel", panel, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 32f), new Vector2(260f, 54f), new Color(0.02f, 0.16f, 0.15f, 0.8f));
+            var alarmRect = UiFactory.Panel("AlarmPanel", panel, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(-32f, 72f), new Color(0.02f, 0.16f, 0.15f, 0.8f));
             alarmBackground = alarmRect.GetComponent<Image>();
-            alarmValue = UiFactory.Text("AlarmValue", alarmRect, "normal", 13, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(245f, 46f));
+            alarmValue = UiFactory.Text("AlarmValue", alarmRect, "normal", 13, TextAnchor.MiddleCenter, Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(260f, 56f));
 
             playback.FrameChangedWithReason += OnFrameChanged;
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
@@ -77,10 +77,10 @@ namespace UnderwaterGliderTwin.UI
             return true;
         }
 
-        private static Text AddRow(Transform panel, string label, string valueName, float y)
+        private static Text AddRow(Transform panel, string label, string valueName, float topOffset)
         {
-            UiFactory.Text(label + "Label", panel, label, 13, TextAnchor.MiddleLeft, new Color(0.68f, 0.88f, 0.92f), new Vector2(-238f, y), new Vector2(105f, 24f));
-            return UiFactory.Text(valueName, panel, "-", 13, TextAnchor.MiddleRight, Color.white, new Vector2(-82f, y), new Vector2(150f, 24f));
+            UiFactory.Text(label + "Label", panel, label, 13, TextAnchor.MiddleLeft, new Color(0.68f, 0.88f, 0.92f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -topOffset), new Vector2(116f, 24f));
+            return UiFactory.Text(valueName, panel, "-", 13, TextAnchor.MiddleRight, Color.white, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-16f, -topOffset), new Vector2(174f, 24f));
         }
 
         private void OnFrameChanged(TelemetryFrame frame, int index, float progress01, FrameUpdateReason reason)

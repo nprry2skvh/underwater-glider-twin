@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using UnderwaterGliderTwin.Logging;
 using UnderwaterGliderTwin.Playback;
@@ -75,6 +76,47 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(playback.Model.IsPlaying, Is.True);
             Assert.That(playback.Model.Speed, Is.EqualTo(2f));
             Assert.That(playback.Model.CurrentIndex, Is.EqualTo(4).Or.EqualTo(5));
+        }
+
+        [Test]
+        public void UiFactory_CreatesEventSystemForRuntimeUi()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
+            var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
+            var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
+
+            controls.Initialize(playback, cameraController, environment, trajectory);
+
+            Assert.That(Object.FindObjectOfType<EventSystem>(), Is.Not.Null);
+            Assert.That(Object.FindObjectOfType<StandaloneInputModule>(), Is.Not.Null);
+        }
+
+        [Test]
+        public void DashboardView_UsesFixedAnchorsForValueLabels()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Initialize(playback);
+
+            var depthRect = FindText("DepthValue").rectTransform;
+            Assert.That(depthRect.anchorMin, Is.EqualTo(depthRect.anchorMax));
+        }
+
+        [Test]
+        public void DashboardView_AnchorsValueLabelsToTopRightOfPanel()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Initialize(playback);
+
+            var depthRect = FindText("DepthValue").rectTransform;
+            Assert.That(depthRect.anchorMin, Is.EqualTo(new Vector2(1f, 1f)));
+            Assert.That(depthRect.anchorMax, Is.EqualTo(new Vector2(1f, 1f)));
+            Assert.That(depthRect.pivot, Is.EqualTo(new Vector2(1f, 1f)));
         }
 
         private static Text FindText(string name)
