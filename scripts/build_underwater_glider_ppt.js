@@ -5,7 +5,7 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const spec = JSON.parse(fs.readFileSync(path.join(root, '.superpowers/sdd/paper-ppt-assets/slide_spec.json'), 'utf8'));
 const assetsDir = path.join(root, '.superpowers/sdd/paper-ppt-assets');
-const out = path.join(root, '姘翠笅婊戠繑鏈鸿鏂囩粍浼氭眹鎶涓枃.pptx');
+const out = path.join(root, '水下滑翔机论文组会汇报_中文.pptx');
 
 const pptx = new pptxgen();
 pptx.layout = 'LAYOUT_WIDE'; // 13.333 x 7.5
@@ -58,13 +58,13 @@ spec.forEach((s, idx) => {
   } else if ([5,6,8,11].includes(idx)) {
     addBullets(slide,s.bullets,0.75,1.28,5.15,4.9);
     panel(slide,6.2,1.45,6.3,4.7);
-    if(idx===5) flow(slide,['CTD / DVL / AHRS / MSIS','BSD 后座导航','任务控制器','Frontseat / 飞控'],3.1);
+    if(idx===5) { addImage(slide,'fig_system_architecture.png',6.35,1.62,6.0,4.38); }
     if(idx===6) { flow(slide,['DVL 速度','AHRS 姿态','BSD 融合','实时状态'],2.2); slide.addText('< 15 W navigation + sonar',{x:6.65,y:4.35,w:5.35,h:0.45,fontSize:22,bold:true,color:C.gold,align:'center',margin:0}); }
     if(idx===8) { const ss=['Raspberry Pi 4 BSD','Sea-Bird CTD','600-kHz DVL','Sparton M2 AHRS','700-kHz MSIS']; ss.forEach((t,i)=>chip(slide,t,6.75,1.85+i*0.72,4.9,[C.blue,C.cyan,C.gold,C.green,'5A7CC2'][i])); }
-    if(idx===11) { slide.addText('11%',{x:6.7,y:2.0,w:2.0,h:1.0,fontSize:42,bold:true,color:C.green,align:'center',margin:0}); slide.addText('BMC 平均位置误差',{x:6.45,y:3.1,w:2.5,h:0.4,fontSize:13,color:C.white,align:'center',margin:0}); slide.addText('44%',{x:9.7,y:2.0,w:2.0,h:1.0,fontSize:42,bold:true,color:C.red,align:'center',margin:0}); slide.addText('Frontseat 内部估计',{x:9.35,y:3.1,w:2.7,h:0.4,fontSize:13,color:C.white,align:'center',margin:0}); slide.addShape(pptx.ShapeType.line,{x:8.75,y:2.1,w:0,h:1.5,line:{color:C.muted,width:2,dash:'dash'}}); }
+    if(idx===11) { slide.addText('11%',{x:6.7,y:2.0,w:2.0,h:1.0,fontSize:42,bold:true,color:C.green,align:'center',margin:0}); slide.addText('BMC 平均位置误差',{x:6.45,y:3.1,w:2.5,h:0.4,fontSize:13,color:C.white,align:'center',margin:0}); slide.addText('44%',{x:9.7,y:2.0,w:2.0,h:1.0,fontSize:42,bold:true,color:C.red,align:'center',margin:0}); slide.addText('Frontseat 内部估计',{x:9.35,y:3.1,w:2.7,h:0.4,fontSize:13,color:C.white,align:'center',margin:0}); slide.addShape(pptx.ShapeType.line,{x:8.75,y:2.1,w:0,h:1.5,line:{color:C.muted,width:2,dash:'dash'}}); addImage(slide,'fig_bathymetry.png',6.15,3.75,6.2,1.95); }
   } else if ([2,3,4,7,9,10,12,14].includes(idx)) {
     addBullets(slide,s.bullets,0.7,1.3,5.0,4.9);
-    if(s.assets && s.assets.length){ const file=s.assets[0]; panel(slide,5.95,1.3,6.7,5.35,'0B223C'); addImage(slide,file,6.1,1.5,6.4,4.8); slide.addText(s.source_reference,{x:6.15,y:6.28,w:6.2,h:0.22,fontSize:9,color:C.muted,align:'right',margin:0}); }
+    if(s.assets && s.assets.length){ panel(slide,5.95,1.3,6.7,5.35,'0B223C'); if(idx===14){ addImage(slide,'fig_bathymetry.png',6.1,1.5,6.4,2.25); addImage(slide,'fig_arctic_survey.png',6.1,3.95,6.4,2.25); } else { addImage(slide,s.assets[0],6.1,1.5,6.4,4.8); } slide.addText(s.source_reference,{x:6.15,y:6.28,w:6.2,h:0.22,fontSize:9,color:C.muted,align:'right',margin:0}); }
     else { panel(slide,6.0,1.55,6.35,4.5); if(idx===2) flow(slide,['长航时','低扰动测绘','多场景验证'],2.8); if(idx===3) flow(slide,['无 GPS','误差累积','多传感器融合'],2.8); if(idx===4) flow(slide,['DVL-Odo 里程计','BSD 后座','BMC 航点修正'],2.8); }
   } else if (idx===13) { addBullets(slide,s.bullets,0.75,1.3,6.2,4.9); panel(slide,7.2,1.4,5.2,4.9); flow(slide,['状态记录','误差校准','航点更新','回放闭环'],2.6); slide.addText('应用推断（非论文直接结果）',{x:7.35,y:4.45,w:4.9,h:0.35,fontSize:15,bold:true,color:C.gold,align:'center',margin:0}); }
   slide.addText(`Source: ${s.source_reference}`,{x:0.58,y:6.84,w:10.4,h:0.18,fontSize:8,color:C.muted,margin:0,fit:'shrink'});
