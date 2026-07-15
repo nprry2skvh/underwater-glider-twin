@@ -19,6 +19,8 @@ slides=15
 VALID
 ```
 
-Commit: recorded after staging Task 2 files (see final hash).
+Commit: initial Task 2 commit `17efc2526126cf5bd7e0ded837523c0da4147631`; follow-up language/source fix commit recorded below.
 
 Concerns: The design-spec file is mojibake-encoded in the workspace; slide copy follows the unambiguous sequence and source-facts JSON. Slide 14 is explicitly labeled as an application inference rather than a paper-reported result.
+
+Follow-up fix: slides 3–7 were translated to Chinese while retaining technical abbreviations; slide 13 now uses a sourced measurement-condition caveat; slide 14 visibly marks its content as application inference.
