@@ -14,7 +14,7 @@ Verified the exact Desktop-root PPTX (Unicode filename escape: `\\u6c34\\u4e0b\\
 - Exactly 15 `ppt/slides/slideN.xml` files found.
 - Presentation slide size: `cx=12192000`, `cy=6858000` EMU (16:9).
 - Transition elements present on all 15 slides (`transitions_count=15`).
-- Media relationship targets: slide 6 = 1, slide 12 = 1, slide 15 = 2; expected counts match.
+- Media relationship targets: slide 6 = 1, slide 8 = 1, slide 10 = 1, slide 11 = 1, slide 12 = 1, slide 13 = 1, slide 15 = 2; all expected figure-slide counts match.
 - XML parsing passed for `ppt/presentation.xml`, all slide XML files, slide relationship files, and transition elements.
 
 All package checks passed. Rendering in PowerPoint/LibreOffice is version-dependent; this verification makes no claim of element-level animations beyond slide transitions.

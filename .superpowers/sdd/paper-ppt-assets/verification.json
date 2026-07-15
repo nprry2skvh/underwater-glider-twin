@@ -7,7 +7,7 @@
   "slide_xml_count": 15,
   "slide_size_emu": {"cx": 12192000, "cy": 6858000},
   "transitions": {"count": 15, "all_slides_have_transition": true},
-  "media_targets": {"slide_6": 1, "slide_12": 1, "slide_15": 2, "expected_counts_match": true},
+  "media_targets": {"slide_6": 1, "slide_8": 1, "slide_10": 1, "slide_11": 1, "slide_12": 1, "slide_13": 1, "slide_15": 2, "expected_figure_slides_match": true},
   "xml_parsing": {"presentation": true, "slides": true, "relationships": true, "transitions": true},
   "checks_pass": true,
   "known_limitation": "PowerPoint/LibreOffice rendering is version-dependent; this package check makes no claim of element-level animations beyond slide transitions."
