@@ -5,7 +5,7 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const spec = JSON.parse(fs.readFileSync(path.join(root, '.superpowers/sdd/paper-ppt-assets/slide_spec.json'), 'utf8'));
 const assetsDir = path.join(root, '.superpowers/sdd/paper-ppt-assets');
-const out = path.join(root, '水下滑翔机论文组会汇报_中文.pptx');
+const out = path.resolve(root, '..', '水下滑翔机论文组会汇报_中文.pptx');
 
 const pptx = new pptxgen();
 pptx.layout = 'LAYOUT_WIDE'; // 13.333 x 7.5

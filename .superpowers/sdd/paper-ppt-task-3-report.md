@@ -13,6 +13,7 @@ Commands and checks:
 - `node scripts/add_ppt_transitions.js` — added fade transitions to 15 slides.
 - `tar -tf ...pptx | Select-String 'ppt/slides/slide.*xml'` — 15 slide XML parts found; package is a valid ZIP container.
 - Review fix: slide 6 now embeds Fig. 3, slide 12 embeds Fig. 8, and slide 15 embeds both Fig. 8 and Fig. 9. Slide relationship parts confirm one, one, and two image targets respectively.
+- Final path check: `Test-Path D:\Desktop\水下滑翔机论文组会汇报_中文.pptx` = `True`; file size = 23,954,057 bytes; ZIP check still reports 15 slide XML parts.
 
 Concerns:
 

@@ -3,7 +3,7 @@ const path = require('path');
 const JSZip = require('jszip');
 
 const root = path.resolve(__dirname, '..');
-const input = path.join(root, '姘翠笅婊戠繑鏈鸿鏂囩粍浼氭眹鎶涓枃.pptx');
+const input = path.resolve(root, '..', '水下滑翔机论文组会汇报_中文.pptx');
 
 (async () => {
   const zip = await JSZip.loadAsync(fs.readFileSync(input));
