@@ -1,0 +1,39 @@
+{
+  "source": {
+    "file": "D:/Desktop/An Autonomous Underwater Glider With Improved.pdf",
+    "title": "An Autonomous Underwater Glider With Improved Onboard Navigation for Unattended Mapping",
+    "venue": "IEEE Journal of Oceanic Engineering, vol. 50, no. 3, July 2025",
+    "doi": "10.1109/JOE.2025.3538925"
+  },
+  "authors": [
+    {"name": "Amy Phung", "affiliation": "MIT-WHOI Joint Program / Massachusetts Institute of Technology and Woods Hole Oceanographic Institution"},
+    {"name": "Gideon Billings", "affiliation": "Woods Hole Oceanographic Institution; Australian Centre for Field Robotics, University of Sydney"},
+    {"name": "Gregory Burgess", "affiliation": "MIT-WHOI Joint Program / Massachusetts Institute of Technology and Woods Hole Oceanographic Institution"},
+    {"name": "Richard Camilli", "affiliation": "Woods Hole Oceanographic Institution; MIT-WHOI Joint Program", "note": "Member, IEEE; corresponding author"}
+  ],
+  "figures": [
+    {"asset": "fig_system_architecture.png", "figure_number": "Fig. 3", "page": 5, "caption": "Diagram of the core ROS nodes running on the BSD. The central node of the system is the backseat navigation process, which subscribes to topics published by ROS drivers for each of the interfaced sensors as well flight status topics from the frontseat, published by the external control node. The mission controller publishes directives to the flight computer based on the current backseat navigation estimate. The rate and direction of messages between nodes are noted by the connecting arrows."},
+    {"asset": "fig_bmc.png", "figure_number": "Fig. 5", "page": 6, "caption": "Diagram of our “carrot following” type mission architecture, where the frontseat sequences a mission as normal, and the BMC feeds waypoint updates to the frontseat. Also shown is the under ice surfacing behavior, which is also triggered whenever there is an abort for any reason."},
+    {"asset": "fig_bathymetry.png", "figure_number": "Fig. 8", "page": 8, "caption": "DVL (Top, Bottom) and MSIS (Top) survey results from our AUG traversing over a coral head and shelf break, overlaid on 2015 aerial NOAA NGS Topobathy LiDAR gridded at 2 m [39]. (Right) Plots showing the AUG depth profile and the difference between the AUG and LiDAR bathymetry data show good agreement between both data sets. (Top) Delta Mean: 0.29, Median: 0.35, Std: 0.78. (Bottom) Delta Mean: 0.53, Median: 1.07, Std: 3.75. Displayed ranges for the bathymetry and deltas are truncated to illustrate bathymetry variations on the shelf with more detail."},
+    {"asset": "fig_arctic_survey.png", "figure_number": "Fig. 9", "page": 9, "caption": "The upper panel shows a perspective view without vertical exaggeration of results from simultaneous bathymetric and ocean surface ice mapping using the DVL and MSIS sonar (extent of the shown vehicle track is approximately 1.3 km). The MSIS data, collected using an upward looking +/- 10 deg sweep across the vehicle track, are used to identify ice distribution. The downward looking DVL ocean floor acoustic returns from each Doppler beam appear as colored icons below the MSIS data. Discrete ice floes (white) are visible at the sea surface, along with ocean floor scours (blue) and ridges (red) extending in a generally NW-SE orientation. The underlay shows IBCAO bathymetric data (Version 4.2.13) [40] gridded at its native 200-m horizontal resolution. Black lines indicate the IBCAO grid spacing. The colorbar indicates DVL and IBCAO estimated ocean floor depth."}
+  ],
+  "experimental_locations": [
+    "Eastern Caribbean coastal areas near La Paguera, Puerto Rico",
+    "Shelf break south of Cabo Rojo, Puerto Rico",
+    "Buzzards Bay, Massachusetts",
+    "Arctic Ocean Beaufort Sea marginal ice zone (MIZ), northeast of Prudhoe Bay, Alaska"
+  ],
+  "sensors_and_compute": [
+    "Sea-Bird Scientific CTD",
+    "Teledyne RDI Pathfinder 600-kHz phased-array DVL",
+    "Sparton M2 altitude and heading reference system (AHRS)",
+    "700-kHz Tritech mechanically scanned imaging sonar (MSIS)",
+    "Raspberry Pi 4 backseat computer (BSD)"
+  ],
+  "reported_comparisons": [
+    "Across all BMC-guided missions, average position error was 11% of distance travelled versus 44% for the frontseat internal navigation estimate.",
+    "Fig. 8 reports DVL/MSIS bathymetry differences against NOAA LiDAR: top delta mean 0.29, median 0.35, standard deviation 0.78; bottom delta mean 0.53, median 1.07, standard deviation 3.75.",
+    "In the Arctic MIZ, the AUG ocean-floor estimate had an approximately 3-m discrepancy versus IBCAO; surface-vessel depth-sounder logs were used for verification.",
+    "Combined navigation and sonar draw less than 15 W (reported in the paper abstract/introduction)."
+  ]
+}
