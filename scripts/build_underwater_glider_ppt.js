@@ -22,7 +22,7 @@ pptx.defineSlideMaster({
     { rect: { x: 0, y: 7.12, w: 13.333, h: 0.38, fill: { color: '061326' }, line: { color: '061326' } } },
     { text: { text: 'Underwater Glider Navigation · IEEE JOE 2025', options: { x: 0.45, y: 7.2, w: 8.6, h: 0.15, fontFace: 'Aptos', fontSize: 8, color: '8BA8C7', margin: 0 } } },
   ],
-  slideNumber: { x: 12.55, y: 7.18, color: 'D8B45A', fontFace: 'Aptos', fontSize: 9 }
+  slideNumber: { x: 12.55, y: 7.06, color: 'D8B45A', fontFace: 'Aptos', fontSize: 9 }
 });
 
 const C = { navy: '081B33', panel: '102D4E', blue: '2D78B8', cyan: '63C7E6', gold: 'D8B45A', white: 'F4F8FC', muted: 'A9BED3', red: 'E56B6F', green: '76C893' };
