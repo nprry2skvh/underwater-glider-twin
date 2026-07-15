@@ -30,3 +30,5 @@ Additional language fix: slides 8–12 and 15 now use Chinese takeaways/bullets 
 Language-fix commit: `e3487c1c92249ea47db21d44a76cc924c6fd5767`.
 
 Final slide 9 language fix is included in the latest commit below.
+
+Latest slide-9 fix commit: `e03f6114be5e5dececfc00d0bbf7e64b1844713e`.
