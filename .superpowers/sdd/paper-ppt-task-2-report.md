@@ -23,4 +23,6 @@ Commit: initial Task 2 commit `17efc2526126cf5bd7e0ded837523c0da4147631`; follow
 
 Concerns: The design-spec file is mojibake-encoded in the workspace; slide copy follows the unambiguous sequence and source-facts JSON. Slide 14 is explicitly labeled as an application inference rather than a paper-reported result.
 
-Follow-up fix: slides 3–7 were translated to Chinese while retaining technical abbreviations; slide 13 now uses a sourced measurement-condition caveat; slide 14 visibly marks its content as application inference.
+Follow-up fix commit: `6efea4d177cd4e3a4aeda78a5f176a4d00f6de64`.
+
+Additional language fix: slides 8–12 and 15 now use Chinese takeaways/bullets while retaining proper nouns and technical abbreviations. Slide 14 visibly marks its content as application inference.
