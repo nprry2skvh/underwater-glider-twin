@@ -26,3 +26,5 @@ Concerns: The design-spec file is mojibake-encoded in the workspace; slide copy 
 Follow-up fix commit: `6efea4d177cd4e3a4aeda78a5f176a4d00f6de64`.
 
 Additional language fix: slides 8–12 and 15 now use Chinese takeaways/bullets while retaining proper nouns and technical abbreviations. Slide 14 visibly marks its content as application inference.
+
+Language-fix commit: `e3487c1c92249ea47db21d44a76cc924c6fd5767`.
