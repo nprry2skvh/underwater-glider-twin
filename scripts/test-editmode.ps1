@@ -1,5 +1,6 @@
 param(
-    [string]$UnityPath = ""
+    [string]$UnityPath = "",
+    [int]$TimeoutMinutes = 15
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,36 +23,44 @@ Remove-Item -Force -ErrorAction SilentlyContinue $resultPath, $logPath
 $unityArguments = @(
     "-batchmode"
     "-nographics"
-    "-projectPath `"$projectPath`""
+    "-projectPath"
+    $projectPath
     "-runTests"
-    "-testPlatform EditMode"
-    "-testResults `"$resultPath`""
-    "-logFile `"$logPath`""
+    "-testPlatform"
+    "EditMode"
+    "-testResults"
+    $resultPath
+    "-logFile"
+    $logPath
 )
-$unityProcess = Start-Process -FilePath $UnityPath -ArgumentList $unityArguments -PassThru
-$deadline = [DateTime]::UtcNow.AddMinutes(3)
 
-try {
-    while (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) {
-        if ([DateTime]::UtcNow -ge $deadline) {
-            throw "Unity did not write a test result file within three minutes. See $logPath"
-        }
-
-        Start-Sleep -Milliseconds 250
-    }
-
-    [xml]$results = Get-Content -Raw -LiteralPath $resultPath
-    $run = $results.'test-run'
-    if ($run.result -ne "Passed" -or [int]$run.failed -ne 0) {
-        throw "EditMode tests did not pass. See $resultPath"
-    }
-
-    Write-Host "EditMode tests passed: $($run.passed)/$($run.total)"
-    Write-Host "Results: $resultPath"
-}
-finally {
-    if ($unityProcess -and -not $unityProcess.HasExited) {
+$unityProcess = Start-Process -FilePath $UnityPath -ArgumentList $unityArguments -PassThru -WindowStyle Hidden
+$timeoutSeconds = [Math]::Max(60, $TimeoutMinutes * 60)
+if (-not $unityProcess.WaitForExit($timeoutSeconds * 1000)) {
+    try {
         Stop-Process -Id $unityProcess.Id -Force
+    }
+    finally {
         $unityProcess.WaitForExit()
     }
+    throw "Unity did not write a test result file within $TimeoutMinutes minutes. See $logPath"
 }
+
+$unityExitCode = $unityProcess.ExitCode
+
+if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) {
+    throw "Unity did not write a test result file. Exit code: $unityExitCode. See $logPath"
+}
+
+[xml]$results = Get-Content -Raw -LiteralPath $resultPath
+$run = $results.'test-run'
+if ($run.result -ne "Passed" -or [int]$run.failed -ne 0) {
+    throw "EditMode tests did not pass. See $resultPath"
+}
+
+if ($unityExitCode -ne 0) {
+    Write-Warning "Unity returned exit code $unityExitCode after writing passed test results. See $logPath"
+}
+
+Write-Host "EditMode tests passed: $($run.passed)/$($run.total)"
+Write-Host "Results: $resultPath"

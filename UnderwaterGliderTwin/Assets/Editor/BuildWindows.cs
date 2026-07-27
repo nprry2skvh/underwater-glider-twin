@@ -28,12 +28,12 @@ namespace UnderwaterGliderTwin.Editor
                 throw new System.Exception($"Build failed: {report.summary.result}");
             }
 
-            CopyModelArtifacts(projectRoot, outputDirectory);
+            CopyModelArtifacts(workspaceRoot, outputDirectory);
         }
 
-        private static void CopyModelArtifacts(string projectRoot, string outputDirectory)
+        private static void CopyModelArtifacts(string workspaceRoot, string outputDirectory)
         {
-            var sourceRoot = Path.GetFullPath(Path.Combine(projectRoot, "Models"));
+            var sourceRoot = Path.GetFullPath(Path.Combine(workspaceRoot, "Models"));
             if (!Directory.Exists(sourceRoot))
             {
                 return;

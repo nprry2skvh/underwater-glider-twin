@@ -22,22 +22,24 @@ $unityArguments = @(
     "-batchmode"
     "-nographics"
     "-quit"
-    "-projectPath `"$projectPath`""
-    "-executeMethod UnderwaterGliderTwin.Editor.BuildWindows.Build"
-    "-logFile `"$logPath`""
+    "-projectPath"
+    $projectPath
+    "-executeMethod"
+    "UnderwaterGliderTwin.Editor.BuildWindows.Build"
+    "-logFile"
+    $logPath
 )
-$unityProcess = Start-Process -FilePath $UnityPath -ArgumentList $unityArguments -PassThru -WindowStyle Hidden
 
-try {
-    if (-not $unityProcess.WaitForExit(600000)) {
-        throw "Unity did not finish the Windows build within ten minutes. See $logPath"
-    }
-}
-finally {
-    if ($unityProcess -and -not $unityProcess.HasExited) {
+$unityProcess = Start-Process -FilePath $UnityPath -ArgumentList $unityArguments -PassThru -WindowStyle Hidden
+$timeoutSeconds = 600
+if (-not $unityProcess.WaitForExit($timeoutSeconds * 1000)) {
+    try {
         Stop-Process -Id $unityProcess.Id -Force
+    }
+    finally {
         $unityProcess.WaitForExit()
     }
+    throw "Unity did not finish the Windows build within $timeoutSeconds seconds. See $logPath"
 }
 
 $unityExitCode = $unityProcess.ExitCode
