@@ -26,7 +26,25 @@ namespace UnderwaterGliderTwin.Mapping
         {
             var eastMeters = (frame.LongitudeDeg - originLongitudeDeg) * metersPerDegreeLongitude;
             var northMeters = (frame.LatitudeDeg - originLatitudeDeg) * MetersPerDegreeLatitude;
-            return new Vector3((float)eastMeters * horizontalScale, -frame.DepthM * depthScale, (float)northMeters * horizontalScale);
+            return MapEnuPosition(new Vector3((float)eastMeters, -frame.DepthM, (float)northMeters));
+        }
+
+        public Vector3 MapEnuPosition(Vector3 enuPositionM)
+        {
+            return new Vector3(enuPositionM.x * horizontalScale, enuPositionM.y * depthScale, enuPositionM.z * horizontalScale);
+        }
+
+        public Vector3 UnmapPosition(Vector3 worldPosition)
+        {
+            return new Vector3(
+                worldPosition.x / Mathf.Max(horizontalScale, 0.000001f),
+                worldPosition.y / Mathf.Max(depthScale, 0.000001f),
+                worldPosition.z / Mathf.Max(horizontalScale, 0.000001f));
+        }
+
+        public float MapDepth(float depthM)
+        {
+            return -depthM * depthScale;
         }
     }
 }

@@ -25,17 +25,17 @@ namespace UnderwaterGliderTwin.Logging
 
             if (depthExceeded)
             {
-                messages.Add($"depth {frame.DepthM:0.0}m > {maxDepthM:0.0}m");
+                messages.Add($"深度 {frame.DepthM:0.0} > {maxDepthM:0.0}");
             }
 
             if (batteryLow)
             {
-                messages.Add($"battery {frame.BatteryPercent:0.0}% < {minBatteryPercent:0.0}%");
+                messages.Add($"电量 {frame.BatteryPercent:0.0} < {minBatteryPercent:0.0}");
             }
 
             if (attitudeExceeded)
             {
-                messages.Add($"attitude pitch {frame.PitchDeg:0.0} roll {frame.RollDeg:0.0}");
+                messages.Add($"姿态 俯仰 {frame.PitchDeg:0.0} 横滚 {frame.RollDeg:0.0}");
             }
 
             return new AlarmState(depthExceeded, batteryLow, attitudeExceeded, string.Join("; ", messages));

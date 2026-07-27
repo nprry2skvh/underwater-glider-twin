@@ -33,9 +33,37 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(Mathf.Abs(forward.z), Is.LessThan(0.2f));
         }
 
+        [Test]
+        public void PoseMapper_AppliesRollAroundGliderForwardAxis()
+        {
+            var frame = Frame(120.0, 25.0, 0f, heading: 0f, pitch: 0f, roll: 25f);
+
+            var rotation = PoseMapper.ToRotation(frame);
+
+            var rightWing = rotation * Vector3.right;
+            Assert.That(rightWing.y, Is.LessThan(-0.35f));
+        }
+
+        [Test]
+        public void PoseMapper_ClampsUnrealisticPitchAndRollForStableVisualization()
+        {
+            var frame = Frame(120.0, 25.0, 0f, heading: 0f, pitch: 120f, roll: 0f);
+            var settings = new AttitudeSettings(1f, 1f, maxAbsPitchDeg: 30f, maxAbsRollDeg: 40f);
+
+            var rotation = PoseMapper.ToRotation(frame, settings);
+
+            var forward = rotation * Vector3.forward;
+            Assert.That(forward.y, Is.EqualTo(-0.5f).Within(0.02f));
+
+            frame = Frame(120.0, 25.0, 0f, heading: 0f, pitch: 0f, roll: 160f);
+            rotation = PoseMapper.ToRotation(frame, settings);
+            var rightWing = rotation * Vector3.right;
+            Assert.That(rightWing.y, Is.EqualTo(-Mathf.Sin(40f * Mathf.Deg2Rad)).Within(0.03f));
+        }
+
         private static TelemetryFrame Frame(double lon, double lat, float depth, float heading, float pitch, float roll)
         {
-            return new TelemetryFrame(0, "t", lon, lat, depth, 100f, heading, pitch, roll, 28f, 0.2f, 95f, "mode", "state", 1f, 40f, 100f, 100f, 0f, 0f, 0f);
+            return new TelemetryFrame(0, "t", 0f, lon, lat, depth, 100f, heading, pitch, roll, 28f, 0.2f, 95f, "mode", "state", 1f, 40f, 100f, 100f, 0f, 0f, 0f);
         }
     }
 }

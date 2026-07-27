@@ -8,7 +8,9 @@ namespace UnderwaterGliderTwin.Editor
     {
         public static void Build()
         {
-            var outputDirectory = Path.GetFullPath(Path.Combine("..", "Builds", "UnderwaterGliderTwin"));
+            var projectRoot = Path.GetFullPath(".");
+            var workspaceRoot = Path.GetFullPath(Path.Combine(projectRoot, ".."));
+            var outputDirectory = Path.GetFullPath(Path.Combine(workspaceRoot, "Builds", "UnderwaterGliderTwin"));
             Directory.CreateDirectory(outputDirectory);
             var outputPath = Path.Combine(outputDirectory, "UnderwaterGliderTwin.exe");
 
@@ -25,6 +27,56 @@ namespace UnderwaterGliderTwin.Editor
             {
                 throw new System.Exception($"Build failed: {report.summary.result}");
             }
+
+            CopyModelArtifacts(projectRoot, outputDirectory);
+        }
+
+        private static void CopyModelArtifacts(string projectRoot, string outputDirectory)
+        {
+            var sourceRoot = Path.GetFullPath(Path.Combine(projectRoot, "Models"));
+            if (!Directory.Exists(sourceRoot))
+            {
+                return;
+            }
+
+            var destinationRoot = Path.Combine(outputDirectory, "Models");
+            CopyDirectoryIfPresent(Path.Combine(sourceRoot, "XGBoost"), Path.Combine(destinationRoot, "XGBoost"));
+            CopyFileIfPresent(Path.Combine(sourceRoot, "training_summary.json"), Path.Combine(destinationRoot, "training_summary.json"));
+        }
+
+        private static void CopyDirectoryIfPresent(string sourceDirectory, string destinationDirectory)
+        {
+            if (!Directory.Exists(sourceDirectory))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(destinationDirectory);
+            foreach (var file in Directory.GetFiles(sourceDirectory))
+            {
+                CopyFileIfPresent(file, Path.Combine(destinationDirectory, Path.GetFileName(file)));
+            }
+
+            foreach (var subDirectory in Directory.GetDirectories(sourceDirectory))
+            {
+                CopyDirectoryIfPresent(subDirectory, Path.Combine(destinationDirectory, Path.GetFileName(subDirectory)));
+            }
+        }
+
+        private static void CopyFileIfPresent(string sourceFile, string destinationFile)
+        {
+            if (!File.Exists(sourceFile))
+            {
+                return;
+            }
+
+            var destinationDirectory = Path.GetDirectoryName(destinationFile);
+            if (!string.IsNullOrWhiteSpace(destinationDirectory))
+            {
+                Directory.CreateDirectory(destinationDirectory);
+            }
+
+            File.Copy(sourceFile, destinationFile, true);
         }
     }
 }

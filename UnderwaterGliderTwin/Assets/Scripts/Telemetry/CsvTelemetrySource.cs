@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace UnderwaterGliderTwin.Telemetry
 {
     public sealed class CsvTelemetrySource : ITelemetrySource
     {
         private const int ExpectedColumnCount = 51;
+        private static readonly Regex TimeNumberPattern = new Regex(@"-?\d+", RegexOptions.Compiled);
         private readonly string path;
 
         public CsvTelemetrySource(string path)
@@ -48,6 +50,7 @@ namespace UnderwaterGliderTwin.Telemetry
                     frames.Add(new TelemetryFrame(
                         rowIndex: lineNumber - 2,
                         rawTime: columns[0],
+                        elapsedSeconds: ParseElapsedSeconds(columns[0]),
                         longitudeDeg: ParseDouble(columns[21]),
                         latitudeDeg: ParseDouble(columns[22]),
                         depthM: ParseFloat(columns[23]),
@@ -98,6 +101,21 @@ namespace UnderwaterGliderTwin.Telemetry
         private static double ParseDouble(string value)
         {
             return double.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
+        }
+
+        private static float ParseElapsedSeconds(string rawTime)
+        {
+            var matches = TimeNumberPattern.Matches(rawTime ?? string.Empty);
+            if (matches.Count != 4)
+            {
+                throw new FormatException($"Could not parse telemetry time '{rawTime}'.");
+            }
+
+            var days = int.Parse(matches[0].Value, CultureInfo.InvariantCulture);
+            var hours = int.Parse(matches[1].Value, CultureInfo.InvariantCulture);
+            var minutes = int.Parse(matches[2].Value, CultureInfo.InvariantCulture);
+            var seconds = int.Parse(matches[3].Value, CultureInfo.InvariantCulture);
+            return ((days * 24f + hours) * 60f + minutes) * 60f + seconds;
         }
     }
 }

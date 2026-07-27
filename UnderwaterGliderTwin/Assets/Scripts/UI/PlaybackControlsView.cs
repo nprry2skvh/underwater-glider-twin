@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnderwaterGliderTwin.Playback;
@@ -8,32 +10,64 @@ namespace UnderwaterGliderTwin.UI
     public sealed class PlaybackControlsView : MonoBehaviour
     {
         private PlaybackController playback;
+        private Button playPauseButton;
         private Slider progressSlider;
+        private Text statusText;
         private bool updatingSlider;
+        private Action exitAction;
+        private Action missionViewAction;
+        private Func<string> screenshotAction;
+        private readonly Dictionary<float, Button> speedButtons = new Dictionary<float, Button>();
 
-        public void Initialize(PlaybackController playbackController, TwinCameraController cameraController, UnderwaterEnvironmentBuilder environmentBuilder, TrajectoryView trajectoryView)
+        public void Initialize(PlaybackController playbackController, TwinCameraController cameraController, UnderwaterEnvironmentBuilder environmentBuilder, TrajectoryView trajectoryView, Action onExitRequested = null, Func<string> onScreenshotRequested = null, Action onMissionViewRequested = null)
         {
             playback = playbackController;
+            exitAction = onExitRequested;
+            screenshotAction = onScreenshotRequested;
+            missionViewAction = onMissionViewRequested;
             var canvas = UiFactory.EnsureCanvas(transform);
-            var panel = UiFactory.Panel("PlaybackControlsPanel", canvas.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 24f), new Vector2(1080f, 120f), new Color(0.02f, 0.09f, 0.12f, 0.78f));
+            var panel = UiFactory.CommandPanel("PlaybackControlsPanel", canvas.transform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 18f), new Vector2(-100f, 124f));
+            var groupColor = new Color(0.42f, 0.76f, 0.84f);
+            UiFactory.Text("PlaybackGroupLabel", panel, "回放控制", 11, TextAnchor.MiddleLeft, groupColor, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -14f), new Vector2(120f, 18f));
 
-            UiFactory.Button("PlayPauseButton", panel, "Play", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -18f), new Vector2(88f, 34f)).onClick.AddListener(playback.TogglePlaying);
-            AddSpeedButton(panel, "Speed05Button", "0.5x", 118f, 0.5f);
-            AddSpeedButton(panel, "Speed1Button", "1x", 176f, 1f);
-            AddSpeedButton(panel, "Speed2Button", "2x", 234f, 2f);
-            AddSpeedButton(panel, "Speed5Button", "5x", 292f, 5f);
-            AddSpeedButton(panel, "Speed10Button", "10x", 350f, 10f);
+            playPauseButton = UiFactory.PrimaryButton("PlayPauseButton", panel, "开始", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -40f), new Vector2(92f, 32f));
+            playPauseButton.onClick.AddListener(OnPlayPauseClicked);
+            UiFactory.Button("ReverseButton", panel, "倒放", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(118f, -40f), new Vector2(92f, 32f)).onClick.AddListener(OnReverseClicked);
+            UiFactory.Button("ReplayButton", panel, "回放", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(218f, -40f), new Vector2(92f, 32f)).onClick.AddListener(OnReplayClicked);
+            UiFactory.Button("ResetButton", panel, "重置", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(318f, -40f), new Vector2(92f, 32f)).onClick.AddListener(OnResetClicked);
+            UiFactory.Button("ExportButton", panel, "导出", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(418f, -40f), new Vector2(92f, 32f)).onClick.AddListener(OnExportClicked);
 
-            progressSlider = UiFactory.Slider("ProgressSlider", panel, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(430f, -18f), new Vector2(620f, 32f));
+            progressSlider = UiFactory.Slider("ProgressSlider", panel, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(528f, -40f), new Vector2(746f, 32f));
             progressSlider.onValueChanged.AddListener(OnSliderChanged);
 
-            UiFactory.Button("CameraFollowButton", panel, "Follow", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -62f), new Vector2(88f, 30f)).onClick.AddListener(() => cameraController.SetMode(CameraMode.Follow));
-            UiFactory.Button("CameraGlobalButton", panel, "Global", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(114f, -62f), new Vector2(88f, 30f)).onClick.AddListener(() => cameraController.SetMode(CameraMode.Global));
-            UiFactory.Button("CameraFreeButton", panel, "Free", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(210f, -62f), new Vector2(88f, 30f)).onClick.AddListener(() => cameraController.SetMode(CameraMode.Free));
+            UiFactory.Button("ExitButton", panel, "退出", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1712f, -40f), new Vector2(88f, 32f)).onClick.AddListener(OnExitClicked);
 
-            UiFactory.Toggle("FogToggle", panel, "Fog", true, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(336f, -62f), new Vector2(120f, 28f)).onValueChanged.AddListener(environmentBuilder.SetFogEnabled);
-            UiFactory.Toggle("ParticlesToggle", panel, "Particles", true, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(470f, -62f), new Vector2(140f, 28f)).onValueChanged.AddListener(environmentBuilder.SetParticlesEnabled);
-            UiFactory.Toggle("TrajectoryToggle", panel, "Trajectory", true, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(626f, -62f), new Vector2(150f, 28f)).onValueChanged.AddListener(trajectoryView.SetVisible);
+            UiFactory.Text("ViewGroupLabel", panel, "视图与图层", 11, TextAnchor.MiddleLeft, groupColor, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -70f), new Vector2(160f, 18f));
+            UiFactory.Button("CameraFollowButton", panel, "跟随", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -94f), new Vector2(88f, 28f)).onClick.AddListener(() => SetCameraMode(cameraController, trajectoryView, CameraMode.Follow));
+            UiFactory.Button("CameraGlobalButton", panel, "全局", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(114f, -94f), new Vector2(88f, 28f)).onClick.AddListener(() => SetCameraMode(cameraController, trajectoryView, CameraMode.Global));
+            UiFactory.Button("CameraOrbitButton", panel, "环绕", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(210f, -94f), new Vector2(88f, 28f)).onClick.AddListener(() => SetCameraMode(cameraController, trajectoryView, CameraMode.Orbit));
+            UiFactory.Button("MissionVolumeButton", panel, "海域", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(306f, -94f), new Vector2(72f, 28f)).onClick.AddListener(OnMissionViewClicked);
+
+            UiFactory.Toggle("FogToggle", panel, "雾效", true, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(322f, -94f), new Vector2(84f, 26f)).onValueChanged.AddListener(environmentBuilder.SetFogEnabled);
+            UiFactory.Toggle("ParticlesToggle", panel, "粒子", true, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(414f, -94f), new Vector2(110f, 26f)).onValueChanged.AddListener(environmentBuilder.SetParticlesEnabled);
+            var trajectoryToggle = UiFactory.Toggle("TrajectoryToggle", panel, "航迹", true, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(538f, -94f), new Vector2(128f, 26f));
+            trajectoryToggle.onValueChanged.AddListener(trajectoryView.SetVisible);
+
+            UiFactory.Text("SpeedGroupLabel", panel, "速度", 11, TextAnchor.MiddleLeft, groupColor, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(694f, -70f), new Vector2(100f, 18f));
+            AddSpeedButton(panel, "Speed05Button", "0.5x", 694f, 0.5f);
+            AddSpeedButton(panel, "Speed1Button", "1x", 752f, 1f);
+            AddSpeedButton(panel, "Speed2Button", "2x", 810f, 2f);
+            AddSpeedButton(panel, "Speed5Button", "5x", 868f, 5f);
+            AddSpeedButton(panel, "Speed10Button", "10x", 926f, 10f);
+
+            UiFactory.Text("LegendActual", panel, "实际", 12, TextAnchor.MiddleLeft, new Color(0.18f, 0.72f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1048f, -94f), new Vector2(64f, 20f));
+            UiFactory.Text("LegendPredicted", panel, "预测历史", 12, TextAnchor.MiddleLeft, new Color(1f, 0.84f, 0.2f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1122f, -94f), new Vector2(96f, 20f));
+            UiFactory.Text("LegendPlanned", panel, "计划", 12, TextAnchor.MiddleLeft, new Color(0.3f, 0.92f, 0.52f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1210f, -94f), new Vector2(66f, 20f));
+            statusText = UiFactory.Text("PlaybackStatus", panel, "回放已就绪", 12, TextAnchor.MiddleRight, new Color(0.78f, 0.96f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -94f), new Vector2(490f, 20f));
+
+            trajectoryView.SetCameraMode(CameraMode.Follow);
+            trajectoryView.SetVisible(true);
+            HideLegacyCameraControls(panel);
 
             playback.FrameChanged += OnFrameChanged;
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01);
@@ -47,9 +81,96 @@ namespace UnderwaterGliderTwin.UI
             }
         }
 
+        private static void HideLegacyCameraControls(Transform panel)
+        {
+            var legacyNames = new[]
+            {
+                "ViewGroupLabel",
+                "CameraFollowButton",
+                "CameraGlobalButton",
+                "CameraOrbitButton",
+                "MissionVolumeButton"
+            };
+            foreach (var legacyName in legacyNames)
+            {
+                var legacyControl = panel.Find(legacyName);
+                if (legacyControl != null)
+                {
+                    legacyControl.gameObject.SetActive(false);
+                }
+            }
+        }
+
         private void AddSpeedButton(Transform panel, string name, string label, float x, float speed)
         {
-            UiFactory.Button(name, panel, label, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(x, -18f), new Vector2(50f, 34f)).onClick.AddListener(() => playback.SetSpeed(speed));
+            var button = UiFactory.Button(name, panel, label, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(x, -94f), new Vector2(50f, 28f));
+            speedButtons[speed] = button;
+            button.onClick.AddListener(() =>
+            {
+                playback.SetSpeed(speed);
+                RefreshButtonLabels();
+                SetStatus($"回放速度：{speed:0.##}x");
+            });
+        }
+
+        private void OnPlayPauseClicked()
+        {
+            playback.TogglePlaying();
+            RefreshButtonLabels();
+            SetStatus(playback.Model.IsPlaying ? "正在回放" : "回放已暂停");
+        }
+
+        private void OnReverseClicked()
+        {
+            playback.PlayReverse();
+            RefreshButtonLabels();
+            SetStatus("正在倒放");
+        }
+
+        private void OnReplayClicked()
+        {
+            playback.Restart(true);
+            RefreshButtonLabels();
+            SetStatus("已从任务起点重新回放");
+        }
+
+        private void OnResetClicked()
+        {
+            playback.Restart(false);
+            RefreshButtonLabels();
+            SetStatus("已重置到任务起点");
+        }
+
+        private void OnExportClicked()
+        {
+            if (screenshotAction == null)
+            {
+                SetStatus("截图功能不可用");
+                return;
+            }
+
+            var exportPath = screenshotAction.Invoke();
+            SetStatus($"截图已保存：{exportPath}");
+        }
+
+        private void OnMissionViewClicked()
+        {
+            missionViewAction?.Invoke();
+            SetStatus("已切换到局部三维海域视角");
+        }
+
+        private void OnExitClicked()
+        {
+            if (exitAction != null)
+            {
+                exitAction.Invoke();
+                return;
+            }
+
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#endif
+            Application.Quit();
         }
 
         private void OnSliderChanged(float value)
@@ -67,6 +188,32 @@ namespace UnderwaterGliderTwin.UI
             updatingSlider = true;
             progressSlider.value = progress01;
             updatingSlider = false;
+            RefreshButtonLabels();
+        }
+
+        private void RefreshButtonLabels()
+        {
+            UiFactory.SetButtonText(playPauseButton, playback != null && playback.Model.IsPlaying ? "暂停" : "开始");
+            foreach (var entry in speedButtons)
+            {
+                entry.Value.image.color = playback != null && Mathf.Approximately(playback.Model.Speed, entry.Key)
+                    ? new Color(0.08f, 0.56f, 0.72f, 0.96f)
+                    : new Color(0.12f, 0.28f, 0.34f, 0.9f);
+            }
+        }
+
+        private void SetStatus(string message)
+        {
+            if (statusText != null)
+            {
+                statusText.text = message;
+            }
+        }
+
+        private static void SetCameraMode(TwinCameraController cameraController, TrajectoryView trajectoryView, CameraMode mode)
+        {
+            cameraController.SetMode(mode);
+            trajectoryView.SetCameraMode(mode);
         }
     }
 }

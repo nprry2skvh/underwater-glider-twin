@@ -12,10 +12,17 @@ namespace UnderwaterGliderTwin.Playback
 
         public bool IsPlaying { get; private set; }
         public float Speed { get; private set; } = 1f;
+        public int Direction { get; private set; } = 1;
         public int CurrentIndex { get; private set; }
         public int FrameCount => frames.Count;
+        public IReadOnlyList<TelemetryFrame> Frames => frames;
+        public float RowsPerSecond => rowsPerSecond;
         public float Progress01 => frames.Count <= 1 ? 0f : CurrentIndex / (float)(frames.Count - 1);
         public TelemetryFrame CurrentFrame => frames[CurrentIndex];
+        public float StartElapsedSeconds => frames[0].ElapsedSeconds;
+        public float EndElapsedSeconds => frames[frames.Count - 1].ElapsedSeconds;
+        public float TotalElapsedSeconds => Math.Max(0f, EndElapsedSeconds - StartElapsedSeconds);
+        public float CurrentElapsedSeconds => CurrentFrame.ElapsedSeconds;
 
         public PlaybackModel(IReadOnlyList<TelemetryFrame> frames, float rowsPerSecond)
         {
@@ -38,6 +45,11 @@ namespace UnderwaterGliderTwin.Playback
             IsPlaying = !IsPlaying;
         }
 
+        public void SetDirection(int direction)
+        {
+            Direction = direction < 0 ? -1 : 1;
+        }
+
         public void SetSpeed(float speed)
         {
             Speed = Math.Max(0.1f, speed);
@@ -50,12 +62,15 @@ namespace UnderwaterGliderTwin.Playback
                 return false;
             }
 
-            continuousIndex += rowsPerSecond * Speed * deltaSeconds;
-            var nextIndex = Math.Min(frames.Count - 1, (int)continuousIndex);
+            continuousIndex += rowsPerSecond * Speed * deltaSeconds * Direction;
+            continuousIndex = Math.Max(0f, Math.Min(frames.Count - 1, continuousIndex));
+            var nextIndex = Direction >= 0
+                ? Math.Min(frames.Count - 1, (int)Math.Floor(continuousIndex))
+                : Math.Max(0, (int)Math.Ceiling(continuousIndex));
             var changed = nextIndex != CurrentIndex;
             CurrentIndex = nextIndex;
 
-            if (CurrentIndex >= frames.Count - 1)
+            if ((Direction >= 0 && CurrentIndex >= frames.Count - 1) || (Direction < 0 && CurrentIndex <= 0))
             {
                 IsPlaying = false;
             }
@@ -68,6 +83,18 @@ namespace UnderwaterGliderTwin.Playback
             var clamped = Math.Max(0f, Math.Min(1f, progress01));
             CurrentIndex = (int)Math.Round(clamped * (frames.Count - 1));
             continuousIndex = CurrentIndex;
+        }
+
+        public TelemetryFrame GetFrame(int index)
+        {
+            return frames[Math.Max(0, Math.Min(frames.Count - 1, index))];
+        }
+
+        public void Restart(bool playImmediately)
+        {
+            Direction = 1;
+            SeekNormalized(0f);
+            IsPlaying = playImmediately;
         }
     }
 }

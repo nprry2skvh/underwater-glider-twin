@@ -5,10 +5,13 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using UnderwaterGliderTwin.Logging;
+using UnderwaterGliderTwin.Mapping;
 using UnderwaterGliderTwin.Playback;
+using UnderwaterGliderTwin.Prediction;
 using UnderwaterGliderTwin.Telemetry;
 using UnderwaterGliderTwin.UI;
 using UnderwaterGliderTwin.Visualization;
+using UnderwaterGliderTwin.Bootstrap;
 
 namespace UnderwaterGliderTwin.Tests
 {
@@ -17,6 +20,8 @@ namespace UnderwaterGliderTwin.Tests
         [TearDown]
         public void TearDown()
         {
+            RuntimePredictionState.SetModelKind(PredictionModelKind.Physics);
+            RuntimePredictionState.SetEnabled(true);
             foreach (var obj in Object.FindObjectsOfType<GameObject>())
             {
                 Object.DestroyImmediate(obj);
@@ -27,12 +32,44 @@ namespace UnderwaterGliderTwin.Tests
         public void DashboardView_DisplaysCurrentTelemetry()
         {
             var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
             var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
 
-            dashboard.Initialize(playback);
+            dashboard.Initialize(playback, prediction);
 
+            Assert.That(FindText("TelemetryTitle").text, Is.EqualTo("遥测数据"));
             Assert.That(FindText("DepthValue").text, Is.EqualTo("10.0 m"));
-            Assert.That(FindText("BatteryValue").text, Is.EqualTo("15%"));
+            Assert.That(FindText("BatteryValue").text, Is.EqualTo("15 %"));
+            Assert.That(FindText("VelocityXValue").text, Is.EqualTo("0.00 m/s"));
+            Assert.That(FindText("VelocityYValue").text, Is.EqualTo("0.00 m/s"));
+            Assert.That(FindText("VelocityZValue").text, Is.EqualTo("0.00 m/s"));
+        }
+
+        [Test]
+        public void DashboardView_CreatesTheCommandCenterFrame()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Initialize(playback, prediction);
+
+            Assert.That(GameObject.Find("CommandCenterHeader"), Is.Not.Null);
+            Assert.That(GameObject.Find("TelemetryPanel").GetComponent<Outline>(), Is.Not.Null);
+            Assert.That(FindText("CommandCenterProductName").text, Is.EqualTo("UnderwaterGliderTwin"));
+        }
+
+        [Test]
+        public void DashboardView_CreatesNavigationReferenceCard()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Initialize(playback, prediction);
+
+            Assert.That(GameObject.Find("NavigationReferenceCard"), Is.Not.Null);
+            Assert.That(FindText("NavigationCardNorth").text, Is.EqualTo("N"));
         }
 
         [Test]
@@ -51,40 +88,667 @@ namespace UnderwaterGliderTwin.Tests
             var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-log-" + System.Guid.NewGuid().ToString("N"));
             var logger = new TwinLogger(logDirectory);
             var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
             var panel = new GameObject("Status").AddComponent<StatusPanelView>();
 
-            panel.Initialize(playback, new AlarmEvaluator(5f, 20f, 20f), logger);
+            panel.Initialize(playback, new AlarmEvaluator(5f, 20f, 20f), logger, prediction);
 
-            Assert.That(FindText("AlarmValue").text, Does.Contain("depth"));
-            Assert.That(File.ReadAllText(Path.Combine(logDirectory, "alarm.log")), Does.Contain("depth"));
+            Assert.That(FindText("AlarmValue").text, Does.Contain("深度"));
+            Assert.That(File.ReadAllText(Path.Combine(logDirectory, "alarm.log")), Does.Contain("深度"));
         }
 
         [Test]
         public void PlaybackControlsView_ButtonsAndSliderDrivePlayback()
         {
-            var playback = CreatePlayback(Frames(10));
+            var frames = Frames(10);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
             var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
             var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
             var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
             var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
-
-            controls.Initialize(playback, cameraController, environment, trajectory);
+            var exitRequested = false;
+            controls.Initialize(playback, cameraController, environment, trajectory, () => exitRequested = true);
             GameObject.Find("PlayPauseButton").GetComponent<Button>().onClick.Invoke();
             GameObject.Find("Speed2Button").GetComponent<Button>().onClick.Invoke();
             GameObject.Find("ProgressSlider").GetComponent<Slider>().value = 0.5f;
+            GameObject.Find("TrajectoryToggle").GetComponent<Toggle>().isOn = true;
+            GameObject.Find("ReverseButton").GetComponent<Button>().onClick.Invoke();
+            playback.Step(1f);
+            GameObject.Find("ExitButton").GetComponent<Button>().onClick.Invoke();
 
             Assert.That(playback.Model.IsPlaying, Is.True);
             Assert.That(playback.Model.Speed, Is.EqualTo(2f));
-            Assert.That(playback.Model.CurrentIndex, Is.EqualTo(4).Or.EqualTo(5));
+            Assert.That(playback.Model.Direction, Is.EqualTo(-1));
+            Assert.That(playback.Model.CurrentIndex, Is.EqualTo(2).Or.EqualTo(3));
+            Assert.That(exitRequested, Is.True);
+        }
+
+        [Test]
+        public void OceanCommandToolbarView_ChangesOnlyTheCameraMode()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("ToolbarCamera").AddComponent<TwinCameraController>();
+            var target = new GameObject("ToolbarTarget");
+            cameraController.Initialize(target.transform, new[] { Vector3.zero, Vector3.one });
+            var trajectory = new GameObject("ToolbarTrajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            var toolbar = new GameObject("Toolbar").AddComponent<OceanCommandToolbarView>();
+
+            toolbar.Initialize(cameraController, trajectory);
+            GameObject.Find("CameraTopCommand").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(cameraController.CurrentMode, Is.EqualTo(CameraMode.Top));
+            Assert.That(playback.Model.IsPlaying, Is.False);
+            Assert.That(GameObject.Find("OceanVisibleArrowCount"), Is.Not.Null);
+            Assert.That(GameObject.Find("OceanVisibleArrowCount").GetComponent<Text>().text, Does.Contain("/ 360"));
+            Assert.That(GameObject.Find("OceanViewportFrame").GetComponent<Image>().color.a, Is.LessThan(0.05f));
+            Assert.That(GameObject.Find("OceanViewportBorderTop"), Is.Not.Null);
+            Assert.That(FindText("OceanToolbarTitle").rectTransform.anchorMin.x, Is.EqualTo(0f));
+        }
+
+        [Test]
+        public void OceanCommandToolbarView_ReservesGuttersAroundTheCentralViewport()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("ToolbarCamera").AddComponent<TwinCameraController>();
+            var target = new GameObject("ToolbarTarget");
+            cameraController.Initialize(target.transform, new[] { Vector3.zero, Vector3.one });
+            var trajectory = new GameObject("ToolbarTrajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            new GameObject("Toolbar").AddComponent<OceanCommandToolbarView>().Initialize(cameraController, trajectory);
+
+            var viewport = GameObject.Find("OceanViewportFrame").GetComponent<RectTransform>();
+            Assert.That(viewport.sizeDelta.x, Is.LessThanOrEqualTo(-760f));
+            Assert.That(viewport.sizeDelta.y, Is.LessThanOrEqualTo(-520f));
+        }
+
+        [Test]
+        public void CurrentLookupFailureMessage_DescribesTheRetainedNetworkField()
+        {
+            var profile = SimulationProfile.Default;
+            profile.OceanCurrentSourcePreference = OceanCurrentSourcePreference.NetworkPreferred;
+            profile.OceanCurrentField = new OceanCurrentField(new[]
+            {
+                new OceanCurrentFieldSample(140d, 15d, 10f, 0f, 0.1f, 0.2f)
+            });
+
+            var message = DataInputView.BuildCurrentLookupFailureMessage(profile, "timeout");
+
+            Assert.That(message, Does.Contain("保留当前联网格点场"));
+            Assert.That(message, Does.Contain("可重试"));
+        }
+
+        [Test]
+        public void CurrentLookupFailureMessage_DescribesTheRetainedLayeredField()
+        {
+            var profile = SimulationProfile.Default;
+            profile.OceanCurrentSourcePreference = OceanCurrentSourcePreference.LayeredPreferred;
+            profile.OceanCurrentProfile = new OceanCurrentProfile(new[]
+            {
+                new OceanCurrentLayer(0f, 100f, 0.1f, 0.2f),
+                new OceanCurrentLayer(100f, 300f, 0.2f, 0.1f)
+            });
+
+            var message = DataInputView.BuildCurrentLookupFailureMessage(profile, "timeout");
+
+            Assert.That(message, Does.Contain("保留当前 2 层分层场"));
+            Assert.That(message, Does.Contain("可重试"));
+        }
+
+        [Test]
+        public void PlaybackControlsView_ExportUsesSuppliedScreenshotCallback()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
+            var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
+            var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
+            var callbackWasCalled = false;
+
+            controls.Initialize(playback, cameraController, environment, trajectory,
+                onScreenshotRequested: () => { callbackWasCalled = true; return @"C:\\capture\\ui.png"; });
+            GameObject.Find("ExportButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(callbackWasCalled, Is.True);
+            Assert.That(FindText("PlaybackStatus").text, Does.Contain("ui.png"));
+        }
+
+        [Test]
+        public void DashboardView_DisplaysComputedAxisVelocities()
+        {
+            var frames = new[]
+            {
+                new TelemetryFrame(0, "t0", 0f, 120.0, 25.0, 10f, 100f, 30f, 4f, -3f, 28.5f, 0.3f, 15f, "mode", "state", 2f, 44f, 120f, 80f, 300f, 17f, 32f),
+                new TelemetryFrame(1, "t1", 10f, 120.0001, 25.0001, 13f, 100f, 31f, 4f, -3f, 28.5f, 0.3f, 15f, "mode", "state", 2f, 44f, 120f, 80f, 300f, 17f, 32f)
+            };
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Initialize(playback, prediction);
+            playback.Seek(1f);
+
+            Assert.That(FindText("VelocityXValue").text, Is.EqualTo("1.01 m/s"));
+            Assert.That(FindText("VelocityYValue").text, Is.EqualTo("-0.30 m/s"));
+            Assert.That(FindText("VelocityZValue").text, Is.EqualTo("1.11 m/s"));
+            Assert.That(FindText("HorizontalDisplacementValue").text, Is.EqualTo("E 10.1 N 11.1 |15.0| m"));
+        }
+
+        [Test]
+        public void DashboardView_DisplaysCurrentForSimulationDepth()
+        {
+            var profile = SimulationProfile.Default;
+            profile.OceanCurrentProfile = new OceanCurrentProfile(new[] { new OceanCurrentLayer(0f, 50f, 0.2f, -0.4f) });
+            RuntimeDataSourceState.UseSimulation(profile);
+            var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Initialize(playback, prediction);
+
+            Assert.That(FindText("OceanCurrentValue").text, Is.EqualTo("东 0.20 m/s 北 -0.40 m/s"));
+        }
+
+        [Test]
+        public void DataInputView_CreatesCsvInputAndInvokesLoad()
+        {
+            var tempCsv = Path.Combine(Application.temporaryCachePath, "reload.csv");
+            File.WriteAllText(tempCsv, "x");
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            var loadedPath = string.Empty;
+
+            dataInput.Initialize(tempCsv, SimulationProfile.Default, null, path => loadedPath = path);
+            GameObject.Find("LoadCsvButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(GameObject.Find("CsvPathInput").GetComponent<InputField>().text, Is.EqualTo(tempCsv));
+            Assert.That(loadedPath, Is.EqualTo(tempCsv));
+            Assert.That(GameObject.Find("CsvPathInputText").GetComponent<Text>().raycastTarget, Is.False);
+            Assert.That(GameObject.Find("CsvPathInputPlaceholder").GetComponent<Text>().raycastTarget, Is.False);
+            Assert.That(GameObject.Find("SimulationApplyButton"), Is.Not.Null);
+            Assert.That(GameObject.Find("PredictionHorizonInput"), Is.Not.Null);
+            Assert.That(GameObject.Find("XGBoostModelButton"), Is.Not.Null);
+            Assert.That(GameObject.Find("DataSourceConfigurationGroup"), Is.Not.Null);
+            Assert.That(GameObject.Find("OceanConfigurationGroup"), Is.Not.Null);
+        }
+
+        [Test]
+        public void CommandCenterConfigurationStrip_UsesFramedSurfaceBelowSystemHeader()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            var strip = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
+            Assert.That(strip.GetComponent<Outline>(), Is.Not.Null);
+            Assert.That(strip.anchoredPosition.y, Is.LessThanOrEqualTo(-56f));
+        }
+
+        [Test]
+        public void DataInputView_UsesChineseMissionCopy()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            Assert.That(FindText("MissionConfigurationTitle").text, Is.EqualTo("任务配置"));
+            Assert.That(FindText("LoadCsvButtonLabel").text, Is.EqualTo("加载 CSV"));
+            Assert.That(FindText("SimulationApplyButtonLabel").text, Is.EqualTo("运行仿真"));
+            Assert.That(FindText("MissionConfigurationStatus").text, Is.EqualTo("CSV 回放和参数仿真均可用"));
+            var missionBar = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
+            Assert.That(missionBar.anchorMin.x, Is.EqualTo(0f));
+            Assert.That(missionBar.anchorMax.x, Is.EqualTo(1f));
+
+            GameObject.Find("CsvPathInput").GetComponent<InputField>().text = string.Empty;
+            GameObject.Find("LoadCsvButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(FindText("MissionConfigurationStatus").text, Is.EqualTo("请输入 CSV 路径"));
+        }
+
+        [Test]
+        public void DataInputView_BuildsSimulationProfileAndInvokesCallback()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile capturedProfile = null;
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => capturedProfile = profile);
+            GameObject.Find("SimulationDepthInput").GetComponent<InputField>().text = "220";
+            GameObject.Find("SimulationCyclesInput").GetComponent<InputField>().text = "4";
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(capturedProfile, Is.Not.Null);
+            Assert.That(capturedProfile.TargetDepthM, Is.EqualTo(220f).Within(0.01f));
+            Assert.That(capturedProfile.CycleCount, Is.EqualTo(4));
+        }
+
+        [Test]
+        public void DataInputView_AutoCorrectsCycleDurationWhenDepthChanges()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            var cycleDuration = GameObject.Find("SimulationDurationInput").GetComponent<InputField>();
+            var targetDepth = GameObject.Find("SimulationDepthInput").GetComponent<InputField>();
+
+            cycleDuration.text = "900";
+            targetDepth.text = "1600";
+            targetDepth.onEndEdit.Invoke(targetDepth.text);
+
+            Assert.That(cycleDuration.text, Is.EqualTo("32940"));
+        }
+
+        [Test]
+        public void DataInputView_ShowsAndAppliesTheDepthReferenceCycle()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            var cycleDuration = GameObject.Find("SimulationDurationInput").GetComponent<InputField>();
+            var targetDepth = GameObject.Find("SimulationDepthInput").GetComponent<InputField>();
+
+            targetDepth.text = "1600";
+            targetDepth.onEndEdit.Invoke(targetDepth.text);
+
+            Assert.That(FindText("ReferenceCycleDurationValue").text, Is.EqualTo("9 h 09 min"));
+            cycleDuration.text = "900";
+            GameObject.Find("ApplyReferenceCycleButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(cycleDuration.text, Is.EqualTo("32940"));
+        }
+
+        [Test]
+        public void DataInputView_LabelsConfigurationFieldsWithUnits()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("telemetry.csv", SimulationProfile.Default, null);
+
+            Assert.That(FindText("SimulationDurationInputLabel").text, Is.EqualTo("单航段安全上限 (s)"));
+            Assert.That(FindText("SimulationDepthInputLabel").text, Is.EqualTo("深度 (m)"));
+            Assert.That(GameObject.Find("SimulationSpeedInput"), Is.Null);
+            Assert.That(GameObject.Find("EstimatedWaterSpeedLabel"), Is.Null);
+            Assert.That(GameObject.Find("EstimatedWaterSpeedReadout"), Is.Null);
+            Assert.That(FindText("MissionLongitudeInputLabel").text, Is.EqualTo("经度 (°)"));
+            Assert.That(FindText("MissionLatitudeInputLabel").text, Is.EqualTo("纬度 (°)"));
+        }
+
+        [Test]
+        public void DataInputView_UsesConfiguredMissionCoordinatesForSimulation()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile capturedProfile = null;
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => capturedProfile = profile);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+            GameObject.Find("MissionLongitudeInput").GetComponent<InputField>().text = "121.4737";
+            GameObject.Find("MissionLatitudeInput").GetComponent<InputField>().text = "31.2304";
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(capturedProfile, Is.Not.Null);
+            Assert.That(capturedProfile.OriginLongitudeDeg, Is.EqualTo(121.4737d).Within(0.000001d));
+            Assert.That(capturedProfile.OriginLatitudeDeg, Is.EqualTo(31.2304d).Within(0.000001d));
+        }
+
+        [Test]
+        public void DataInputView_ExposesMissionCoordinatesInTheMainConfigurationPanel()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("telemetry.csv", SimulationProfile.Default, null);
+
+            Assert.That(GameObject.Find("MissionLongitudeInput"), Is.Not.Null);
+            Assert.That(GameObject.Find("MissionLatitudeInput"), Is.Not.Null);
+        }
+
+        [Test]
+        public void DataInputView_StoresRegionalCurrentPrefetchSettingsInSimulationProfile()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile capturedProfile = null;
+
+            dataInput.Initialize("telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => capturedProfile = profile);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+            var halfWidth = GameObject.Find("OceanCurrentPrefetchHalfWidthInput").GetComponent<InputField>();
+            var forecastWindow = GameObject.Find("OceanCurrentForecastWindowInput").GetComponent<InputField>();
+            Assert.That(halfWidth.text, Is.EqualTo("25"));
+            Assert.That(forecastWindow.text, Is.EqualTo("72"));
+
+            halfWidth.text = "40";
+            forecastWindow.text = "96";
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(capturedProfile.OceanCurrentPrefetchHalfWidthKm, Is.EqualTo(40f));
+            Assert.That(capturedProfile.OceanCurrentForecastWindowHours, Is.EqualTo(96f));
+        }
+
+        [Test]
+        public void DataInputView_AcceptsSimulationValuesOutsideFormerRanges()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile capturedProfile = null;
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => capturedProfile = profile);
+            GameObject.Find("SimulationCyclesInput").GetComponent<InputField>().text = "250";
+            GameObject.Find("SimulationDurationInput").GetComponent<InputField>().text = "15";
+            GameObject.Find("SimulationDepthInput").GetComponent<InputField>().text = "5000";
+            GameObject.Find("SimulationHeadingInput").GetComponent<InputField>().text = "1080";
+            GameObject.Find("SimulationHeadingDeltaInput").GetComponent<InputField>().text = "720";
+            GameObject.Find("SimulationPitchInput").GetComponent<InputField>().text = "120";
+            GameObject.Find("SimulationRollInput").GetComponent<InputField>().text = "-90";
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(capturedProfile, Is.Not.Null);
+            Assert.That(capturedProfile.CycleCount, Is.EqualTo(250));
+            Assert.That(capturedProfile.TargetDepthM, Is.EqualTo(5000f));
+            Assert.That(capturedProfile.WaterColumnDepthM, Is.GreaterThanOrEqualTo(5000f));
+            Assert.That(GameObject.Find("SimulationWaterColumnInput").GetComponent<InputField>().text, Is.EqualTo("5000"));
+            Assert.That(capturedProfile.RollAmplitudeDeg, Is.EqualTo(-90f));
+        }
+
+        [Test]
+        public void DataInputView_StoresArbitraryOceanCurrentLayersInSimulationProfile()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile capturedProfile = null;
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => capturedProfile = profile);
+            GameObject.Find("OceanCurrentAddLayerButton").GetComponent<Button>().onClick.Invoke();
+            GameObject.Find("OceanCurrentMinDepthInput").GetComponent<InputField>().text = "20";
+            GameObject.Find("OceanCurrentMaxDepthInput").GetComponent<InputField>().text = "80";
+            GameObject.Find("OceanCurrentEastwardInput").GetComponent<InputField>().text = "0.35";
+            GameObject.Find("OceanCurrentNorthwardInput").GetComponent<InputField>().text = "-0.12";
+            GameObject.Find("OceanCurrentSaveLayerButton").GetComponent<Button>().onClick.Invoke();
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(capturedProfile, Is.Not.Null);
+            Assert.That(capturedProfile.OceanCurrentProfile.Layers, Has.Count.EqualTo(1));
+            Assert.That(capturedProfile.OceanCurrentProfile.GetVelocity(40f), Is.EqualTo(new Vector2(0.35f, -0.12f)));
+        }
+
+        [Test]
+        public void DataInputView_SelectsAndDisplaysExistingOceanCurrentLayer()
+        {
+            var profile = SimulationProfile.Default;
+            profile.OceanCurrentProfile = new OceanCurrentProfile(new[]
+            {
+                new OceanCurrentLayer(0f, 160f, 0.35f, -0.12f)
+            });
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+
+            dataInput.Initialize("D:\\telemetry.csv", profile, null);
+
+            Assert.That(GameObject.Find("OceanCurrentEastwardInput").GetComponent<InputField>().text, Is.EqualTo("0.35"));
+            Assert.That(GameObject.Find("OceanCurrentNorthwardInput").GetComponent<InputField>().text, Is.EqualTo("-0.12"));
+            Assert.That(FindText("OceanCurrentLayerSummary").text, Is.EqualTo("海流层：1/1  覆盖 0-160m"));
+        }
+
+        [Test]
+        public void DataInputView_OpensAndClosesDedicatedOceanCurrentDrawer()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+
+            var drawer = GameObject.Find("OceanCurrentDrawerPanel");
+            Assert.That(drawer.activeSelf, Is.True);
+            Assert.That(GameObject.Find("OceanCurrentDrawerSaveButton"), Is.Not.Null);
+            Assert.That(GameObject.Find("DynamicsCalibrateFromCsvButton"), Is.Not.Null);
+            Assert.That(GameObject.Find("OceanCurrentQualitySummary"), Is.Not.Null);
+            GameObject.Find("OceanCurrentDrawerCloseButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(drawer.activeSelf, Is.False);
+        }
+
+        [Test]
+        public void DataInputView_AppliesDynamicsPresetToSimulationProfile()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile capturedProfile = null;
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => capturedProfile = profile);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+            GameObject.Find("DynamicsCalmWaterPresetButton").GetComponent<Button>().onClick.Invoke();
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(capturedProfile.Dynamics.PresetName, Is.EqualTo("Calm Water Baseline"));
+            Assert.That(capturedProfile.Dynamics.TurbulenceMps, Is.EqualTo(0f));
+        }
+
+        [Test]
+        public void DataInputView_ExposesAndSavesCoreDynamicsParameters()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile capturedProfile = null;
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => capturedProfile = profile);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(GameObject.Find("DynamicsMassInput"), Is.Not.Null);
+            Assert.That(GameObject.Find("DynamicsReferenceAreaInput"), Is.Not.Null);
+            Assert.That(GameObject.Find("DynamicsRollInertiaInput"), Is.Not.Null);
+            Assert.That(FindText("DynamicsParametersTitle").text, Is.EqualTo("动力学参数"));
+
+            GameObject.Find("DynamicsMassInput").GetComponent<InputField>().text = "68";
+            GameObject.Find("DynamicsReferenceAreaInput").GetComponent<InputField>().text = "0.31";
+            GameObject.Find("DynamicsRollInertiaInput").GetComponent<InputField>().text = "35";
+            GameObject.Find("DynamicsPitchInertiaInput").GetComponent<InputField>().text = "48";
+            GameObject.Find("DynamicsYawInertiaInput").GetComponent<InputField>().text = "62";
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(capturedProfile, Is.Not.Null);
+            Assert.That(capturedProfile.Dynamics.MassKg, Is.EqualTo(68f));
+            Assert.That(capturedProfile.Dynamics.ReferenceAreaM2, Is.EqualTo(0.31f));
+            Assert.That(capturedProfile.Dynamics.RollInertiaKgM2, Is.EqualTo(35f));
+            Assert.That(capturedProfile.Dynamics.PitchInertiaKgM2, Is.EqualTo(48f));
+            Assert.That(capturedProfile.Dynamics.YawInertiaKgM2, Is.EqualTo(62f));
+        }
+
+        [Test]
+        public void DataInputView_ExposesAndSavesTurnaroundDuration()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile capturedProfile = null;
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => capturedProfile = profile);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+
+            var turnaroundDuration = GameObject.Find("DynamicsTurnaroundDurationInput").GetComponent<InputField>();
+            turnaroundDuration.text = "540";
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(capturedProfile.Dynamics.TurnaroundDurationSeconds, Is.EqualTo(540f));
+        }
+
+        [Test]
+        public void DataInputView_OffersOnlyXGBoostPredictionModel()
+        {
+            RuntimePredictionState.SetModelKind(PredictionModelKind.XGBoost);
+            var frames = Frames(2);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, prediction);
+
+            Assert.That(GameObject.Find("PhysicsModelButton"), Is.Null);
+            Assert.That(GameObject.Find("LSTMModelButton"), Is.Null);
+            Assert.That(GameObject.Find("XGBoostModelButton").GetComponent<Button>().interactable, Is.True);
+            Assert.That(RuntimePredictionState.ModelKind, Is.EqualTo(PredictionModelKind.XGBoost));
+        }
+
+        [Test]
+        public void DashboardView_HidesAdvancedTelemetryUntilDetailsAreRequested()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Initialize(playback, prediction);
+
+            Assert.That(GameObject.Find("TelemetryDetailsButton"), Is.Not.Null);
+            Assert.That(GameObject.Find("VelocityXValue").GetComponent<Text>().enabled, Is.False);
+            GameObject.Find("TelemetryDetailsButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(GameObject.Find("VelocityXValue").GetComponent<Text>().enabled, Is.True);
+        }
+
+        [Test]
+        public void DashboardView_KeepsExpandedTelemetryAbovePlaybackControls()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Initialize(playback, null);
+            GameObject.Find("TelemetryDetailsButton").GetComponent<Button>().onClick.Invoke();
+
+            var panel = GameObject.Find("TelemetryPanel").GetComponent<RectTransform>();
+            Assert.That(panel.sizeDelta.y, Is.LessThanOrEqualTo(640f));
+        }
+
+        [Test]
+        public void DataInputView_ExposesFlightLegParametersAndSubmitsThem()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile capturedProfile = null;
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => capturedProfile = profile);
+
+            var button = GameObject.Find("FlightLegSettingsButton");
+            Assert.That(button, Is.Not.Null);
+            button.GetComponent<Button>().onClick.Invoke();
+            GameObject.Find("DescentNetBuoyancyInput").GetComponent<InputField>().text = "-12";
+            GameObject.Find("AscentNetBuoyancyInput").GetComponent<InputField>().text = "8";
+            GameObject.Find("DescentPitchInput").GetComponent<InputField>().text = "26";
+            GameObject.Find("AscentPitchInput").GetComponent<InputField>().text = "7";
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(capturedProfile, Is.Not.Null);
+            var descentBuoyancy = typeof(SimulationProfile).GetProperty("DescentNetBuoyancyForceN");
+            var ascentPitch = typeof(SimulationProfile).GetProperty("AscentPitchDeg");
+            Assert.That(descentBuoyancy.GetValue(capturedProfile), Is.EqualTo(-12f));
+            Assert.That(ascentPitch.GetValue(capturedProfile), Is.EqualTo(7f));
+            Assert.That(FindText("FlightLegDrawerStatus").text, Does.Contain("上浮为正、下潜为负"));
+        }
+
+        [Test]
+        public void DataInputView_ClarifiesAndRestoresDefaultFlightLegControls()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile capturedProfile = null;
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => capturedProfile = profile);
+
+            Assert.That(FindText("SimulationPitchInputLabel").text, Is.EqualTo("默认俯仰 (°)"));
+            Assert.That(FindText("SimulationRollInputLabel").text, Is.EqualTo("默认横滚 (°)"));
+            Assert.That(GameObject.Find("SimulationPitchInput").GetComponent<InputField>().text, Is.EqualTo("12"));
+            Assert.That(GameObject.Find("SimulationRollInput").GetComponent<InputField>().text, Is.EqualTo("3"));
+
+            GameObject.Find("FlightLegSettingsButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(FindText("FlightLegDrawerStatus").text, Does.Contain("覆盖默认值"));
+            GameObject.Find("DescentPitchInput").GetComponent<InputField>().text = "18";
+            GameObject.Find("FlightLegRestoreDefaultsButton").GetComponent<Button>().onClick.Invoke();
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(capturedProfile, Is.Not.Null);
+            Assert.That(float.IsNaN(capturedProfile.DescentPitchDeg), Is.True);
+            Assert.That(float.IsNaN(capturedProfile.AscentRollDeg), Is.True);
+        }
+
+        [Test]
+        public void StatusPanelView_CreatesVisibleMissionHealthBadge()
+        {
+            var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-status-" + System.Guid.NewGuid().ToString("N"));
+            var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+
+            panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), new TwinLogger(logDirectory), prediction);
+
+            Assert.That(GameObject.Find("MissionHealthBadgeValue"), Is.Not.Null);
+            Assert.That(FindText("MissionHealthBadgeValue").text, Is.EqualTo("正常"));
+            Assert.That(GameObject.Find("EngineeringValidationValue"), Is.Not.Null);
+            Assert.That(FindText("AlarmValue").text, Is.EqualTo("运行正常"));
+        }
+
+        [Test]
+        public void StatusPanelView_UsesChineseMissionCopy()
+        {
+            var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-status-copy-" + System.Guid.NewGuid().ToString("N"));
+            RuntimeDataSourceState.UseCsvPath("D:\\telemetry.csv");
+            var playback = CreatePlayback(Frames(2));
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+
+            panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), new TwinLogger(logDirectory), null);
+
+            Assert.That(FindText("MissionStatusTitle").text, Is.EqualTo("任务状态"));
+            Assert.That(FindText("MissionValue").text, Is.EqualTo("CSV 回放"));
+        }
+
+        [Test]
+        public void StatusPanelView_TranslatesSimulationModeAndState()
+        {
+            var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-status-simulation-" + System.Guid.NewGuid().ToString("N"));
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            var frames = new[]
+            {
+                new TelemetryFrame(0, "t", 0f, 120d, 25d, 0f, 0f, 42f, 0f, 0f,
+                    0f, 0f, 96f, "Parameter Simulation", "Turnaround", 1f, 42f, 160f, 0f, 0f, 0f, 0f)
+            };
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+
+            panel.Initialize(CreatePlayback(frames), new AlarmEvaluator(1000f, 1f, 90f), new TwinLogger(logDirectory), null);
+
+            Assert.That(FindText("ModeValue").text, Is.EqualTo("参数仿真"));
+            Assert.That(FindText("StateValue").text, Is.EqualTo("转向过渡"));
+        }
+
+        [Test]
+        public void StatusPanelView_ShowsCurrentSegmentAgainstTheMissionTotal()
+        {
+            var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-status-segments-" + System.Guid.NewGuid().ToString("N"));
+            var simulationProfile = SimulationProfile.Default;
+            simulationProfile.CycleCount = 10;
+            RuntimeDataSourceState.UseSimulation(simulationProfile);
+            var frames = new[]
+            {
+                new TelemetryFrame(0, "000d 00:00:00", 0f, 140d, 15d, 0f, 0f, 42f, 0f, 0f, 28.6f, 0.2f, 96f, "Parameter Simulation", "Surface", 1f, 42f, 160f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(1, "000d 10:00:00", 36000f, 140.1d, 15d, 0f, 0f, 42f, 0f, 0f, 28.6f, 0.2f, 90f, "Parameter Simulation", "Surface", 10f, 42f, 160f, 0f, 0f, 0f, 0f)
+            };
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+
+            panel.Initialize(CreatePlayback(frames), new AlarmEvaluator(1000f, 1f, 90f), new TwinLogger(logDirectory), null);
+
+            Assert.That(FindText("CurrentSegmentValue").text, Is.EqualTo("1 / 10"));
+        }
+
+        [Test]
+        public void StatusPanelView_LeavesRoomForOperationsBar()
+        {
+            var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-status-layout-" + System.Guid.NewGuid().ToString("N"));
+            var playback = CreatePlayback(Frames(2));
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+
+            panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), new TwinLogger(logDirectory), null);
+
+            Assert.That(GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>().sizeDelta.y,
+                Is.LessThanOrEqualTo(640f));
         }
 
         [Test]
         public void UiFactory_CreatesEventSystemForRuntimeUi()
         {
-            var playback = CreatePlayback(Frames(2));
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
             var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
             var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
             var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
             var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
 
             controls.Initialize(playback, cameraController, environment, trajectory);
@@ -94,12 +758,98 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void PlaybackControlsView_CreatesGroupedControlLabels()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
+            var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
+            var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
+
+            controls.Initialize(playback, cameraController, environment, trajectory);
+
+            Assert.That(GameObject.Find("PlaybackGroupLabel"), Is.Not.Null);
+            Assert.That(GameObject.Find("SpeedGroupLabel"), Is.Not.Null);
+        }
+
+        [Test]
+        public void DashboardView_DisplaysSimulationDiagnosticsWithUnits()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            var diagnostics = new SimulationDiagnostics(
+                new Vector3(0.3f, -0.1f, 0.4f),
+                new Vector3(0.2f, 0f, -0.1f),
+                6.5f,
+                8.2f,
+                12.4f,
+                3.2f,
+                4.5f,
+                7.8f,
+                -1.1f,
+                new Vector3(0.02f, 0.01f, 0.03f),
+                new Vector3(1.2f, 2.4f, 0.8f),
+                12.5f,
+                new Vector3(4.0f, -3.0f, 1.5f),
+                6.7f);
+            var frames = new[]
+            {
+                new TelemetryFrame(0, "t0", 0f, 120d, 25d, 10f, 100f, 30f, 4f, -3f,
+                    28.5f, 0.3f, 90f, "Parameter Simulation", "Glide", 2f, 44f, 120f, 80f,
+                    0f, 17f, 32f, diagnostics)
+            };
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Initialize(CreatePlayback(frames), null);
+
+            Assert.That(FindText("WaterSpeedValue").text, Is.EqualTo("0.51 m/s"));
+            Assert.That(FindText("GroundSpeedValue").text, Is.EqualTo("0.59 m/s"));
+            Assert.That(FindText("SideSlipValue").text, Is.EqualTo("12.4°"));
+            Assert.That(FindText("OceanCurrentValue").text, Is.EqualTo("东 0.20 m/s 北 -0.10 m/s"));
+            Assert.That(FindText("NetBuoyancyValue").text, Is.EqualTo("6.5 N"));
+            Assert.That(FindText("EnergyValue").text, Is.EqualTo("8.2 W"));
+            Assert.That(FindText("AngleOfAttackValue").text, Is.EqualTo("3.2 deg"));
+            Assert.That(FindText("LiftForceValue").text, Is.EqualTo("4.5 N"));
+            Assert.That(FindText("DragForceValue").text, Is.EqualTo("7.8 N"));
+            Assert.That(FindText("AngularRateValue").text, Is.EqualTo("2.14 deg/s"));
+            Assert.That(FindText("PistonPositionValue").text, Is.EqualTo("12.5 mm"));
+            Assert.That(FindText("ControlSurfaceValue").text, Is.EqualTo("R 4.0 / P -3.0 / Y 1.5 deg"));
+            Assert.That(FindText("ActuatorPowerValue").text, Is.EqualTo("6.7 W"));
+            Assert.That(FindText("DynamicsSummaryValue").text, Is.EqualTo("AoA 3.2°  L 4.5N  D 7.8N"));
+        }
+
+        [Test]
+        public void PlaybackControlsView_UsesCompactOperationsBar()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
+            var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
+            var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
+
+            controls.Initialize(playback, cameraController, environment, trajectory);
+
+            var operationsBar = GameObject.Find("PlaybackControlsPanel").GetComponent<RectTransform>();
+            Assert.That(operationsBar.sizeDelta.y, Is.LessThanOrEqualTo(128f));
+            Assert.That(operationsBar.anchorMin.x, Is.EqualTo(0f));
+            Assert.That(operationsBar.anchorMax.x, Is.EqualTo(1f));
+        }
+
+        [Test]
         public void DashboardView_UsesFixedAnchorsForValueLabels()
         {
             var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
             var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
 
-            dashboard.Initialize(playback);
+            dashboard.Initialize(playback, prediction);
 
             var depthRect = FindText("DepthValue").rectTransform;
             Assert.That(depthRect.anchorMin, Is.EqualTo(depthRect.anchorMax));
@@ -109,9 +859,10 @@ namespace UnderwaterGliderTwin.Tests
         public void DashboardView_AnchorsValueLabelsToTopRightOfPanel()
         {
             var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
             var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
 
-            dashboard.Initialize(playback);
+            dashboard.Initialize(playback, prediction);
 
             var depthRect = FindText("DepthValue").rectTransform;
             Assert.That(depthRect.anchorMin, Is.EqualTo(new Vector2(1f, 1f)));
@@ -131,12 +882,20 @@ namespace UnderwaterGliderTwin.Tests
             return playback;
         }
 
+        private static PredictionController CreatePrediction(PlaybackController playback, IReadOnlyList<TelemetryFrame> frames)
+        {
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var prediction = new GameObject("Prediction").AddComponent<PredictionController>();
+            prediction.Initialize(frames, mapper, playback);
+            return prediction;
+        }
+
         private static IReadOnlyList<TelemetryFrame> Frames(int count)
         {
             var frames = new List<TelemetryFrame>();
             for (var i = 0; i < count; i++)
             {
-                frames.Add(new TelemetryFrame(i, $"t{i}", 120, 25, 10f + i, 100, 30f + i, 4f, -3f, 28.5f, 0.3f, 15f, "mode", "state", 2f, 44f, 120f, 80f, 300f, 17f, 32f));
+                frames.Add(new TelemetryFrame(i, $"t{i}", i, 120, 25, 10f + i, 100, 30f + i, 4f, -3f, 28.5f, 0.3f, 15f, "mode", "state", 2f, 44f, 120f, 80f, 300f, 17f, 32f));
             }
 
             return frames;

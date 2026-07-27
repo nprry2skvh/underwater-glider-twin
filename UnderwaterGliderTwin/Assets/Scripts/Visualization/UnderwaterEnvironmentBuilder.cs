@@ -19,7 +19,6 @@ namespace UnderwaterGliderTwin.Visualization
             CreateSeabed();
             CreateDirectionalLight();
             CreateMarineSnow();
-            CreateLightBeams();
         }
 
         public void SetFogEnabled(bool enabled)
@@ -77,26 +76,7 @@ namespace UnderwaterGliderTwin.Visualization
             shape.scale = new Vector3(60f, 18f, 60f);
         }
 
-        private void CreateLightBeams()
-        {
-            for (var i = 0; i < 3; i++)
-            {
-                var beam = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                beam.name = $"GodRay{i + 1}";
-                beam.transform.SetParent(transform, false);
-                beam.transform.position = new Vector3(-14f + i * 14f, 2f, 18f - i * 8f);
-                beam.transform.rotation = Quaternion.Euler(18f, 0f, 12f - i * 10f);
-                beam.transform.localScale = new Vector3(2.2f, 22f, 2.2f);
-                beam.GetComponent<Renderer>().sharedMaterial = RuntimeMaterialFactory.Transparent("GodRayMaterial", new Color(0.55f, 0.9f, 1f, 0.11f));
-                var collider = beam.GetComponent<Collider>();
-                if (collider != null)
-                {
-                    DestroyObject(collider);
-                }
-            }
-        }
-
-        private static void DestroyObject(Object target)
+        private static void DestroyRuntimeObject(Object target)
         {
             if (Application.isPlaying)
             {

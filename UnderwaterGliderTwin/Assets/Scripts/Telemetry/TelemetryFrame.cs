@@ -4,6 +4,7 @@ namespace UnderwaterGliderTwin.Telemetry
     {
         public readonly int RowIndex;
         public readonly string RawTime;
+        public readonly float ElapsedSeconds;
         public readonly double LongitudeDeg;
         public readonly double LatitudeDeg;
         public readonly float DepthM;
@@ -23,10 +24,16 @@ namespace UnderwaterGliderTwin.Telemetry
         public readonly float PropellerRpm;
         public readonly float PistonMm;
         public readonly float TurnAngleDeg;
+        public readonly SimulationDiagnostics? Diagnostics;
+        public readonly double PlannedLongitudeDeg;
+        public readonly double PlannedLatitudeDeg;
+
+        public bool HasPlannedPosition => !double.IsNaN(PlannedLongitudeDeg) && !double.IsNaN(PlannedLatitudeDeg);
 
         public TelemetryFrame(
             int rowIndex,
             string rawTime,
+            float elapsedSeconds,
             double longitudeDeg,
             double latitudeDeg,
             float depthM,
@@ -45,10 +52,14 @@ namespace UnderwaterGliderTwin.Telemetry
             float targetAltitudeM,
             float propellerRpm,
             float pistonMm,
-            float turnAngleDeg)
+            float turnAngleDeg,
+            SimulationDiagnostics? diagnostics = null,
+            double plannedLongitudeDeg = double.NaN,
+            double plannedLatitudeDeg = double.NaN)
         {
             RowIndex = rowIndex;
             RawTime = rawTime;
+            ElapsedSeconds = elapsedSeconds;
             LongitudeDeg = longitudeDeg;
             LatitudeDeg = latitudeDeg;
             DepthM = depthM;
@@ -68,6 +79,9 @@ namespace UnderwaterGliderTwin.Telemetry
             PropellerRpm = propellerRpm;
             PistonMm = pistonMm;
             TurnAngleDeg = turnAngleDeg;
+            Diagnostics = diagnostics;
+            PlannedLongitudeDeg = plannedLongitudeDeg;
+            PlannedLatitudeDeg = plannedLatitudeDeg;
         }
     }
 }

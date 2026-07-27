@@ -1,0 +1,17 @@
+{
+  "csv_path": "D:\\Desktop\\digital twin\\1.csv",
+  "row_count": 236149,
+  "train_ratio": 0.7,
+  "window_size": 30,
+  "horizon": 30,
+  "models": {
+    "physics": {
+      "status": "trained",
+      "rmse": 15935.8681640625,
+      "mae": 280.6121826171875,
+      "current_error": 18.395689010620117,
+      "max_error": 7153107.5,
+      "confidence": 0.00037636743311713646
+    }
+  }
+}

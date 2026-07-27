@@ -31,6 +31,33 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void Tick_RewindsWhenDirectionIsReverse()
+        {
+            var model = new PlaybackModel(Frames(100), rowsPerSecond: 10f);
+            model.SeekNormalized(0.5f);
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+
+            model.Tick(1f);
+
+            Assert.That(model.CurrentIndex, Is.EqualTo(40));
+        }
+
+        [Test]
+        public void Tick_StopsAtFirstFrameWhenReversingPastStart()
+        {
+            var model = new PlaybackModel(Frames(100), rowsPerSecond: 10f);
+            model.SeekNormalized(0.1f);
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+
+            model.Tick(2f);
+
+            Assert.That(model.CurrentIndex, Is.EqualTo(0));
+            Assert.That(model.IsPlaying, Is.False);
+        }
+
+        [Test]
         public void PlaybackController_ReportsSeekReason()
         {
             var controller = new UnityEngine.GameObject("Playback").AddComponent<PlaybackController>();
@@ -49,7 +76,7 @@ namespace UnderwaterGliderTwin.Tests
             var frames = new List<TelemetryFrame>();
             for (var i = 0; i < count; i++)
             {
-                frames.Add(new TelemetryFrame(i, $"t{i}", 120, 25, i, 100, 0, 0, 0, 28, 0, 95, "mode", "state", 1, 0, 0, 0, 0, 0, 0));
+                frames.Add(new TelemetryFrame(i, $"t{i}", i, 120, 25, i, 100, 0, 0, 0, 28, 0, 95, "mode", "state", 1, 0, 0, 0, 0, 0, 0));
             }
 
             return frames;

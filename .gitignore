@@ -3,6 +3,18 @@
 *.bin
 *.sqlite
 *.sqlite3
+*.npz
+
+# Local run/test artifacts
+*.log
+EditModeResults*.xml
+TestResults*.xml
+TestResults/
+.superpowers/
+
+# Python generated files
+__pycache__/
+*.py[cod]
 
 # Unity generated folders
 [Ll]ibrary/

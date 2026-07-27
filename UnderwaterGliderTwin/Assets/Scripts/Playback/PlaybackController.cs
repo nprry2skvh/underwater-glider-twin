@@ -28,10 +28,7 @@ namespace UnderwaterGliderTwin.Playback
 
         private void Update()
         {
-            if (model != null && model.Tick(Time.deltaTime))
-            {
-                Publish(FrameUpdateReason.Playback);
-            }
+            Step(Time.deltaTime);
         }
 
         public void TogglePlaying()
@@ -49,10 +46,36 @@ namespace UnderwaterGliderTwin.Playback
             model.SetSpeed(speed);
         }
 
+        public void PlayReverse()
+        {
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+        }
+
+        public void PlayForward()
+        {
+            model.SetDirection(1);
+            model.SetPlaying(true);
+        }
+
         public void Seek(float progress01)
         {
             model.SeekNormalized(progress01);
             Publish(FrameUpdateReason.Seek);
+        }
+
+        public void Restart(bool playImmediately)
+        {
+            model.Restart(playImmediately);
+            Publish(FrameUpdateReason.Seek);
+        }
+
+        public void Step(float deltaSeconds)
+        {
+            if (model != null && model.Tick(deltaSeconds))
+            {
+                Publish(FrameUpdateReason.Playback);
+            }
         }
 
         private void Publish(FrameUpdateReason reason)

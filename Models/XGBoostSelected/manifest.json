@@ -1,0 +1,25 @@
+{
+  "artifact_version": 1,
+  "models": [
+    "models/east_displacement_m.json",
+    "models/north_displacement_m.json",
+    "models/depth_delta_m.json",
+    "models/heading_delta_deg.json",
+    "models/pitch_delta_deg.json",
+    "models/roll_delta_deg.json"
+  ],
+  "targets": [
+    "east_displacement_m",
+    "north_displacement_m",
+    "depth_delta_m",
+    "heading_delta_deg",
+    "pitch_delta_deg",
+    "roll_delta_deg"
+  ],
+  "output_sources": {
+    "east_displacement_m": "xgboost",
+    "north_displacement_m": "xgboost",
+    "depth_delta_m": "xgboost",
+    "heading_delta_deg": "stable"
+  }
+}

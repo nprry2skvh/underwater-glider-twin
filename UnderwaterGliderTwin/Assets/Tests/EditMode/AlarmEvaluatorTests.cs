@@ -10,7 +10,7 @@ namespace UnderwaterGliderTwin.Tests
         public void Evaluate_FlagsDepthBatteryAndAttitude()
         {
             var evaluator = new AlarmEvaluator(maxDepthM: 1000f, minBatteryPercent: 20f, maxAbsAttitudeDeg: 20f);
-            var frame = new TelemetryFrame(0, "t", 120, 25, 1201f, 100f, 0f, 22f, -21f, 28f, 0f, 9f, "潜航", "潜航", 1f, 0f, 1000f, 100f, 0f, 0f, 0f);
+            var frame = new TelemetryFrame(0, "t", 0f, 120, 25, 1201f, 100f, 0f, 22f, -21f, 28f, 0f, 9f, "潜航", "潜航", 1f, 0f, 1000f, 100f, 0f, 0f, 0f);
 
             var alarm = evaluator.Evaluate(frame);
 
@@ -18,9 +18,9 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(alarm.DepthExceeded, Is.True);
             Assert.That(alarm.BatteryLow, Is.True);
             Assert.That(alarm.AttitudeExceeded, Is.True);
-            Assert.That(alarm.Message, Does.Contain("depth"));
-            Assert.That(alarm.Message, Does.Contain("battery"));
-            Assert.That(alarm.Message, Does.Contain("attitude"));
+            Assert.That(alarm.Message, Does.Contain("深度"));
+            Assert.That(alarm.Message, Does.Contain("电量"));
+            Assert.That(alarm.Message, Does.Contain("姿态"));
         }
     }
 }

@@ -1,43 +1,120 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnderwaterGliderTwin.Mapping;
 using UnderwaterGliderTwin.Playback;
+using UnderwaterGliderTwin.Prediction;
 using UnderwaterGliderTwin.Telemetry;
 
 namespace UnderwaterGliderTwin.Visualization
 {
     public sealed class TrajectoryView : MonoBehaviour
     {
-        private LineRenderer travelledLine;
+        private LineRenderer backdropLine;
+        private LineRenderer actualLine;
+        private LineRenderer futureActualLine;
+        private LineRenderer predictedLine;
+        private LineRenderer predictedHistoryLine;
+        private LineRenderer plannedLine;
+        private LineRenderer intendedLine;
         private PlaybackController playback;
-        private Vector3[] travelledBuffer = Array.Empty<Vector3>();
-        private int lastTravelledCount = -1;
+        private PredictionController prediction;
+        private GeoCoordinateMapper mapper;
+        private Vector3[] actualBuffer = Array.Empty<Vector3>();
+        private Vector3[] futureBuffer = Array.Empty<Vector3>();
+        private Vector3[] intendedBuffer = Array.Empty<Vector3>();
+        private int lastActualCount = -1;
+        private bool isVisible;
+        private CameraMode cameraMode = CameraMode.Follow;
+        private float widthScale = 1f;
+        private Vector3 currentActualWorldPoint;
+        private int currentPlaybackIndex;
+        private GameObject startMarker;
+        private GameObject targetMarker;
+        private GameObject currentMarker;
+        private readonly SortedDictionary<int, PredictionSnapshot> predictionSnapshots = new SortedDictionary<int, PredictionSnapshot>();
+        private readonly List<Vector3> predictedHistoryBuffer = new List<Vector3>();
 
         public Vector3[] FullTrajectoryPoints { get; private set; } = Array.Empty<Vector3>();
 
-        public void Initialize(IReadOnlyList<TelemetryFrame> frames, GeoCoordinateMapper mapper, PlaybackController playbackController)
+        public void Initialize(IReadOnlyList<TelemetryFrame> frames, GeoCoordinateMapper mapper, PlaybackController playbackController, PredictionController predictionController)
         {
             playback = playbackController;
-            FullTrajectoryPoints = TrajectorySampler.Sample(frames, mapper, 8000);
-            travelledBuffer = new Vector3[FullTrajectoryPoints.Length];
-            Array.Copy(FullTrajectoryPoints, travelledBuffer, FullTrajectoryPoints.Length);
+            prediction = predictionController;
+            this.mapper = mapper;
+            predictionSnapshots.Clear();
+            predictedHistoryBuffer.Clear();
+            lastActualCount = -1;
+            currentPlaybackIndex = 0;
+            FullTrajectoryPoints = TrajectorySampler.Sample(frames, mapper, 1200);
+            intendedBuffer = BuildIntendedPoints(frames, mapper);
+            actualBuffer = new Vector3[FullTrajectoryPoints.Length];
+            futureBuffer = new Vector3[FullTrajectoryPoints.Length];
+            Array.Copy(FullTrajectoryPoints, actualBuffer, FullTrajectoryPoints.Length);
 
-            var fullLine = CreateLine("FullTrajectory", new Color(0.18f, 0.45f, 0.65f, 0.55f), 0.08f);
-            fullLine.positionCount = FullTrajectoryPoints.Length;
-            fullLine.SetPositions(FullTrajectoryPoints);
+            backdropLine = CreateLine("ActualBackdropLine", new Color(0.18f, 0.48f, 0.6f, 0.035f), 0.035f);
+            backdropLine.positionCount = FullTrajectoryPoints.Length;
+            backdropLine.SetPositions(FullTrajectoryPoints);
 
-            travelledLine = CreateLine("TravelledTrajectory", new Color(0.0f, 0.95f, 1f, 1f), 0.13f);
+            futureActualLine = CreateLine("RemainingTrajectoryLine", new Color(0.45f, 0.88f, 1f, 0.32f), 0.08f);
+            actualLine = CreateLine("ActualTrajectoryLine", new Color(0.35f, 0.92f, 1f, 1f), 0.17f);
+            predictedLine = CreateLine("PredictedTrajectoryLine", new Color(1f, 0.9f, 0.28f, 0.98f), 0.13f);
+            predictedHistoryLine = CreateLine("PredictedHistoryLine", new Color(1f, 0.82f, 0.18f, 0.16f), 0.05f);
+            plannedLine = CreateLine("PlannedTrajectoryLine", new Color(0.3f, 0.92f, 0.52f, 0.9f), 0.08f);
+            intendedLine = CreateLine("IntendedTrajectoryLine", new Color(0.34f, 0.95f, 0.53f, 0.92f), 0.11f);
+            intendedLine.positionCount = intendedBuffer.Length;
+            if (intendedBuffer.Length > 0)
+            {
+                intendedLine.SetPositions(intendedBuffer);
+            }
+
+            if (FullTrajectoryPoints.Length > 1)
+            {
+                startMarker = CreateMarker("StartMarker", FullTrajectoryPoints[0], new Color(0.18f, 0.72f, 1f, 1f), 0.42f);
+                targetMarker = CreateMarker("TargetMarker", FullTrajectoryPoints[FullTrajectoryPoints.Length - 1], new Color(0.3f, 0.92f, 0.52f, 1f), 0.5f);
+                currentMarker = CreateMarker("CurrentPositionMarker", FullTrajectoryPoints[0], new Color(1f, 0.92f, 0.2f, 1f), 0.45f);
+            }
+
             playback.FrameChanged += OnFrameChanged;
+            if (prediction != null)
+            {
+                prediction.SnapshotUpdated += OnPredictionUpdated;
+            }
+
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01);
+            if (prediction != null)
+            {
+                OnPredictionUpdated(prediction.CurrentSnapshot);
+            }
+
+            ApplyWidthScale();
+            SetVisible(true);
         }
 
         public void SetVisible(bool visible)
         {
-            foreach (Transform child in transform)
+            isVisible = visible;
+            RefreshVisibility();
+        }
+
+        public void SetCameraMode(CameraMode mode)
+        {
+            cameraMode = mode;
+            if (playback == null)
             {
-                child.gameObject.SetActive(visible);
+                return;
             }
+
+            lastActualCount = -1;
+            OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01);
+            RefreshVisibility();
+        }
+
+        public void SetWidthScale(float scale)
+        {
+            widthScale = Mathf.Clamp(scale, 0.6f, 2.4f);
+            ApplyWidthScale();
         }
 
         private void OnDestroy()
@@ -46,25 +123,86 @@ namespace UnderwaterGliderTwin.Visualization
             {
                 playback.FrameChanged -= OnFrameChanged;
             }
+
+            if (prediction != null)
+            {
+                prediction.SnapshotUpdated -= OnPredictionUpdated;
+            }
         }
 
         private void OnFrameChanged(TelemetryFrame frame, int index, float progress01)
         {
-            if (travelledLine == null || FullTrajectoryPoints.Length == 0)
+            if (actualLine == null || FullTrajectoryPoints.Length == 0)
             {
                 return;
             }
 
+            currentPlaybackIndex = index;
             var count = Mathf.Clamp(Mathf.CeilToInt(progress01 * (FullTrajectoryPoints.Length - 1)) + 1, 1, FullTrajectoryPoints.Length);
-            if (count == lastTravelledCount)
+            if (count == lastActualCount)
+            {
+                RebuildPredictedHistory();
+                return;
+            }
+
+            actualLine.positionCount = count;
+            actualLine.SetPositions(actualBuffer);
+            currentActualWorldPoint = mapper != null && TelemetryPositionUtility.HasUsableCoordinates(frame)
+                ? mapper.Map(frame)
+                : actualBuffer[Mathf.Max(0, count - 1)];
+            actualLine.SetPosition(count - 1, currentActualWorldPoint);
+            if (currentMarker != null)
+            {
+                currentMarker.transform.position = currentActualWorldPoint;
+            }
+            UpdateFutureActualLine(count);
+            RebuildPredictedHistory();
+            UpdatePlannedLine();
+            lastActualCount = count;
+        }
+
+        private void OnPredictionUpdated(PredictionSnapshot snapshot)
+        {
+            if (predictedLine == null)
             {
                 return;
             }
 
-            travelledLine.positionCount = count;
-            travelledLine.SetPositions(travelledBuffer);
+            if (snapshot == null || snapshot.SampleCount < 2)
+            {
+                predictedLine.positionCount = 0;
+                if (snapshot == null || snapshot.SampleCount == 0)
+                {
+                    predictionSnapshots.Clear();
+                    predictedHistoryBuffer.Clear();
+                    predictedHistoryLine.positionCount = 0;
+                }
 
-            lastTravelledCount = count;
+                RefreshVisibility();
+                return;
+            }
+
+            predictionSnapshots[snapshot.StartIndex] = snapshot;
+            predictedLine.positionCount = 0;
+            RebuildPredictedHistory();
+            UpdatePlannedLine();
+            RefreshVisibility();
+        }
+
+        private void UpdatePlannedLine()
+        {
+            if (plannedLine == null || targetMarker == null || playback == null)
+            {
+                return;
+            }
+
+            var currentPosition = prediction != null && prediction.CurrentSnapshot.SampleCount > 0
+                ? prediction.CurrentSnapshot.OriginPoint
+                : currentActualWorldPoint;
+
+            plannedLine.positionCount = 2;
+            plannedLine.SetPosition(0, currentPosition);
+            plannedLine.SetPosition(1, targetMarker.transform.position);
         }
 
         private LineRenderer CreateLine(string lineName, Color color, float width)
@@ -74,15 +212,168 @@ namespace UnderwaterGliderTwin.Visualization
             var line = lineObject.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
             line.widthMultiplier = width;
-            line.numCornerVertices = 3;
-            line.numCapVertices = 3;
-            line.sharedMaterial = CreateLineMaterial(color);
+            line.numCornerVertices = 4;
+            line.numCapVertices = 4;
+            line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            line.receiveShadows = false;
+            line.textureMode = LineTextureMode.Tile;
+            line.sortingOrder = lineName == "PredictedHistoryLine" ? 6
+                : lineName == "ActualTrajectoryLine" ? 5
+                : lineName == "PredictedTrajectoryLine" ? 4
+                : lineName == "RemainingTrajectoryLine" ? 2
+                : 1;
+            line.sharedMaterial = RuntimeMaterialFactory.Line(lineName + "Material", color);
+            line.sharedMaterial.renderQueue = 3100;
             return line;
         }
 
-        private static Material CreateLineMaterial(Color color)
+        private GameObject CreateMarker(string markerName, Vector3 position, Color color, float scale)
         {
-            return RuntimeMaterialFactory.Line("TrajectoryLineMaterial", color);
+            var marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            marker.name = markerName;
+            marker.transform.SetParent(transform, false);
+            marker.transform.position = position;
+            marker.transform.localScale = Vector3.one * scale;
+            var collider = marker.GetComponent<Collider>();
+            if (collider != null)
+            {
+                if (Application.isPlaying)
+                {
+                    Destroy(collider);
+                }
+                else
+                {
+                    DestroyImmediate(collider);
+                }
+            }
+
+            var renderer = marker.GetComponent<Renderer>();
+            renderer.sharedMaterial = RuntimeMaterialFactory.Opaque(markerName + "Material", color);
+            renderer.sharedMaterial.renderQueue = 3101;
+            return marker;
+        }
+
+        private void RefreshVisibility()
+        {
+            if (actualLine == null || predictedLine == null || backdropLine == null || plannedLine == null || futureActualLine == null || predictedHistoryLine == null || intendedLine == null)
+            {
+                return;
+            }
+
+            actualLine.gameObject.SetActive(isVisible);
+            futureActualLine.gameObject.SetActive(isVisible && futureActualLine.positionCount > 1);
+            predictedLine.gameObject.SetActive(isVisible && predictedLine.positionCount > 1);
+            predictedHistoryLine.gameObject.SetActive(isVisible && predictedHistoryLine.positionCount > 1);
+            backdropLine.gameObject.SetActive(isVisible && cameraMode != CameraMode.Follow);
+            plannedLine.gameObject.SetActive(isVisible && plannedLine.positionCount > 1);
+            intendedLine.gameObject.SetActive(isVisible && intendedLine.positionCount > 1);
+            if (startMarker != null)
+            {
+                startMarker.SetActive(isVisible && cameraMode != CameraMode.Follow);
+            }
+
+            if (targetMarker != null)
+            {
+                targetMarker.SetActive(isVisible);
+            }
+
+            if (currentMarker != null)
+            {
+                currentMarker.SetActive(isVisible);
+            }
+        }
+
+        private void ApplyWidthScale()
+        {
+            if (actualLine == null || predictedLine == null || backdropLine == null || plannedLine == null || futureActualLine == null || predictedHistoryLine == null || intendedLine == null)
+            {
+                return;
+            }
+
+            actualLine.widthMultiplier = 0.17f * widthScale;
+            futureActualLine.widthMultiplier = 0.09f * widthScale;
+            predictedLine.widthMultiplier = 0.13f * widthScale;
+            predictedHistoryLine.widthMultiplier = 0.08f * widthScale;
+            plannedLine.widthMultiplier = 0.08f * widthScale;
+            intendedLine.widthMultiplier = 0.11f * widthScale;
+            backdropLine.widthMultiplier = 0.05f * widthScale;
+        }
+
+        private static Vector3[] BuildIntendedPoints(IReadOnlyList<TelemetryFrame> frames, GeoCoordinateMapper mapper)
+        {
+            var plannedFrames = new List<TelemetryFrame>();
+            foreach (var frame in frames)
+            {
+                if (!frame.HasPlannedPosition)
+                {
+                    continue;
+                }
+
+                var plannedFrame = new TelemetryFrame(
+                    frame.RowIndex, frame.RawTime, frame.ElapsedSeconds, frame.PlannedLongitudeDeg, frame.PlannedLatitudeDeg,
+                    frame.DepthM, frame.AltitudeM, frame.HeadingDeg, frame.PitchDeg, frame.RollDeg,
+                    frame.Voltage24V, frame.Current24A, frame.BatteryPercent, frame.WorkMode, frame.RunState,
+                    frame.TargetSegment, frame.TargetHeadingDeg, frame.TargetDepthM, frame.TargetAltitudeM,
+                    frame.PropellerRpm, frame.PistonMm, frame.TurnAngleDeg);
+                plannedFrames.Add(plannedFrame);
+            }
+
+            return TrajectorySampler.Sample(plannedFrames, mapper, 1200);
+        }
+
+        private void UpdateFutureActualLine(int actualCount)
+        {
+            if (futureActualLine == null || FullTrajectoryPoints.Length < 2)
+            {
+                return;
+            }
+
+            var startIndex = Mathf.Clamp(actualCount - 1, 0, FullTrajectoryPoints.Length - 1);
+            var remainingCount = FullTrajectoryPoints.Length - startIndex;
+            if (remainingCount < 2)
+            {
+                futureActualLine.positionCount = 0;
+                return;
+            }
+
+            Array.Copy(actualBuffer, startIndex, futureBuffer, 0, remainingCount);
+            futureActualLine.positionCount = remainingCount;
+            futureActualLine.SetPositions(futureBuffer);
+        }
+
+        private void RebuildPredictedHistory()
+        {
+            if (predictedHistoryLine == null)
+            {
+                return;
+            }
+
+            predictedHistoryBuffer.Clear();
+            foreach (var snapshot in predictionSnapshots.Values.OrderBy(entry => entry.StartIndex))
+            {
+                if (snapshot.SampleCount == 0 || snapshot.StartIndex > currentPlaybackIndex)
+                {
+                    continue;
+                }
+
+                AppendPredictedHistoryPoint(snapshot.PredictedPoints[0]);
+            }
+
+            predictedHistoryLine.positionCount = predictedHistoryBuffer.Count;
+            if (predictedHistoryBuffer.Count > 0)
+            {
+                predictedHistoryLine.SetPositions(predictedHistoryBuffer.ToArray());
+            }
+        }
+
+        private void AppendPredictedHistoryPoint(Vector3 point)
+        {
+            if (predictedHistoryBuffer.Count > 0 && Vector3.Distance(predictedHistoryBuffer[predictedHistoryBuffer.Count - 1], point) < 0.05f)
+            {
+                return;
+            }
+
+            predictedHistoryBuffer.Add(point);
         }
     }
 }
