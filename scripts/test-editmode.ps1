@@ -20,6 +20,21 @@ $UnityPath = Resolve-UnityEditorPath -UnityPath $UnityPath -ProjectPath $project
 New-Item -ItemType Directory -Force -Path $resultsDirectory | Out-Null
 Remove-Item -Force -ErrorAction SilentlyContinue $resultPath, $logPath
 
+function ConvertTo-UnityArgumentText {
+    param([string[]]$Arguments)
+
+    $quotedArguments = foreach ($argument in $Arguments) {
+        if ($argument -match '[\s"]') {
+            '"' + ($argument -replace '"', '\"') + '"'
+        }
+        else {
+            $argument
+        }
+    }
+
+    [string]::Join(" ", $quotedArguments)
+}
+
 $unityArguments = @(
     "-batchmode"
     "-nographics"
@@ -34,7 +49,7 @@ $unityArguments = @(
     $logPath
 )
 
-$unityProcess = Start-Process -FilePath $UnityPath -ArgumentList $unityArguments -PassThru -WindowStyle Hidden
+$unityProcess = Start-Process -FilePath $UnityPath -ArgumentList (ConvertTo-UnityArgumentText $unityArguments) -PassThru -WindowStyle Hidden
 $timeoutSeconds = [Math]::Max(60, $TimeoutMinutes * 60)
 if (-not $unityProcess.WaitForExit($timeoutSeconds * 1000)) {
     try {
