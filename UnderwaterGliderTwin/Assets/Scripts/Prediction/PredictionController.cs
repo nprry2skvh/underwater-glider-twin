@@ -13,6 +13,7 @@ namespace UnderwaterGliderTwin.Prediction
     {
         private const int DefaultWindowSize = 30;
         private readonly Dictionary<PredictionModelKind, IPredictor> predictors = new Dictionary<PredictionModelKind, IPredictor>();
+        private readonly Dictionary<PredictionModelKind, string> modelErrors = new Dictionary<PredictionModelKind, string>();
         private IReadOnlyList<TelemetryFrame> frames;
         private GeoCoordinateMapper mapper;
         private PlaybackController playback;
@@ -23,13 +24,11 @@ namespace UnderwaterGliderTwin.Prediction
         public PredictionModelKind ModelKind { get; private set; } = RuntimePredictionState.ModelKind;
         public float HorizonSeconds { get; private set; } = RuntimePredictionState.HorizonSeconds;
         public bool PredictionEnabled { get; private set; } = RuntimePredictionState.PredictionEnabled;
+        public IPredictorFactory PredictorFactory { get; set; } = new XGBoostPredictorFactory();
 
         public bool IsModelRuntimeAvailable(PredictionModelKind modelKind)
         {
-            return modelKind == PredictionModelKind.XGBoost
-                && predictors.TryGetValue(modelKind, out var predictor)
-                && predictor is XGBoostPredictor xgboost
-                && xgboost.IsReady;
+            return predictors.TryGetValue(modelKind, out var predictor) && predictor != null;
         }
 
         public void Initialize(IReadOnlyList<TelemetryFrame> telemetryFrames, GeoCoordinateMapper coordinateMapper, PlaybackController playbackController)
@@ -38,20 +37,33 @@ namespace UnderwaterGliderTwin.Prediction
             mapper = coordinateMapper ?? throw new ArgumentNullException(nameof(coordinateMapper));
             playback = playbackController ?? throw new ArgumentNullException(nameof(playbackController));
             BuildPredictorRegistry();
+            if (!IsModelRuntimeAvailable(ModelKind))
+            {
+                PredictionEnabled = false;
+                RuntimePredictionState.SetEnabled(false);
+            }
             playback.FrameChangedWithReason += OnFrameChanged;
             Recompute(playback.Model.CurrentIndex);
         }
 
         public void SetModelKind(PredictionModelKind modelKind)
         {
+            TrySetModelKind(modelKind, out _);
+        }
+
+        public bool TrySetModelKind(PredictionModelKind modelKind, out string error)
+        {
             if (!IsModelRuntimeAvailable(modelKind))
             {
-                modelKind = PredictionModelKind.XGBoost;
+                error = GetModelUnavailableError(modelKind);
+                return false;
             }
 
+            error = string.Empty;
             ModelKind = modelKind;
             RuntimePredictionState.SetModelKind(modelKind);
             Recompute(playback != null ? playback.Model.CurrentIndex : 0);
+            return true;
         }
 
         public void SetHorizonSeconds(float seconds)
@@ -124,10 +136,30 @@ namespace UnderwaterGliderTwin.Prediction
         private void BuildPredictorRegistry()
         {
             predictors.Clear();
+            modelErrors.Clear();
             var modelRoot = RuntimePathResolver.ResolveModelsDirectory();
-            var xgboost = new XGBoostPredictor();
-            xgboost.LoadModel(Path.Combine(modelRoot, "XGBoost"));
-            predictors[PredictionModelKind.XGBoost] = xgboost;
+            RegisterPredictor(PredictionModelKind.XGBoost, Path.Combine(modelRoot, "XGBoost"));
+        }
+
+        private void RegisterPredictor(PredictionModelKind modelKind, string root)
+        {
+            var factory = PredictorFactory ?? new XGBoostPredictorFactory();
+            if (factory.TryCreate(root, out var predictor, out var error))
+            {
+                predictors[modelKind] = predictor;
+                return;
+            }
+
+            modelErrors[modelKind] = string.IsNullOrWhiteSpace(error)
+                ? $"{modelKind} predictor is unavailable."
+                : error;
+        }
+
+        private string GetModelUnavailableError(PredictionModelKind modelKind)
+        {
+            return modelErrors.TryGetValue(modelKind, out var error) && !string.IsNullOrWhiteSpace(error)
+                ? error
+                : $"{modelKind} prediction model is unavailable.";
         }
 
         private void Publish(PredictionSnapshot snapshot)
