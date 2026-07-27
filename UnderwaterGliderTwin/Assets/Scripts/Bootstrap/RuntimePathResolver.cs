@@ -91,6 +91,7 @@ namespace UnderwaterGliderTwin.Bootstrap
         {
             var candidates = new List<string>();
             AddCandidate(candidates, csvPathOverride);
+            AddCandidate(candidates, PlayerPrefs.GetString(LaunchCoordinator.LastCsvPlayerPrefsKey, string.Empty));
             AddCandidate(candidates, Path.Combine(Application.streamingAssetsPath, "2.csv"));
             AddCandidate(candidates, Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "2.csv"));
             AddCandidate(candidates, Path.Combine(Directory.GetCurrentDirectory(), "2.csv"));

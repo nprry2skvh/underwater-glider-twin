@@ -24,13 +24,56 @@ namespace UnderwaterGliderTwin.Telemetry
             var errors = new List<string>();
             var skipped = 0;
 
-            using var reader = new StreamReader(path, GetGbkEncoding(), true);
-            _ = reader.ReadLine();
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                errors.Add($"CSV file does not exist: {path}");
+                return new TelemetryLoadResult(frames, errors, skipped);
+            }
+
+            byte[] bytes;
+            try
+            {
+                bytes = File.ReadAllBytes(path);
+                if (!IsWellFormedGbk(bytes, out var invalidIndex))
+                {
+                    errors.Add($"Could not decode CSV as GBK: invalid byte sequence at byte {invalidIndex}.");
+                    return new TelemetryLoadResult(frames, errors, skipped);
+                }
+            }
+            catch (IOException ex)
+            {
+                errors.Add($"Could not read CSV: {ex.Message}");
+                return new TelemetryLoadResult(frames, errors, skipped);
+            }
+
+            string content;
+            try
+            {
+                content = GetStrictGbkEncoding().GetString(bytes);
+            }
+            catch (DecoderFallbackException ex)
+            {
+                errors.Add($"Could not decode CSV as GBK: {ex.Message}");
+                return new TelemetryLoadResult(frames, errors, skipped);
+            }
+            if (content.IndexOf('\uFFFD') >= 0)
+            {
+                errors.Add("Could not decode CSV as GBK: invalid byte sequence was replaced.");
+                return new TelemetryLoadResult(frames, errors, skipped);
+            }
+
+            using var reader = new StringReader(content);
+            var header = reader.ReadLine();
+            if (string.IsNullOrWhiteSpace(header) || header.Split(',').Length < ExpectedColumnCount)
+            {
+                errors.Add($"CSV header must contain at least {ExpectedColumnCount} columns.");
+                return new TelemetryLoadResult(frames, errors, skipped);
+            }
             var lineNumber = 1;
 
-            while (!reader.EndOfStream)
+            string line;
+            while ((line = reader.ReadLine()) != null)
             {
-                var line = reader.ReadLine();
                 lineNumber++;
                 if (string.IsNullOrWhiteSpace(line))
                 {
@@ -78,19 +121,45 @@ namespace UnderwaterGliderTwin.Telemetry
                 }
             }
 
+            if (frames.Count == 0)
+            {
+                errors.Add("CSV did not contain any usable telemetry frames.");
+            }
+
             return new TelemetryLoadResult(frames, errors, skipped);
         }
 
-        private static Encoding GetGbkEncoding()
+        private static Encoding GetStrictGbkEncoding()
         {
-            try
+            return Encoding.GetEncoding(936, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+        }
+
+        private static bool IsWellFormedGbk(byte[] bytes, out int invalidIndex)
+        {
+            invalidIndex = -1;
+            for (var i = 0; i < bytes.Length; i++)
             {
-                return Encoding.GetEncoding(936);
+                var current = bytes[i];
+                if (current <= 0x80)
+                {
+                    continue;
+                }
+
+                if (current < 0x81 || current > 0xFE || i + 1 >= bytes.Length)
+                {
+                    invalidIndex = i;
+                    return false;
+                }
+
+                var trail = bytes[++i];
+                if (trail < 0x40 || trail == 0x7F || trail > 0xFE)
+                {
+                    invalidIndex = i - 1;
+                    return false;
+                }
             }
-            catch (ArgumentException)
-            {
-                return Encoding.Default;
-            }
+
+            return true;
         }
 
         private static float ParseFloat(string value)
