@@ -65,6 +65,29 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(backend.RunCount, Is.EqualTo(0));
         }
 
+        [UnityTest]
+        public IEnumerator OnlineFailure_FallsBackThroughConverterCoroutineForHdf5LocalFile()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "ocean-current-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "field.nc");
+            File.WriteAllBytes(path, new byte[] { 0x89, (byte)'H', (byte)'D', (byte)'F' });
+            var previousConverter = OceanCurrentFileLoader.Converter;
+            var converter = new SuccessfulConverter();
+            OceanCurrentFileLoader.Converter = converter;
+            var backend = new FailingCurrentFetchBackend();
+            CopernicusCurrentResult loaded = null;
+            try
+            {
+                yield return new CopernicusCurrentClient(backend).Fetch(new CopernicusCurrentRequest(171.234567d, -21.345678d, 0f, 100f), OceanCurrentAcquisitionMode.Online, path, DateTime.UtcNow,
+                    result => loaded = result, error => Assert.Fail(error));
+                Assert.That(loaded, Is.Not.Null);
+                Assert.That(backend.RunCount, Is.EqualTo(1));
+                Assert.That(converter.RunCount, Is.EqualTo(1));
+            }
+            finally { OceanCurrentFileLoader.Converter = previousConverter; Directory.Delete(directory, true); }
+        }
+
         [Test]
         public void RequestTimeoutSeconds_AllowsTheInitialRemoteSubsetToComplete()
         {
@@ -141,6 +164,27 @@ namespace UnderwaterGliderTwin.Tests
         {
             public ResultHolder(CopernicusCurrentResult current) { Current = current; }
             public CopernicusCurrentResult Current { get; set; }
+        }
+
+        private sealed class FailingCurrentFetchBackend : ICopernicusCurrentFetchBackend
+        {
+            public int RunCount { get; private set; }
+            public void Run(CopernicusCurrentRequest request, string requestPath, string responsePath, Action<string> onCompleted, Action<string> onFailure, Action<string> onProgress)
+            {
+                RunCount++;
+                onFailure?.Invoke("network unavailable");
+            }
+        }
+
+        private sealed class SuccessfulConverter : IOceanCurrentFileConverter
+        {
+            public int RunCount { get; private set; }
+            public void Convert(string inputPath, string outputPath, Action onCompleted, Action<string> onFailure, Action<string> onProgress)
+            {
+                RunCount++;
+                File.WriteAllText(outputPath, "{\"source\":\"converter\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}],\"fieldSamples\":[{\"longitudeDeg\":120,\"latitudeDeg\":25,\"depthM\":5,\"elapsedSeconds\":0,\"eastwardMps\":1,\"northwardMps\":2,\"verticalMps\":0}]}");
+                onCompleted?.Invoke();
+            }
         }
     }
 }

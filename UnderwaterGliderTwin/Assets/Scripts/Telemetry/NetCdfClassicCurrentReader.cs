@@ -277,6 +277,7 @@ namespace UnderwaterGliderTwin.Telemetry
             var units = Attribute(variable, "units").Trim().ToLowerInvariant();
             if (units.Length == 0 || units == "m/s" || units == "m s-1" || units == "m s^-1") return value;
             if (units == "cm/s" || units == "cm s-1" || units == "cm s^-1") return value / 100d;
+            if (units == "knot" || units == "knots" || units == "kt") return value * 0.514444d;
             throw new InvalidDataException("NetCDF velocity uses unknown units '" + units + "'.");
         }
         private static string Attribute(Variable variable, string name) { string value; return variable.Attributes.TryGetValue(name, out value) ? value ?? string.Empty : string.Empty; }

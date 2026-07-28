@@ -130,7 +130,7 @@ namespace UnderwaterGliderTwin.Telemetry
                     System.Threading.Thread.Sleep(50 * (attempt + 1));
                 }
             }
-            System.Diagnostics.Trace.TraceWarning("Ocean current converter temporary directory could not be removed: " + directory);
+            UnityEngine.Debug.LogWarning("Ocean current converter temporary directory could not be removed: " + directory);
         }
 
         public static OceanCurrentSourceIdentity CreateIdentity(string path, int schemaVersion)

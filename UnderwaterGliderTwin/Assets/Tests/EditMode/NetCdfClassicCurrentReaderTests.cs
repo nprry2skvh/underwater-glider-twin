@@ -44,44 +44,100 @@ namespace UnderwaterGliderTwin.Tests
             finally { Directory.Delete(directory, true); }
         }
 
+        [Test]
+        public void TryRead_UsesAliasesAndConvertsCentimetersPerSecondAndKnots()
+        {
+            var path = WriteFixture(BuildGridFixture("lon", "lat", "u", "v", "cm/s", "knot", new[] { 120f }, new[] { 25f }, new[] { 5f }, new[] { 25f }, new[] { 1f }));
+            try
+            {
+                Assert.That(NetCdfClassicCurrentReader.TryRead(path, DateTime.UtcNow, out var result, out var error), Is.True, error);
+                Assert.That(result.Field.Samples[0].EastwardMps, Is.EqualTo(.25f).Within(.0001f));
+                Assert.That(result.Field.Samples[0].NorthwardMps, Is.EqualTo(.514444f).Within(.0001f));
+            }
+            finally { Directory.Delete(Path.GetDirectoryName(path), true); }
+        }
+
+        [Test]
+        public void TryRead_SortsDescendingCoordinatesWithoutSeparatingVelocityComponents()
+        {
+            var path = WriteFixture(BuildGridFixture("longitude", "latitude", "uo", "vo", "m/s", "m/s", new[] { 121f, 120f }, new[] { 26f, 25f }, new[] { 10f, 5f }, new[] { 1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f }, new[] { -1f, -2f, -3f, -4f, -5f, -6f, -7f, -8f }));
+            try
+            {
+                Assert.That(NetCdfClassicCurrentReader.TryRead(path, DateTime.UtcNow, out var result, out var error), Is.True, error);
+                var first = result.Field.Samples[0];
+                Assert.That(first.LongitudeDeg, Is.EqualTo(120d));
+                Assert.That(first.LatitudeDeg, Is.EqualTo(25d));
+                Assert.That(first.DepthM, Is.EqualTo(5f));
+                Assert.That(first.EastwardMps, Is.EqualTo(8f));
+                Assert.That(first.NorthwardMps, Is.EqualTo(-8f));
+            }
+            finally { Directory.Delete(Path.GetDirectoryName(path), true); }
+        }
+
+        private static string WriteFixture(byte[] bytes)
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "ocean-current-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory); var path = Path.Combine(directory, "field.nc"); File.WriteAllBytes(path, bytes); return path;
+        }
+
         private static byte[] BuildFixture(byte version)
         {
             var variables = new List<FixtureVariable>
             {
-                new FixtureVariable("longitude", new[] { 0 }, 120f), new FixtureVariable("latitude", new[] { 1 }, 25f),
-                new FixtureVariable("depth", new[] { 2 }, 5f), new FixtureVariable("uo", new[] { 2, 1, 0 }, .25f), new FixtureVariable("vo", new[] { 2, 1, 0 }, -.5f)
+                new FixtureVariable("longitude", new[] { 0 }, new[] { 120f }), new FixtureVariable("latitude", new[] { 1 }, new[] { 25f }),
+                new FixtureVariable("depth", new[] { 2 }, new[] { 5f }), new FixtureVariable("uo", new[] { 2, 1, 0 }, new[] { .25f }), new FixtureVariable("vo", new[] { 2, 1, 0 }, new[] { -.5f })
             };
+            return Build( version, new[] { new FixtureDimension("longitude", 1), new FixtureDimension("latitude", 1), new FixtureDimension("depth", 1) }, variables);
+        }
+
+        private static byte[] BuildGridFixture(string longitudeName, string latitudeName, string uName, string vName, string uUnits, string vUnits, float[] longitude, float[] latitude, float[] depth, float[] u, float[] v)
+        {
+            return Build(1, new[] { new FixtureDimension(longitudeName, longitude.Length), new FixtureDimension(latitudeName, latitude.Length), new FixtureDimension("depth", depth.Length) }, new List<FixtureVariable>
+            {
+                new FixtureVariable(longitudeName, new[] { 0 }, longitude), new FixtureVariable(latitudeName, new[] { 1 }, latitude), new FixtureVariable("depth", new[] { 2 }, depth),
+                new FixtureVariable(uName, new[] { 2, 1, 0 }, u, uUnits), new FixtureVariable(vName, new[] { 2, 1, 0 }, v, vUnits)
+            });
+        }
+
+        private static byte[] Build(byte version, FixtureDimension[] dimensions, List<FixtureVariable> variables)
+        {
             using (var initial = new MemoryStream())
             {
-                WriteHeader(initial, version, variables);
+                WriteHeader(initial, version, dimensions, variables);
                 var offset = initial.Length;
-                foreach (var variable in variables) { variable.Begin = offset; offset += 4; }
+                foreach (var variable in variables) { variable.Begin = offset; offset += variable.Values.Length * 4; }
             }
             using (var stream = new MemoryStream())
             {
-                WriteHeader(stream, version, variables);
-                foreach (var variable in variables) WriteSingle(stream, variable.Value);
+                WriteHeader(stream, version, dimensions, variables);
+                foreach (var variable in variables) foreach (var value in variable.Values) WriteSingle(stream, value);
                 return stream.ToArray();
             }
         }
 
-        private static void WriteHeader(Stream stream, byte version, List<FixtureVariable> variables)
+        private static void WriteHeader(Stream stream, byte version, FixtureDimension[] dimensions, List<FixtureVariable> variables)
         {
             stream.WriteByte((byte)'C'); stream.WriteByte((byte)'D'); stream.WriteByte((byte)'F'); stream.WriteByte(version); WriteInt(stream, 0);
-            WriteInt(stream, 10); WriteInt(stream, 3);
-            WriteName(stream, "longitude"); WriteInt(stream, 1); WriteName(stream, "latitude"); WriteInt(stream, 1); WriteName(stream, "depth"); WriteInt(stream, 1);
+            WriteInt(stream, 10); WriteInt(stream, dimensions.Length); foreach (var dimension in dimensions) { WriteName(stream, dimension.Name); WriteInt(stream, dimension.Length); }
             WriteInt(stream, 0); WriteInt(stream, 11); WriteInt(stream, variables.Count);
             foreach (var variable in variables)
             {
                 WriteName(stream, variable.Name); WriteInt(stream, variable.Dimensions.Length); foreach (var dimension in variable.Dimensions) WriteInt(stream, dimension);
-                WriteInt(stream, 0); WriteInt(stream, 5); WriteInt(stream, 4);
+                WriteAttributes(stream, variable.Units); WriteInt(stream, 5); WriteInt(stream, variable.Values.Length * 4);
                 if (version == 2) { WriteInt(stream, 0); WriteInt(stream, (int)variable.Begin); } else WriteInt(stream, (int)variable.Begin);
             }
+        }
+
+        private static void WriteAttributes(Stream stream, string units)
+        {
+            if (string.IsNullOrEmpty(units)) { WriteInt(stream, 0); return; }
+            WriteInt(stream, 12); WriteInt(stream, 1); WriteName(stream, "units"); WriteInt(stream, 2); WriteInt(stream, units.Length); foreach (var value in units) stream.WriteByte((byte)value); while (stream.Length % 4 != 0) stream.WriteByte(0);
         }
 
         private static void WriteName(Stream stream, string value) { WriteInt(stream, value.Length); foreach (var character in value) stream.WriteByte((byte)character); while (stream.Length % 4 != 0) stream.WriteByte(0); }
         private static void WriteInt(Stream stream, int value) { stream.WriteByte((byte)(value >> 24)); stream.WriteByte((byte)(value >> 16)); stream.WriteByte((byte)(value >> 8)); stream.WriteByte((byte)value); }
         private static void WriteSingle(Stream stream, float value) { WriteInt(stream, BitConverter.SingleToInt32Bits(value)); }
-        private sealed class FixtureVariable { public FixtureVariable(string name, int[] dimensions, float value) { Name = name; Dimensions = dimensions; Value = value; } public string Name; public int[] Dimensions; public float Value; public long Begin; }
+        private sealed class FixtureDimension { public FixtureDimension(string name, int length) { Name = name; Length = length; } public string Name; public int Length; }
+        private sealed class FixtureVariable { public FixtureVariable(string name, int[] dimensions, float[] values, string units = null) { Name = name; Dimensions = dimensions; Values = values; Units = units; } public string Name; public int[] Dimensions; public float[] Values; public string Units; public long Begin; }
     }
 }
