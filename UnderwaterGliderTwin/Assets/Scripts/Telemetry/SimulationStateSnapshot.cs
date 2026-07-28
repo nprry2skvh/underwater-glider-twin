@@ -21,6 +21,12 @@ namespace UnderwaterGliderTwin.Telemetry
         public static SimulationStateSnapshot FromFrame(TelemetryFrame frame, SimulationProfile profile)
         {
             var sourceProfile = profile?.Clone() ?? SimulationProfile.Default;
+            var latitudeRadians = sourceProfile.OriginLatitudeDeg * Mathf.Deg2Rad;
+            var metersPerDegreeLongitude = 111320d * System.Math.Cos(latitudeRadians);
+            var localX = System.Math.Abs(metersPerDegreeLongitude) > 0.001d
+                ? (float)((frame.LongitudeDeg - sourceProfile.OriginLongitudeDeg) * metersPerDegreeLongitude)
+                : 0f;
+            var localZ = (float)((frame.LatitudeDeg - sourceProfile.OriginLatitudeDeg) * 111320d);
             var headingRadians = frame.HeadingDeg * Mathf.Deg2Rad;
             var waterVelocity = new Vector3(
                 Mathf.Sin(headingRadians) * sourceProfile.Dynamics.CruiseSpeedMps,
@@ -36,7 +42,7 @@ namespace UnderwaterGliderTwin.Telemetry
 
             var state = new GliderDynamicsState
             {
-                PositionEndM = new Vector3(0f, frame.DepthM, 0f),
+                PositionEndM = new Vector3(localX, frame.DepthM, localZ),
                 EarthVelocityEndMps = waterVelocity + currentVelocity,
                 WaterVelocityEndMps = waterVelocity,
                 HeadingDeg = frame.HeadingDeg,

@@ -129,7 +129,28 @@ namespace UnderwaterGliderTwin.Playback
             frames = replacement;
             CurrentIndex = preservedIndex;
             continuousIndex = Math.Max(preservedIndex, Math.Min(replacement.Count - 1, continuousIndex));
-            FramesReplaced?.Invoke(frames, preservedIndex);
+            NotifyFramesReplaced();
+        }
+
+        private void NotifyFramesReplaced()
+        {
+            var handlers = FramesReplaced;
+            if (handlers == null)
+            {
+                return;
+            }
+
+            foreach (Action<IReadOnlyList<TelemetryFrame>, int> handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(frames, CurrentIndex);
+                }
+                catch (Exception)
+                {
+                    // A presentation listener must not roll back the committed playback transaction.
+                }
+            }
         }
 
         private static bool FrameValuesEqual(TelemetryFrame left, TelemetryFrame right)

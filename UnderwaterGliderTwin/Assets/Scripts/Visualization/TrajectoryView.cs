@@ -24,6 +24,9 @@ namespace UnderwaterGliderTwin.Visualization
         private Vector3[] actualBuffer = Array.Empty<Vector3>();
         private Vector3[] futureBuffer = Array.Empty<Vector3>();
         private Vector3[] intendedBuffer = Array.Empty<Vector3>();
+        private int replacementPreservedIndex = -1;
+        private int replacementHistoryPointCount;
+        private int replacementMappedThroughIndex = -1;
         private int lastActualCount = -1;
         private bool isVisible;
         private CameraMode cameraMode = CameraMode.Follow;
@@ -47,6 +50,9 @@ namespace UnderwaterGliderTwin.Visualization
             predictedHistoryBuffer.Clear();
             lastActualCount = -1;
             currentPlaybackIndex = 0;
+            replacementPreservedIndex = -1;
+            replacementHistoryPointCount = 0;
+            replacementMappedThroughIndex = -1;
             FullTrajectoryPoints = TrajectorySampler.Sample(frames, mapper, 1200);
             intendedBuffer = BuildIntendedPoints(frames, mapper);
             actualBuffer = new Vector3[FullTrajectoryPoints.Length];
@@ -129,19 +135,29 @@ namespace UnderwaterGliderTwin.Visualization
                 throw new ArgumentOutOfRangeException(nameof(preservedIndex));
             }
 
-            FullTrajectoryPoints = TrajectorySampler.Sample(frames, mapper, 1200);
-            actualBuffer = new Vector3[FullTrajectoryPoints.Length];
-            Array.Copy(FullTrajectoryPoints, actualBuffer, FullTrajectoryPoints.Length);
-            futureBuffer = TrajectorySampler.Sample(
-                frames.Skip(preservedIndex).ToArray(),
-                mapper,
-                1200);
+            CaptureRenderedHistory(frames, preservedIndex);
+            replacementPreservedIndex = preservedIndex;
+            replacementMappedThroughIndex = preservedIndex;
+            FullTrajectoryPoints = BuildCombinedTrajectory(frames, preservedIndex);
+            intendedBuffer = BuildIntendedPoints(frames, mapper);
+            futureBuffer = TrajectorySampler.Sample(frames.Skip(preservedIndex).ToArray(), mapper, 1200);
+            UpdateBackdropAndTarget();
+            if (intendedLine != null)
+            {
+                intendedLine.positionCount = intendedBuffer.Length;
+                if (intendedBuffer.Length > 0)
+                {
+                    intendedLine.SetPositions(intendedBuffer);
+                }
+            }
+
             futureActualLine.positionCount = futureBuffer.Length;
             if (futureBuffer.Length > 0)
             {
                 futureActualLine.SetPositions(futureBuffer);
             }
 
+            UpdatePlannedLine();
             RefreshVisibility();
         }
 
@@ -166,6 +182,12 @@ namespace UnderwaterGliderTwin.Visualization
             }
 
             currentPlaybackIndex = index;
+            if (replacementPreservedIndex >= 0)
+            {
+                UpdateActualLineAfterReplacement(frame, index);
+                return;
+            }
+
             var count = Mathf.Clamp(Mathf.CeilToInt(progress01 * (FullTrajectoryPoints.Length - 1)) + 1, 1, FullTrajectoryPoints.Length);
             if (count == lastActualCount)
             {
@@ -365,7 +387,27 @@ namespace UnderwaterGliderTwin.Visualization
 
         private void UpdateFutureActualLine(int actualCount)
         {
-            if (futureActualLine == null || FullTrajectoryPoints.Length < 2)
+            if (futureActualLine == null)
+            {
+                return;
+            }
+
+            if (replacementPreservedIndex >= 0)
+            {
+                var remainingFrames = playback != null
+                    ? playback.Model.Frames.Skip(Mathf.Clamp(currentPlaybackIndex, 0, playback.Model.FrameCount - 1)).ToArray()
+                    : Array.Empty<TelemetryFrame>();
+                futureBuffer = TrajectorySampler.Sample(remainingFrames, mapper, 1200);
+                futureActualLine.positionCount = futureBuffer.Length;
+                if (futureBuffer.Length > 0)
+                {
+                    futureActualLine.SetPositions(futureBuffer);
+                }
+
+                return;
+            }
+
+            if (FullTrajectoryPoints.Length < 2)
             {
                 return;
             }
@@ -381,6 +423,100 @@ namespace UnderwaterGliderTwin.Visualization
             Array.Copy(actualBuffer, startIndex, futureBuffer, 0, remainingCount);
             futureActualLine.positionCount = remainingCount;
             futureActualLine.SetPositions(futureBuffer);
+        }
+
+        private void CaptureRenderedHistory(IReadOnlyList<TelemetryFrame> frames, int preservedIndex)
+        {
+            var renderedCount = actualLine != null ? actualLine.positionCount : 0;
+            if (renderedCount > 0)
+            {
+                actualBuffer = new Vector3[renderedCount];
+                actualLine.GetPositions(actualBuffer);
+            }
+            else
+            {
+                actualBuffer = TrajectorySampler.Sample(frames.Take(preservedIndex + 1).ToArray(), mapper, 1200);
+            }
+
+            replacementHistoryPointCount = actualBuffer.Length;
+            lastActualCount = replacementHistoryPointCount;
+        }
+
+        private Vector3[] BuildCombinedTrajectory(IReadOnlyList<TelemetryFrame> frames, int preservedIndex)
+        {
+            var history = TrajectorySampler.Sample(frames.Take(preservedIndex + 1).ToArray(), mapper, 1200);
+            var future = TrajectorySampler.Sample(frames.Skip(preservedIndex).ToArray(), mapper, 1200);
+            if (history.Length == 0)
+            {
+                return future;
+            }
+
+            if (future.Length == 0)
+            {
+                return history;
+            }
+
+            var startsWithHistoryEndpoint = future[0] == history[history.Length - 1];
+            var combined = new Vector3[history.Length + future.Length - (startsWithHistoryEndpoint ? 1 : 0)];
+            Array.Copy(history, combined, history.Length);
+            Array.Copy(future, startsWithHistoryEndpoint ? 1 : 0, combined, history.Length, future.Length - (startsWithHistoryEndpoint ? 1 : 0));
+            return combined;
+        }
+
+        private void UpdateBackdropAndTarget()
+        {
+            if (backdropLine != null)
+            {
+                backdropLine.positionCount = FullTrajectoryPoints.Length;
+                if (FullTrajectoryPoints.Length > 0)
+                {
+                    backdropLine.SetPositions(FullTrajectoryPoints);
+                }
+            }
+
+            if (targetMarker != null && FullTrajectoryPoints.Length > 0)
+            {
+                targetMarker.transform.position = FullTrajectoryPoints[FullTrajectoryPoints.Length - 1];
+            }
+        }
+
+        private void UpdateActualLineAfterReplacement(TelemetryFrame frame, int index)
+        {
+            var additionalFrames = Mathf.Max(0, index - replacementPreservedIndex);
+            var targetCount = replacementHistoryPointCount + additionalFrames;
+            if (targetCount > actualBuffer.Length)
+            {
+                Array.Resize(ref actualBuffer, targetCount);
+            }
+
+            var startIndex = Mathf.Max(replacementPreservedIndex + 1, replacementMappedThroughIndex + 1);
+            for (var frameIndex = startIndex; frameIndex <= index; frameIndex++)
+            {
+                var targetIndex = replacementHistoryPointCount + frameIndex - replacementPreservedIndex - 1;
+                actualBuffer[targetIndex] = mapper.Map(playback.Model.Frames[frameIndex]);
+            }
+
+            replacementMappedThroughIndex = Mathf.Max(replacementMappedThroughIndex, index);
+            if (actualLine != null && targetCount > 0)
+            {
+                var visible = new Vector3[targetCount];
+                Array.Copy(actualBuffer, visible, targetCount);
+                actualLine.positionCount = targetCount;
+                actualLine.SetPositions(visible);
+            }
+
+            currentActualWorldPoint = mapper != null && TelemetryPositionUtility.HasUsableCoordinates(frame)
+                ? mapper.Map(frame)
+                : actualBuffer[Mathf.Max(0, targetCount - 1)];
+            if (currentMarker != null)
+            {
+                currentMarker.transform.position = currentActualWorldPoint;
+            }
+
+            UpdateFutureActualLine(targetCount);
+            RebuildPredictedHistory();
+            UpdatePlannedLine();
+            lastActualCount = targetCount;
         }
 
         private void RebuildPredictedHistory()

@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnderwaterGliderTwin.Mapping;
 using UnderwaterGliderTwin.Playback;
+using UnderwaterGliderTwin.Prediction;
 using UnderwaterGliderTwin.Telemetry;
 using UnderwaterGliderTwin.Visualization;
 
@@ -131,6 +133,10 @@ namespace UnderwaterGliderTwin.Tests
         {
             var model = new PlaybackModel(BuildFrames(8), 1f);
             model.SeekNormalized(0.5f);
+            model.SetSpeed(2f);
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+            var playbackState = CapturePlaybackState(model);
             var originalFrames = model.Frames;
             var originalProfile = SimulationProfile.Default;
             var generator = new ManualFakeFutureGenerator();
@@ -143,6 +149,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(session.LastError, Does.Contain("generator failed"));
             Assert.That(session.ActiveProfile.TargetDepthM, Is.EqualTo(originalProfile.TargetDepthM));
             Assert.That(model.Frames, Is.SameAs(originalFrames));
+            AssertPlaybackState(model, playbackState);
         }
 
         [Test]
@@ -150,6 +157,10 @@ namespace UnderwaterGliderTwin.Tests
         {
             var model = new PlaybackModel(BuildFrames(8), 1f);
             model.SeekNormalized(0.5f);
+            model.SetSpeed(2f);
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+            var playbackState = CapturePlaybackState(model);
             var originalFrames = model.Frames;
             var generator = new ManualFakeFutureGenerator();
             session = CreateSessionForTest(model, generator);
@@ -163,12 +174,128 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(session.LastError, Does.Contain("finite"));
             Assert.That(model.Frames, Is.SameAs(originalFrames));
+            AssertPlaybackState(model, playbackState);
+        }
+
+        [Test]
+        public void InvalidGeneratedNumericField_DiscardsStaging()
+        {
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            var originalFrames = model.Frames;
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+
+            Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
+            var invalid = FutureFrame(model.CurrentFrame, 1, model.CurrentFrame.ElapsedSeconds + 1f);
+            invalid = new TelemetryFrame(
+                invalid.RowIndex, invalid.RawTime, invalid.ElapsedSeconds, invalid.LongitudeDeg, invalid.LatitudeDeg,
+                invalid.DepthM, invalid.AltitudeM, invalid.HeadingDeg, invalid.PitchDeg, invalid.RollDeg,
+                float.NaN, invalid.Current24A, invalid.BatteryPercent, invalid.WorkMode, invalid.RunState,
+                invalid.TargetSegment, invalid.TargetHeadingDeg, invalid.TargetDepthM, invalid.TargetAltitudeM,
+                invalid.PropellerRpm, invalid.PistonMm, invalid.TurnAngleDeg, invalid.Diagnostics,
+                invalid.PlannedLongitudeDeg, invalid.PlannedLatitudeDeg);
+            generator.CompleteWith(new[] { invalid });
+
+            Assert.That(session.LastError, Does.Contain("finite"));
+            Assert.That(model.Frames, Is.SameAs(originalFrames));
+        }
+
+        [Test]
+        public void EveryNumericGeneratedFieldRejectsNaNOrInfinity()
+        {
+            foreach (var invalidValue in new[] { double.NaN, double.PositiveInfinity })
+            {
+                for (var field = 0; field < 20; field++)
+                {
+                    var model = new PlaybackModel(BuildFrames(8), 1f);
+                    var originalFrames = model.Frames;
+                    var generator = new ManualFakeFutureGenerator();
+                    session = CreateSessionForTest(model, generator);
+
+                    Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True, $"field {field}");
+                    generator.CompleteWith(new[]
+                    {
+                        WithNumericField(
+                            FutureFrame(model.CurrentFrame, 1, model.CurrentFrame.ElapsedSeconds + 1f),
+                            field,
+                            invalidValue)
+                    });
+
+                    Assert.That(session.LastError, Does.Contain("finite"), $"field {field}");
+                    Assert.That(model.Frames, Is.SameAs(originalFrames), $"field {field}");
+                    session = null;
+                }
+            }
+        }
+
+        [Test]
+        public void SubscriberFailureDoesNotSplitCommittedFramesAndProfile()
+        {
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+            var candidate = ChangedProfile();
+            model.FramesReplaced += (frames, index) => throw new InvalidOperationException("view failed");
+            var notificationContinued = false;
+            model.FramesReplaced += (frames, index) => notificationContinued = true;
+
+            Assert.That(session.RequestProfileUpdate(candidate), Is.True);
+            generator.CompleteWithDeterministicFuture();
+
+            Assert.That(session.IsRebuildPending, Is.False);
+            Assert.That(session.LastError, Is.Null);
+            Assert.That(session.ActiveProfile.TargetDepthM, Is.EqualTo(candidate.TargetDepthM));
+            Assert.That(model.FrameCount, Is.EqualTo(model.CurrentIndex + 3));
+            Assert.That(notificationContinued, Is.True);
+        }
+
+        [Test]
+        public void SnapshotFromFrame_PreservesLocalHorizontalPosition()
+        {
+            var profile = SimulationProfile.Default;
+            profile.OriginLongitudeDeg = 120d;
+            profile.OriginLatitudeDeg = 25d;
+            var frame = BuildFrames(8)[1];
+            var snapshot = SimulationStateSnapshot.FromFrame(frame, profile);
+
+            Assert.That(snapshot.DynamicsState.PositionEndM.x, Is.EqualTo(10.09f).Within(0.1f));
+            Assert.That(snapshot.DynamicsState.PositionEndM.z, Is.EqualTo(11.132f).Within(0.1f));
+            Assert.That(snapshot.DynamicsState.PositionEndM.y, Is.EqualTo(frame.DepthM));
+        }
+
+        [Test]
+        public void PredictionController_UsesReplacementFramesAfterPlaybackRebuild()
+        {
+            var original = BuildFrames(8);
+            var model = new PlaybackModel(original, 1f);
+            var controller = new GameObject("Playback").AddComponent<PlaybackController>();
+            controller.Initialize(model);
+            var prediction = new GameObject("Prediction").AddComponent<PredictionController>();
+            var predictor = new CapturingPredictor();
+            prediction.PredictorFactory = new CapturingPredictorFactory(predictor);
+            RuntimePredictionState.SetEnabled(true);
+            prediction.Initialize(original, new GeoCoordinateMapper(original[0], 1f, 1f), controller);
+            var replacement = new List<TelemetryFrame>(original);
+            replacement.Add(FutureFrame(original[7], 1, 8f));
+            replacement.Add(FutureFrame(original[7], 2, 9f));
+            model.SeekNormalized(1f);
+
+            model.ReplaceFrames(replacement, model.CurrentIndex);
+
+            Assert.That(predictor.LastFrames, Is.SameAs(replacement));
+            UnityEngine.Object.DestroyImmediate(prediction.gameObject);
+            UnityEngine.Object.DestroyImmediate(controller.gameObject);
         }
 
         [Test]
         public void InvalidCandidate_IsRejectedBeforeGeneration()
         {
             var model = new PlaybackModel(BuildFrames(8), 1f);
+            model.SeekNormalized(0.5f);
+            model.SetSpeed(2f);
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+            var playbackState = CapturePlaybackState(model);
             var generator = new ManualFakeFutureGenerator();
             session = CreateSessionForTest(model, generator);
             var invalid = ChangedProfile();
@@ -179,6 +306,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(session.IsRebuildPending, Is.False);
             Assert.That(session.LastError, Does.Contain("BuoyancyResponseSeconds"));
             Assert.That(generator.StartCount, Is.EqualTo(0));
+            AssertPlaybackState(model, playbackState);
         }
 
         [Test]
@@ -186,6 +314,10 @@ namespace UnderwaterGliderTwin.Tests
         {
             var model = new PlaybackModel(BuildFrames(8), 1f);
             model.SeekNormalized(0.5f);
+            model.SetSpeed(2f);
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+            var playbackState = CapturePlaybackState(model);
             var oldFrames = model.Frames;
             var generator = new ManualFakeFutureGenerator();
             session = CreateSessionForTest(model, generator);
@@ -197,6 +329,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(session.IsRebuildPending, Is.False);
             Assert.That(session.LastError, Does.Contain("cancel"));
             Assert.That(model.Frames, Is.SameAs(oldFrames));
+            AssertPlaybackState(model, playbackState);
         }
 
         [Test]
@@ -204,6 +337,11 @@ namespace UnderwaterGliderTwin.Tests
         {
             var now = new DateTime(2026, 7, 28, 0, 0, 0, DateTimeKind.Utc);
             var model = new PlaybackModel(BuildFrames(8), 1f);
+            model.SeekNormalized(0.5f);
+            model.SetSpeed(2f);
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+            var playbackState = CapturePlaybackState(model);
             var oldFrames = model.Frames;
             var generator = new ManualFakeFutureGenerator();
             session = new SimulationRuntimeSession(
@@ -221,6 +359,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(session.IsRebuildPending, Is.False);
             Assert.That(session.LastError, Does.Contain("timed out"));
             Assert.That(model.Frames, Is.SameAs(oldFrames));
+            AssertPlaybackState(model, playbackState);
         }
 
         [Test]
@@ -308,15 +447,55 @@ namespace UnderwaterGliderTwin.Tests
             replacement.Add(FutureFrame(original[preservedIndex], 2, original[preservedIndex].ElapsedSeconds + 2f));
 
             view.ReplaceFutureTrajectory(replacement, preservedIndex);
+            model.ReplaceFrames(replacement, preservedIndex);
 
-            var after = new Vector3[actual.positionCount];
-            actual.GetPositions(after);
-            Assert.That(after, Is.EqualTo(before));
+            var afterReplacement = new Vector3[actual.positionCount];
+            actual.GetPositions(afterReplacement);
+            Assert.That(afterReplacement, Is.EqualTo(before));
             Assert.That(
                 view.transform.Find("RemainingTrajectoryLine").GetComponent<LineRenderer>().positionCount,
                 Is.EqualTo(3));
+            controller.SetPlaying(true);
+            controller.Step(1f);
+            controller.Step(1f);
+            var afterPlayback = new Vector3[actual.positionCount];
+            actual.GetPositions(afterPlayback);
+            for (var i = 0; i < before.Length; i++)
+            {
+                Assert.That(afterPlayback[i], Is.EqualTo(before[i]));
+            }
+            Assert.That(afterPlayback[afterPlayback.Length - 1], Is.EqualTo(mapper.Map(replacement[model.CurrentIndex])));
+            var backdrop = view.transform.Find("ActualBackdropLine").GetComponent<LineRenderer>();
+            var target = view.transform.Find("TargetMarker");
+            Assert.That(backdrop.GetPosition(backdrop.positionCount - 1), Is.EqualTo(target.position));
+            var planned = view.transform.Find("PlannedTrajectoryLine").GetComponent<LineRenderer>();
+            Assert.That(planned.GetPosition(planned.positionCount - 1), Is.EqualTo(target.position));
             UnityEngine.Object.DestroyImmediate(controller.gameObject);
             UnityEngine.Object.DestroyImmediate(view.gameObject);
+        }
+
+        [Test]
+        public void SuccessfulUpdate_ContinuesReversePlaybackWithoutReplacingCameraObject()
+        {
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            model.SeekNormalized(0.5f);
+            model.SetSpeed(1f);
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+            var camera = new GameObject("CameraReference");
+            var activeScene = SceneManager.GetActiveScene();
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+
+            Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
+            generator.CompleteWithDeterministicFuture();
+            Assert.That(model.Tick(1f), Is.True);
+
+            Assert.That(model.CurrentIndex, Is.EqualTo(3));
+            Assert.That(model.IsPlaying, Is.True);
+            Assert.That(camera, Is.Not.Null);
+            Assert.That(SceneManager.GetActiveScene().handle, Is.EqualTo(activeScene.handle));
+            UnityEngine.Object.DestroyImmediate(camera);
         }
 
         private SimulationRuntimeSession CreateSessionForTest(
@@ -413,6 +592,88 @@ namespace UnderwaterGliderTwin.Tests
                 seed.Diagnostics,
                 seed.PlannedLongitudeDeg + offset * 0.001d,
                 seed.PlannedLatitudeDeg + offset * 0.001d);
+        }
+
+        private static TelemetryFrame WithNumericField(TelemetryFrame frame, int field, double value)
+        {
+            var elapsed = frame.ElapsedSeconds;
+            var longitude = frame.LongitudeDeg;
+            var latitude = frame.LatitudeDeg;
+            var depth = frame.DepthM;
+            var altitude = frame.AltitudeM;
+            var heading = frame.HeadingDeg;
+            var pitch = frame.PitchDeg;
+            var roll = frame.RollDeg;
+            var voltage = frame.Voltage24V;
+            var current = frame.Current24A;
+            var battery = frame.BatteryPercent;
+            var targetSegment = frame.TargetSegment;
+            var targetHeading = frame.TargetHeadingDeg;
+            var targetDepth = frame.TargetDepthM;
+            var targetAltitude = frame.TargetAltitudeM;
+            var propeller = frame.PropellerRpm;
+            var piston = frame.PistonMm;
+            var turn = frame.TurnAngleDeg;
+            var plannedLongitude = frame.PlannedLongitudeDeg;
+            var plannedLatitude = frame.PlannedLatitudeDeg;
+            switch (field)
+            {
+                case 0: elapsed = (float)value; break;
+                case 1: longitude = value; break;
+                case 2: latitude = value; break;
+                case 3: depth = (float)value; break;
+                case 4: altitude = (float)value; break;
+                case 5: heading = (float)value; break;
+                case 6: pitch = (float)value; break;
+                case 7: roll = (float)value; break;
+                case 8: voltage = (float)value; break;
+                case 9: current = (float)value; break;
+                case 10: battery = (float)value; break;
+                case 11: targetSegment = (float)value; break;
+                case 12: targetHeading = (float)value; break;
+                case 13: targetDepth = (float)value; break;
+                case 14: targetAltitude = (float)value; break;
+                case 15: propeller = (float)value; break;
+                case 16: piston = (float)value; break;
+                case 17: turn = (float)value; break;
+                case 18: plannedLongitude = value; break;
+                case 19: plannedLatitude = value; break;
+                default: throw new ArgumentOutOfRangeException(nameof(field));
+            }
+
+            return new TelemetryFrame(
+                frame.RowIndex, frame.RawTime, elapsed, longitude, latitude, depth, altitude, heading, pitch, roll,
+                voltage, current, battery, frame.WorkMode, frame.RunState, targetSegment, targetHeading, targetDepth,
+                targetAltitude, propeller, piston, turn, frame.Diagnostics, plannedLongitude, plannedLatitude);
+        }
+
+        private static PlaybackState CapturePlaybackState(PlaybackModel model)
+        {
+            return new PlaybackState(model.CurrentIndex, model.IsPlaying, model.Speed, model.Direction);
+        }
+
+        private static void AssertPlaybackState(PlaybackModel model, PlaybackState expected)
+        {
+            Assert.That(model.CurrentIndex, Is.EqualTo(expected.CurrentIndex));
+            Assert.That(model.IsPlaying, Is.EqualTo(expected.IsPlaying));
+            Assert.That(model.Speed, Is.EqualTo(expected.Speed));
+            Assert.That(model.Direction, Is.EqualTo(expected.Direction));
+        }
+
+        private readonly struct PlaybackState
+        {
+            public PlaybackState(int currentIndex, bool isPlaying, float speed, int direction)
+            {
+                CurrentIndex = currentIndex;
+                IsPlaying = isPlaying;
+                Speed = speed;
+                Direction = direction;
+            }
+
+            public int CurrentIndex { get; }
+            public bool IsPlaying { get; }
+            public float Speed { get; }
+            public int Direction { get; }
         }
 
         private static FrameSnapshot CaptureFrameSnapshot(TelemetryFrame frame)
@@ -527,6 +788,45 @@ namespace UnderwaterGliderTwin.Tests
         {
             public bool IsCancelled { get; private set; }
             public void Cancel() => IsCancelled = true;
+        }
+
+        private sealed class CapturingPredictorFactory : IPredictorFactory
+        {
+            private readonly IPredictor predictor;
+
+            public CapturingPredictorFactory(IPredictor predictor)
+            {
+                this.predictor = predictor;
+            }
+
+            public bool TryCreate(string root, out IPredictor created, out string error)
+            {
+                created = predictor;
+                error = null;
+                return true;
+            }
+        }
+
+        private sealed class CapturingPredictor : IPredictor
+        {
+            public IReadOnlyList<TelemetryFrame> LastFrames { get; private set; }
+
+            public string GetName() => "capturing";
+            public void LoadModel(string modelDirectory) { }
+            public void Release() { }
+
+            public PredictionResult Predict(PredictionContext context)
+            {
+                LastFrames = context.Frames;
+                return new PredictionResult(
+                    "capturing",
+                    "ok",
+                    new[] { Vector3.zero, Vector3.one },
+                    new[] { Vector3.zero, Vector3.one },
+                    context.Window.FutureStartIndex,
+                    context.Window.FutureEndIndex,
+                    new PredictionMetrics(0f, 0f, 0f, 0f, 1f, 0f));
+            }
         }
     }
 }

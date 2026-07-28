@@ -43,6 +43,7 @@ namespace UnderwaterGliderTwin.Prediction
                 RuntimePredictionState.SetEnabled(false);
             }
             playback.FrameChangedWithReason += OnFrameChanged;
+            playback.Model.FramesReplaced += OnFramesReplaced;
             Recompute(playback.Model.CurrentIndex);
         }
 
@@ -85,6 +86,7 @@ namespace UnderwaterGliderTwin.Prediction
             if (playback != null)
             {
                 playback.FrameChangedWithReason -= OnFrameChanged;
+                playback.Model.FramesReplaced -= OnFramesReplaced;
             }
 
             foreach (var predictor in predictors.Values)
@@ -96,6 +98,12 @@ namespace UnderwaterGliderTwin.Prediction
         private void OnFrameChanged(TelemetryFrame frame, int index, float progress01, FrameUpdateReason reason)
         {
             Recompute(index);
+        }
+
+        private void OnFramesReplaced(IReadOnlyList<TelemetryFrame> replacement, int preservedIndex)
+        {
+            frames = replacement;
+            Recompute(preservedIndex);
         }
 
         private void Recompute(int currentIndex)

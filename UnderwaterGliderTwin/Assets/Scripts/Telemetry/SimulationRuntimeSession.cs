@@ -359,7 +359,16 @@ namespace UnderwaterGliderTwin.Telemetry
                 || !IsFinite(frame.HeadingDeg)
                 || !IsFinite(frame.PitchDeg)
                 || !IsFinite(frame.RollDeg)
+                || !IsFinite(frame.Voltage24V)
+                || !IsFinite(frame.Current24A)
                 || !IsFinite(frame.BatteryPercent)
+                || !IsFinite(frame.TargetSegment)
+                || !IsFinite(frame.TargetHeadingDeg)
+                || !IsFinite(frame.TargetDepthM)
+                || !IsFinite(frame.TargetAltitudeM)
+                || !IsFinite(frame.PropellerRpm)
+                || !IsFinite(frame.PistonMm)
+                || !IsFinite(frame.TurnAngleDeg)
                 || !IsFiniteOrNaNPlanned(frame.PlannedLongitudeDeg, frame.PlannedLatitudeDeg))
             {
                 return false;

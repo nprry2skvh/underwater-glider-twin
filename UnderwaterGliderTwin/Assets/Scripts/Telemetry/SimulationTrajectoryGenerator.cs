@@ -51,6 +51,7 @@ namespace UnderwaterGliderTwin.Telemetry
             SimulationProfile profile)
         {
             var seed = snapshot.Frame;
+            var stateOrigin = snapshot.Profile ?? profile;
             var dynamics = profile.Dynamics?.Clone() ?? GliderDynamicsProfile.Default;
             dynamics.CruiseSpeedMps = profile.HorizontalSpeedMps <= 0f
                 ? 0f
@@ -97,11 +98,11 @@ namespace UnderwaterGliderTwin.Telemetry
                         : profile.ResolveAscentNetBuoyancyForceN(dynamics.MaxBuoyancyForceN * 0.7f)) * envelope
                     : float.NaN;
                 var elapsedSeconds = seed.ElapsedSeconds + relativeSeconds;
-                var latitudeDeg = seed.LatitudeDeg + state.PositionEndM.z / MetersPerDegreeLatitude;
+                var latitudeDeg = stateOrigin.OriginLatitudeDeg + state.PositionEndM.z / MetersPerDegreeLatitude;
                 var metersPerDegreeLongitude = MetersPerDegreeLatitude * Math.Cos(latitudeDeg * Math.PI / 180.0);
                 var longitudeDeg = Math.Abs(metersPerDegreeLongitude) > 0.001
-                    ? seed.LongitudeDeg + state.PositionEndM.x / metersPerDegreeLongitude
-                    : seed.LongitudeDeg;
+                    ? stateOrigin.OriginLongitudeDeg + state.PositionEndM.x / metersPerDegreeLongitude
+                    : stateOrigin.OriginLongitudeDeg;
                 var current = ResolveCurrentVelocity(
                     profile,
                     longitudeDeg,
@@ -132,11 +133,11 @@ namespace UnderwaterGliderTwin.Telemetry
                 ConstrainAtSurface(ref state, currentEndMps);
                 ConstrainAtSurface(ref plannedState, Vector3.zero);
 
-                latitudeDeg = seed.LatitudeDeg + state.PositionEndM.z / MetersPerDegreeLatitude;
+                latitudeDeg = stateOrigin.OriginLatitudeDeg + state.PositionEndM.z / MetersPerDegreeLatitude;
                 metersPerDegreeLongitude = MetersPerDegreeLatitude * Math.Cos(latitudeDeg * Math.PI / 180.0);
                 longitudeDeg = Math.Abs(metersPerDegreeLongitude) > 0.001
-                    ? seed.LongitudeDeg + state.PositionEndM.x / metersPerDegreeLongitude
-                    : seed.LongitudeDeg;
+                    ? stateOrigin.OriginLongitudeDeg + state.PositionEndM.x / metersPerDegreeLongitude
+                    : stateOrigin.OriginLongitudeDeg;
                 var plannedLatitudeDeg = basePlannedLatitude + plannedState.PositionEndM.z / MetersPerDegreeLatitude;
                 var plannedMetersPerDegreeLongitude =
                     MetersPerDegreeLatitude * Math.Cos(plannedLatitudeDeg * Math.PI / 180.0);
