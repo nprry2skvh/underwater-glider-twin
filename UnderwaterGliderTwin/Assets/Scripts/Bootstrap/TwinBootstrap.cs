@@ -24,6 +24,9 @@ namespace UnderwaterGliderTwin.Bootstrap
         public TwinLogger Logger { get; private set; }
         public AlarmEvaluator AlarmEvaluator { get; private set; }
         public string CurrentCsvPath { get; private set; }
+        public SimulationRuntimeSession SimulationSession { get; private set; }
+
+        private TrajectoryView trajectoryView;
 
         private void Awake()
         {
@@ -107,8 +110,23 @@ namespace UnderwaterGliderTwin.Bootstrap
             var visualController = glider.AddComponent<GliderVisualController>();
             visualController.Initialize(PlaybackController);
 
-            var trajectory = new GameObject("TrajectoryView").AddComponent<TrajectoryView>();
-            trajectory.Initialize(LoadResult.Frames, Mapper, PlaybackController, prediction);
+            trajectoryView = new GameObject("TrajectoryView").AddComponent<TrajectoryView>();
+            trajectoryView.Initialize(LoadResult.Frames, Mapper, PlaybackController, prediction);
+
+            if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
+            {
+                SimulationSession = new SimulationRuntimeSession(
+                    PlaybackController.Model,
+                    RuntimeDataSourceState.SimulationProfile,
+                    new SimulationFutureTrajectoryGenerator(this));
+                PlaybackController.Model.FramesReplaced += trajectoryView.ReplaceFutureTrajectory;
+                SimulationSession.StatusChanged += OnSimulationSessionStatusChanged;
+                SimulationRuntimeRegistry.SetActive(SimulationSession);
+            }
+            else
+            {
+                SimulationRuntimeRegistry.SetActive(null);
+            }
 
             var environment = new GameObject("UnderwaterEnvironment").AddComponent<UnderwaterEnvironmentBuilder>();
             environment.Build();
@@ -119,15 +137,15 @@ namespace UnderwaterGliderTwin.Bootstrap
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
             {
                 environment.SetParticlesEnabled(false);
-                missionHorizontalExtents = MissionMapOverlay.ComputeHorizontalExtents(trajectory.FullTrajectoryPoints);
-                missionHorizontalCenter = MissionMapOverlay.ComputeHorizontalCenter(trajectory.FullTrajectoryPoints);
+                missionHorizontalExtents = MissionMapOverlay.ComputeHorizontalExtents(trajectoryView.FullTrajectoryPoints);
+                missionHorizontalCenter = MissionMapOverlay.ComputeHorizontalCenter(trajectoryView.FullTrajectoryPoints);
                 oceanVolume = new GameObject("OceanVolume").AddComponent<OceanVolumeView>();
                 oceanVolume.Initialize(
                     RuntimeDataSourceState.SimulationProfile,
                     Mapper,
                     PlaybackController,
                     glider.transform,
-                    trajectory.FullTrajectoryPoints,
+                    trajectoryView.FullTrajectoryPoints,
                     RuntimeDataSourceState.SimulationProfile.TargetDepthM,
                     missionHorizontalExtents,
                     missionDepthScale,
@@ -138,7 +156,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             var camera = Camera.main != null ? Camera.main : CreateMainCamera();
             ConfigureCamera(camera);
             var cameraController = camera.gameObject.AddComponent<TwinCameraController>();
-            cameraController.Initialize(glider.transform, trajectory.FullTrajectoryPoints);
+            cameraController.Initialize(glider.transform, trajectoryView.FullTrajectoryPoints);
 
             var screenshotCapture = gameObject.AddComponent<RuntimeScreenshotCapture>();
             screenshotCapture.Initialize(screenshotOptions);
@@ -153,26 +171,49 @@ namespace UnderwaterGliderTwin.Bootstrap
                 oceanVolume != null ? oceanVolume.RebuildCurrentSourceAndCandidateCache : null);
             canvasRoot.AddComponent<DashboardView>().Initialize(PlaybackController, prediction);
             canvasRoot.AddComponent<StatusPanelView>().Initialize(PlaybackController, AlarmEvaluator, Logger, prediction);
-            canvasRoot.AddComponent<OceanCommandToolbarView>().Initialize(cameraController, trajectory);
-            canvasRoot.AddComponent<PlaybackControlsView>().Initialize(PlaybackController, cameraController, environment, trajectory,
+            canvasRoot.AddComponent<OceanCommandToolbarView>().Initialize(cameraController, trajectoryView);
+            canvasRoot.AddComponent<PlaybackControlsView>().Initialize(PlaybackController, cameraController, environment, trajectoryView,
                 onScreenshotRequested: screenshotCapture.CaptureManual,
                 onMissionViewRequested: () =>
                 {
                     if (RuntimeDataSourceState.CurrentMode != RuntimeDataSourceMode.Simulation)
                     {
                         cameraController.SetMode(CameraMode.Global);
-                        trajectory.SetCameraMode(CameraMode.Global);
+                        trajectoryView.SetCameraMode(CameraMode.Global);
                         return;
                     }
 
                     cameraController.SetMissionVolumeView(RuntimeDataSourceState.SimulationProfile.TargetDepthM, missionHorizontalExtents, missionDepthScale);
-                    trajectory.SetCameraMode(CameraMode.Global);
+                    trajectoryView.SetCameraMode(CameraMode.Global);
                 });
 
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
             {
                 cameraController.SetMissionVolumeView(RuntimeDataSourceState.SimulationProfile.TargetDepthM, missionHorizontalExtents, missionDepthScale);
-                trajectory.SetCameraMode(CameraMode.Global);
+                trajectoryView.SetCameraMode(CameraMode.Global);
+            }
+        }
+
+        private void Update()
+        {
+            SimulationSession?.Tick();
+        }
+
+        private void OnDestroy()
+        {
+            if (SimulationSession != null)
+            {
+                SimulationSession.StatusChanged -= OnSimulationSessionStatusChanged;
+                SimulationSession.CancelPendingRebuild();
+                if (ReferenceEquals(SimulationRuntimeRegistry.Active, SimulationSession))
+                {
+                    SimulationRuntimeRegistry.SetActive(null);
+                }
+            }
+
+            if (PlaybackController != null && trajectoryView != null)
+            {
+                PlaybackController.Model.FramesReplaced -= trajectoryView.ReplaceFutureTrajectory;
             }
         }
 
@@ -191,8 +232,33 @@ namespace UnderwaterGliderTwin.Bootstrap
 
         private void ReloadFromSimulationProfile(SimulationProfile profile)
         {
-            RuntimeDataSourceState.UseSimulation(profile);
-            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            if (RuntimeDataSourceState.CurrentMode != RuntimeDataSourceMode.Simulation || SimulationSession == null)
+            {
+                Logger.AppendLoad("Simulation profile update ignored because no simulation session is active.");
+                return;
+            }
+
+            if (!SimulationSession.RequestProfileUpdate(profile))
+            {
+                Logger.AppendLoad($"Simulation profile update rejected: {SimulationSession.LastError}");
+            }
+        }
+
+        private void OnSimulationSessionStatusChanged()
+        {
+            if (SimulationSession == null || SimulationSession.IsRebuildPending)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(SimulationSession.LastError))
+            {
+                Logger.AppendLoad($"Simulation profile update failed: {SimulationSession.LastError}");
+                return;
+            }
+
+            RuntimeDataSourceState.UseSimulation(SimulationSession.ActiveProfile);
+            Logger.AppendLoad("Simulation profile update applied without reloading the scene.");
         }
 
         private static Camera CreateMainCamera()

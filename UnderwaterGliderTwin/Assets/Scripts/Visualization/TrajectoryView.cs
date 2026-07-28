@@ -76,7 +76,7 @@ namespace UnderwaterGliderTwin.Visualization
                 currentMarker = CreateMarker("CurrentPositionMarker", FullTrajectoryPoints[0], new Color(1f, 0.92f, 0.2f, 1f), 0.45f);
             }
 
-            playback.FrameChanged += OnFrameChanged;
+            playback.FrameChangedWithReason += OnFrameChangedWithReason;
             if (prediction != null)
             {
                 prediction.SnapshotUpdated += OnPredictionUpdated;
@@ -117,11 +117,39 @@ namespace UnderwaterGliderTwin.Visualization
             ApplyWidthScale();
         }
 
+        public void ReplaceFutureTrajectory(IReadOnlyList<TelemetryFrame> frames, int preservedIndex)
+        {
+            if (frames == null)
+            {
+                throw new ArgumentNullException(nameof(frames));
+            }
+
+            if (preservedIndex < 0 || preservedIndex >= frames.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(preservedIndex));
+            }
+
+            FullTrajectoryPoints = TrajectorySampler.Sample(frames, mapper, 1200);
+            actualBuffer = new Vector3[FullTrajectoryPoints.Length];
+            Array.Copy(FullTrajectoryPoints, actualBuffer, FullTrajectoryPoints.Length);
+            futureBuffer = TrajectorySampler.Sample(
+                frames.Skip(preservedIndex).ToArray(),
+                mapper,
+                1200);
+            futureActualLine.positionCount = futureBuffer.Length;
+            if (futureBuffer.Length > 0)
+            {
+                futureActualLine.SetPositions(futureBuffer);
+            }
+
+            RefreshVisibility();
+        }
+
         private void OnDestroy()
         {
             if (playback != null)
             {
-                playback.FrameChanged -= OnFrameChanged;
+                playback.FrameChangedWithReason -= OnFrameChangedWithReason;
             }
 
             if (prediction != null)
@@ -159,6 +187,20 @@ namespace UnderwaterGliderTwin.Visualization
             RebuildPredictedHistory();
             UpdatePlannedLine();
             lastActualCount = count;
+        }
+
+        private void OnFrameChangedWithReason(
+            TelemetryFrame frame,
+            int index,
+            float progress01,
+            FrameUpdateReason reason)
+        {
+            if (reason == FrameUpdateReason.Rebuild)
+            {
+                return;
+            }
+
+            OnFrameChanged(frame, index, progress01);
         }
 
         private void OnPredictionUpdated(PredictionSnapshot snapshot)

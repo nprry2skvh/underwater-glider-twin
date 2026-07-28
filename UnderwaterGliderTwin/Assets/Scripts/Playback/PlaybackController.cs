@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnderwaterGliderTwin.Telemetry;
 
@@ -8,7 +9,8 @@ namespace UnderwaterGliderTwin.Playback
     {
         Initial,
         Playback,
-        Seek
+        Seek,
+        Rebuild
     }
 
     public sealed class PlaybackController : MonoBehaviour
@@ -22,7 +24,13 @@ namespace UnderwaterGliderTwin.Playback
 
         public void Initialize(PlaybackModel playbackModel)
         {
+            if (model != null)
+            {
+                model.FramesReplaced -= OnFramesReplaced;
+            }
+
             model = playbackModel;
+            model.FramesReplaced += OnFramesReplaced;
             Publish(FrameUpdateReason.Initial);
         }
 
@@ -76,6 +84,19 @@ namespace UnderwaterGliderTwin.Playback
             {
                 Publish(FrameUpdateReason.Playback);
             }
+        }
+
+        private void OnDestroy()
+        {
+            if (model != null)
+            {
+                model.FramesReplaced -= OnFramesReplaced;
+            }
+        }
+
+        private void OnFramesReplaced(IReadOnlyList<TelemetryFrame> frames, int preservedIndex)
+        {
+            Publish(FrameUpdateReason.Rebuild);
         }
 
         private void Publish(FrameUpdateReason reason)

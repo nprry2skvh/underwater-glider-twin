@@ -6,9 +6,11 @@ namespace UnderwaterGliderTwin.Playback
 {
     public sealed class PlaybackModel
     {
-        private readonly IReadOnlyList<TelemetryFrame> frames;
+        private IReadOnlyList<TelemetryFrame> frames;
         private readonly float rowsPerSecond;
         private float continuousIndex;
+
+        public event Action<IReadOnlyList<TelemetryFrame>, int> FramesReplaced;
 
         public bool IsPlaying { get; private set; }
         public float Speed { get; private set; } = 1f;
@@ -95,6 +97,68 @@ namespace UnderwaterGliderTwin.Playback
             Direction = 1;
             SeekNormalized(0f);
             IsPlaying = playImmediately;
+        }
+
+        public void ReplaceFrames(IReadOnlyList<TelemetryFrame> replacement, int preservedIndex)
+        {
+            if (replacement == null)
+            {
+                throw new ArgumentNullException(nameof(replacement));
+            }
+
+            if (replacement.Count == 0)
+            {
+                throw new ArgumentException("Playback requires at least one frame.", nameof(replacement));
+            }
+
+            if (preservedIndex < 0 || preservedIndex >= frames.Count || preservedIndex >= replacement.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(preservedIndex));
+            }
+
+            for (var i = 0; i <= preservedIndex; i++)
+            {
+                if (!FrameValuesEqual(frames[i], replacement[i]))
+                {
+                    throw new ArgumentException(
+                        $"Replacement changed historical frame {i}.",
+                        nameof(replacement));
+                }
+            }
+
+            frames = replacement;
+            CurrentIndex = preservedIndex;
+            continuousIndex = Math.Max(preservedIndex, Math.Min(replacement.Count - 1, continuousIndex));
+            FramesReplaced?.Invoke(frames, preservedIndex);
+        }
+
+        private static bool FrameValuesEqual(TelemetryFrame left, TelemetryFrame right)
+        {
+            return left.RowIndex == right.RowIndex
+                && left.RawTime == right.RawTime
+                && left.ElapsedSeconds.Equals(right.ElapsedSeconds)
+                && left.LongitudeDeg.Equals(right.LongitudeDeg)
+                && left.LatitudeDeg.Equals(right.LatitudeDeg)
+                && left.DepthM.Equals(right.DepthM)
+                && left.AltitudeM.Equals(right.AltitudeM)
+                && left.HeadingDeg.Equals(right.HeadingDeg)
+                && left.PitchDeg.Equals(right.PitchDeg)
+                && left.RollDeg.Equals(right.RollDeg)
+                && left.Voltage24V.Equals(right.Voltage24V)
+                && left.Current24A.Equals(right.Current24A)
+                && left.BatteryPercent.Equals(right.BatteryPercent)
+                && left.WorkMode == right.WorkMode
+                && left.RunState == right.RunState
+                && left.TargetSegment.Equals(right.TargetSegment)
+                && left.TargetHeadingDeg.Equals(right.TargetHeadingDeg)
+                && left.TargetDepthM.Equals(right.TargetDepthM)
+                && left.TargetAltitudeM.Equals(right.TargetAltitudeM)
+                && left.PropellerRpm.Equals(right.PropellerRpm)
+                && left.PistonMm.Equals(right.PistonMm)
+                && left.TurnAngleDeg.Equals(right.TurnAngleDeg)
+                && Nullable.Equals(left.Diagnostics, right.Diagnostics)
+                && left.PlannedLongitudeDeg.Equals(right.PlannedLongitudeDeg)
+                && left.PlannedLatitudeDeg.Equals(right.PlannedLatitudeDeg);
         }
     }
 }

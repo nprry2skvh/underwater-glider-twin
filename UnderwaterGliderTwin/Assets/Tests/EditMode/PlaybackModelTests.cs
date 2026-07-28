@@ -71,6 +71,60 @@ namespace UnderwaterGliderTwin.Tests
             UnityEngine.Object.DestroyImmediate(controller.gameObject);
         }
 
+        [Test]
+        public void ReplaceFrames_PreservesIndexAndPlaybackState()
+        {
+            var original = Frames(10);
+            var replacement = Frames(16);
+            var model = new PlaybackModel(original, rowsPerSecond: 10f);
+            model.SeekNormalized(0.5f);
+            model.SetSpeed(2.5f);
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+            var preservedIndex = model.CurrentIndex;
+
+            model.ReplaceFrames(replacement, preservedIndex);
+
+            Assert.That(model.Frames, Is.SameAs(replacement));
+            Assert.That(model.CurrentIndex, Is.EqualTo(preservedIndex));
+            Assert.That(model.Speed, Is.EqualTo(2.5f));
+            Assert.That(model.Direction, Is.EqualTo(-1));
+            Assert.That(model.IsPlaying, Is.True);
+        }
+
+        [Test]
+        public void ReplaceFrames_RejectsReplacementThatChangesHistory()
+        {
+            var original = Frames(10);
+            var replacement = new List<TelemetryFrame>(Frames(16));
+            replacement[2] = new TelemetryFrame(
+                2, "changed", 2f, 120d, 25d, 2f, 100f, 0f, 0f, 0f,
+                28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f);
+            var model = new PlaybackModel(original, rowsPerSecond: 10f);
+            model.SeekNormalized(0.5f);
+
+            Assert.Throws<System.ArgumentException>(() => model.ReplaceFrames(replacement, model.CurrentIndex));
+            Assert.That(model.Frames, Is.SameAs(original));
+        }
+
+        [Test]
+        public void PlaybackController_ReportsRebuildReasonWhenFramesAreReplaced()
+        {
+            var original = Frames(10);
+            var replacement = Frames(16);
+            var model = new PlaybackModel(original, rowsPerSecond: 10f);
+            model.SeekNormalized(0.5f);
+            var controller = new UnityEngine.GameObject("Playback").AddComponent<PlaybackController>();
+            controller.Initialize(model);
+            var receivedReason = FrameUpdateReason.Initial;
+            controller.FrameChangedWithReason += (frame, index, progress, reason) => receivedReason = reason;
+
+            model.ReplaceFrames(replacement, model.CurrentIndex);
+
+            Assert.That(receivedReason, Is.EqualTo(FrameUpdateReason.Rebuild));
+            UnityEngine.Object.DestroyImmediate(controller.gameObject);
+        }
+
         private static IReadOnlyList<TelemetryFrame> Frames(int count)
         {
             var frames = new List<TelemetryFrame>();

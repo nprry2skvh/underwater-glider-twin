@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
@@ -12,6 +13,156 @@ namespace UnderwaterGliderTwin.Telemetry
         public static IReadOnlyList<TelemetryFrame> GenerateFrames(SimulationProfile profile)
         {
             return GenerateEventDrivenFrames(profile ?? SimulationProfile.Default);
+        }
+
+        public static IEnumerable<IReadOnlyList<TelemetryFrame>> GenerateFutureSlices(
+            SimulationStateSnapshot snapshot,
+            SimulationProfile profile,
+            int frameSliceBudget)
+        {
+            if (profile == null)
+            {
+                throw new ArgumentNullException(nameof(profile));
+            }
+
+            var budget = Math.Max(1, frameSliceBudget);
+            using (var frames = GenerateSeededFutureFrames(snapshot, profile.Clone()).GetEnumerator())
+            {
+                while (true)
+                {
+                    var slice = new List<TelemetryFrame>(budget);
+                    while (slice.Count < budget && frames.MoveNext())
+                    {
+                        slice.Add(frames.Current);
+                    }
+
+                    if (slice.Count == 0)
+                    {
+                        yield break;
+                    }
+
+                    yield return slice;
+                }
+            }
+        }
+
+        private static IEnumerable<TelemetryFrame> GenerateSeededFutureFrames(
+            SimulationStateSnapshot snapshot,
+            SimulationProfile profile)
+        {
+            var seed = snapshot.Frame;
+            var dynamics = profile.Dynamics?.Clone() ?? GliderDynamicsProfile.Default;
+            dynamics.CruiseSpeedMps = profile.HorizontalSpeedMps <= 0f
+                ? 0f
+                : Mathf.Max(0f, dynamics.CruiseSpeedMps);
+            var state = snapshot.DynamicsState;
+            var plannedState = state;
+            plannedState.EarthVelocityEndMps = plannedState.WaterVelocityEndMps;
+            var sampleInterval = Mathf.Max(0.1f, profile.SampleIntervalSeconds);
+            var cycleDuration = Mathf.Max(sampleInterval, profile.CycleDurationSeconds);
+            var totalDuration = cycleDuration * Mathf.Max(1, profile.CycleCount);
+            var frameCount = Mathf.Max(1, Mathf.CeilToInt(totalDuration / sampleInterval));
+            var waterColumnDepthM = Mathf.Max(profile.TargetDepthM, profile.WaterColumnDepthM);
+            var rowIndex = seed.RowIndex + 1;
+            var basePlannedLongitude = seed.HasPlannedPosition ? seed.PlannedLongitudeDeg : seed.LongitudeDeg;
+            var basePlannedLatitude = seed.HasPlannedPosition ? seed.PlannedLatitudeDeg : seed.LatitudeDeg;
+
+            for (var frameOffset = 1; frameOffset <= frameCount; frameOffset++)
+            {
+                var relativeSeconds = frameOffset * sampleInterval;
+                var cyclePosition = relativeSeconds / cycleDuration;
+                var cycleIndex = Mathf.Min(profile.CycleCount - 1, Mathf.FloorToInt(cyclePosition));
+                var phase = cyclePosition - Mathf.Floor(cyclePosition);
+                var descending = phase <= 0.5f;
+                var targetDepthM = Mathf.Max(
+                    0f,
+                    profile.TargetDepthM * 0.5f * (1f - Mathf.Cos(phase * Mathf.PI * 2f)));
+                var targetHeadingDeg = profile.StartHeadingDeg
+                    + (cycleIndex + phase) * profile.HeadingDeltaPerCycleDeg;
+                var legPhase = descending ? phase * 2f : (phase - 0.5f) * 2f;
+                var envelope = Mathf.Sin(Mathf.Clamp01(legPhase) * Mathf.PI);
+                var turnDirection = Mathf.Abs(profile.HeadingDeltaPerCycleDeg) > 0.0001f
+                    ? Mathf.Sign(profile.HeadingDeltaPerCycleDeg)
+                    : 0f;
+                var commandedRollDeg = turnDirection
+                    * (descending ? profile.ResolveDescentRollDeg() : -profile.ResolveAscentRollDeg())
+                    * envelope;
+                var commandedPitchDeg = (descending
+                        ? profile.ResolveDescentPitchDeg()
+                        : -profile.ResolveAscentPitchDeg())
+                    * envelope;
+                var commandedNetBuoyancyForceN = profile.HasDirectionalBuoyancyCommands()
+                    ? (descending
+                        ? profile.ResolveDescentNetBuoyancyForceN(-dynamics.MaxBuoyancyForceN * 0.7f)
+                        : profile.ResolveAscentNetBuoyancyForceN(dynamics.MaxBuoyancyForceN * 0.7f)) * envelope
+                    : float.NaN;
+                var elapsedSeconds = seed.ElapsedSeconds + relativeSeconds;
+                var latitudeDeg = seed.LatitudeDeg + state.PositionEndM.z / MetersPerDegreeLatitude;
+                var metersPerDegreeLongitude = MetersPerDegreeLatitude * Math.Cos(latitudeDeg * Math.PI / 180.0);
+                var longitudeDeg = Math.Abs(metersPerDegreeLongitude) > 0.001
+                    ? seed.LongitudeDeg + state.PositionEndM.x / metersPerDegreeLongitude
+                    : seed.LongitudeDeg;
+                var current = ResolveCurrentVelocity(
+                    profile,
+                    longitudeDeg,
+                    latitudeDeg,
+                    Mathf.Clamp(state.PositionEndM.y, 0f, waterColumnDepthM),
+                    elapsedSeconds);
+                var currentEndMps = new Vector3(current.x, 0f, current.y);
+                state = GliderDynamicsIntegrator.Step(
+                    state,
+                    dynamics,
+                    currentEndMps,
+                    targetDepthM,
+                    targetHeadingDeg,
+                    sampleInterval,
+                    commandedRollDeg,
+                    commandedPitchDeg,
+                    commandedNetBuoyancyForceN);
+                plannedState = GliderDynamicsIntegrator.Step(
+                    plannedState,
+                    dynamics,
+                    Vector3.zero,
+                    targetDepthM,
+                    targetHeadingDeg,
+                    sampleInterval,
+                    commandedRollDeg,
+                    commandedPitchDeg,
+                    commandedNetBuoyancyForceN);
+                ConstrainAtSurface(ref state, currentEndMps);
+                ConstrainAtSurface(ref plannedState, Vector3.zero);
+
+                latitudeDeg = seed.LatitudeDeg + state.PositionEndM.z / MetersPerDegreeLatitude;
+                metersPerDegreeLongitude = MetersPerDegreeLatitude * Math.Cos(latitudeDeg * Math.PI / 180.0);
+                longitudeDeg = Math.Abs(metersPerDegreeLongitude) > 0.001
+                    ? seed.LongitudeDeg + state.PositionEndM.x / metersPerDegreeLongitude
+                    : seed.LongitudeDeg;
+                var plannedLatitudeDeg = basePlannedLatitude + plannedState.PositionEndM.z / MetersPerDegreeLatitude;
+                var plannedMetersPerDegreeLongitude =
+                    MetersPerDegreeLatitude * Math.Cos(plannedLatitudeDeg * Math.PI / 180.0);
+                var plannedLongitudeDeg = Math.Abs(plannedMetersPerDegreeLongitude) > 0.001
+                    ? basePlannedLongitude + plannedState.PositionEndM.x / plannedMetersPerDegreeLongitude
+                    : basePlannedLongitude;
+                var frame = new List<TelemetryFrame>(1);
+                AppendFrame(
+                    frame,
+                    ref rowIndex,
+                    profile,
+                    dynamics,
+                    state,
+                    plannedState,
+                    longitudeDeg,
+                    latitudeDeg,
+                    plannedLongitudeDeg,
+                    plannedLatitudeDeg,
+                    elapsedSeconds,
+                    targetDepthM,
+                    waterColumnDepthM,
+                    Mathf.Max(1, Mathf.RoundToInt(seed.TargetSegment)) + cycleIndex,
+                    targetHeadingDeg,
+                    state.PositionEndM.y <= 0.001f ? "Surface" : "Glide");
+                yield return frame[0];
+            }
         }
 
         private static IReadOnlyList<TelemetryFrame> GenerateEventDrivenFrames(SimulationProfile profile)
@@ -576,6 +727,101 @@ namespace UnderwaterGliderTwin.Telemetry
         {
             var normalized = headingDeg % 360f;
             return normalized < 0f ? normalized + 360f : normalized;
+        }
+    }
+
+    public sealed class SimulationFutureTrajectoryGenerator : ISimulationFutureGenerator
+    {
+        private readonly MonoBehaviour coroutineHost;
+
+        public SimulationFutureTrajectoryGenerator(MonoBehaviour coroutineHost)
+        {
+            this.coroutineHost = coroutineHost != null
+                ? coroutineHost
+                : throw new ArgumentNullException(nameof(coroutineHost));
+        }
+
+        public ISimulationRebuildOperation GenerateFuture(
+            SimulationStateSnapshot snapshot,
+            SimulationProfile profile,
+            int frameSliceBudget,
+            Action<SimulationRebuildResult> onCompleted)
+        {
+            if (onCompleted == null)
+            {
+                throw new ArgumentNullException(nameof(onCompleted));
+            }
+
+            var operation = new CoroutineRebuildOperation();
+            operation.Coroutine = coroutineHost.StartCoroutine(
+                Generate(snapshot, profile, frameSliceBudget, onCompleted, operation));
+            return operation;
+        }
+
+        private static IEnumerator Generate(
+            SimulationStateSnapshot snapshot,
+            SimulationProfile profile,
+            int frameSliceBudget,
+            Action<SimulationRebuildResult> onCompleted,
+            CoroutineRebuildOperation operation)
+        {
+            var stagedFuture = new List<TelemetryFrame>();
+            IEnumerator<IReadOnlyList<TelemetryFrame>> slices;
+            try
+            {
+                slices = SimulationTrajectoryGenerator
+                    .GenerateFutureSlices(snapshot, profile, frameSliceBudget)
+                    .GetEnumerator();
+            }
+            catch (Exception ex)
+            {
+                onCompleted(SimulationRebuildResult.Failure(ex.Message));
+                yield break;
+            }
+
+            using (slices)
+            {
+                while (!operation.IsCancelled)
+                {
+                    bool hasNext;
+                    IReadOnlyList<TelemetryFrame> slice = null;
+                    try
+                    {
+                        hasNext = slices.MoveNext();
+                        if (hasNext)
+                        {
+                            slice = slices.Current;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        onCompleted(SimulationRebuildResult.Failure(ex.Message));
+                        yield break;
+                    }
+
+                    if (!hasNext)
+                    {
+                        onCompleted(SimulationRebuildResult.Success(stagedFuture));
+                        yield break;
+                    }
+
+                    stagedFuture.AddRange(slice);
+                    yield return null;
+                }
+            }
+
+            onCompleted(SimulationRebuildResult.Cancelled());
+        }
+
+        private sealed class CoroutineRebuildOperation : ISimulationRebuildOperation
+        {
+            public Coroutine Coroutine { get; set; }
+            public bool IsCancelled { get; private set; }
+
+            public void Cancel()
+            {
+                IsCancelled = true;
+            }
         }
     }
 }
