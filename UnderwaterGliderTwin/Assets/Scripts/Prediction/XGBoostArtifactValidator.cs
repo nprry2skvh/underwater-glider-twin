@@ -142,6 +142,11 @@ namespace UnderwaterGliderTwin.Prediction
                 return false;
             }
 
+            if (!TryValidateStructure(root, out _, out error))
+            {
+                return false;
+            }
+
             if (!XGBoostArtifact.TryLoad(root, out _, out error))
             {
                 return false;

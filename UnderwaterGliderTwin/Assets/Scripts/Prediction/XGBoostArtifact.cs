@@ -66,14 +66,23 @@ namespace UnderwaterGliderTwin.Prediction
             }
 
             var manifest = File.ReadAllText(manifestPath);
-            if (!Regex.IsMatch(manifest, "\\\"artifact_version\\\"\\s*:\\s*" + SupportedArtifactVersion))
+            var hasCurrentSchema = Regex.IsMatch(manifest, "\\\"artifact_schema_version\\\"\\s*:\\s*" + SupportedArtifactVersion)
+                && Regex.IsMatch(manifest, "\\\"validation_status\\\"\\s*:\\s*\\\"accepted\\\"", RegexOptions.IgnoreCase);
+            var hasLegacySchema = Regex.IsMatch(manifest, "\\\"artifact_version\\\"\\s*:\\s*" + SupportedArtifactVersion);
+            if (!hasCurrentSchema && !hasLegacySchema)
             {
-                error = "XGBoost artifact version is unsupported.";
+                error = "XGBoost artifact manifest is unsupported or not accepted.";
                 return false;
             }
 
             var sources = new Dictionary<string, string>(StringComparer.Ordinal);
-            var matches = Regex.Matches(manifest, "\\\"(?<target>[a-z_]+)\\\"\\s*:\\s*\\\"(?<source>xgboost|stable)\\\"");
+            var reportPath = Path.Combine(directory, "validation_report.json");
+            var report = File.Exists(reportPath) ? File.ReadAllText(reportPath) : string.Empty;
+            var matches = Regex.Matches(report, "\\\"(?<target>[a-z_]+)\\\"\\s*:\\s*\\\"(?<source>xgboost|stable)\\\"");
+            if (matches.Count == 0)
+            {
+                matches = Regex.Matches(manifest, "\\\"(?<target>[a-z_]+)\\\"\\s*:\\s*\\\"(?<source>xgboost|stable)\\\"");
+            }
             foreach (Match match in matches)
             {
                 sources[match.Groups["target"].Value] = match.Groups["source"].Value;
