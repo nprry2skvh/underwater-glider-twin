@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Text;
 using NUnit.Framework;
 using UnityEngine;
 using UnderwaterGliderTwin.Bootstrap;
@@ -18,7 +20,7 @@ namespace UnderwaterGliderTwin.Tests
             tempDirectory = Path.Combine(Application.temporaryCachePath, Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDirectory);
             csvPath = Path.Combine(tempDirectory, "input.csv");
-            File.WriteAllText(csvPath, "header");
+            File.WriteAllText(csvPath, ValidTelemetryCsv(), StrictGbk());
         }
 
         [TearDown]
@@ -166,5 +168,21 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(LaunchCoordinator.GetLastSuccessfulCsvPath(), Is.Empty);
         }
+
+        private static string ValidTelemetryCsv()
+        {
+            var header = string.Join(",", Enumerable.Range(0, 51).Select(i => $"col{i}"));
+            var row = new[]
+            {
+                "000d 00h 00m 09s", "1", "28.5", "0.3", "0", "32", "10", "0", "7", "88", "3", "0", "0",
+                "姘撮潰妯″紡", "姘撮潰", "2", "0", "32", "17", "0", "16", "120.00008333", "25.00001728", "2.3",
+                "100.0", "30.4", "-2", "-5", "0", "30", "44.3", "1000", "500", "29.7", "68.6", "2.931",
+                "26.4086", "2.35", "0", "27", "0", "95", "89", "0", "5241", "0", "0", "31162", "0", "0.0", "1576"
+            };
+            return header + "\n" + string.Join(",", row) + "\n";
+        }
+
+        private static Encoding StrictGbk() =>
+            Encoding.GetEncoding(936, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
     }
 }

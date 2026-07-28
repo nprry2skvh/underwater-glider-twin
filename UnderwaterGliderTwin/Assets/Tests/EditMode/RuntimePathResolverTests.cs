@@ -194,6 +194,30 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void RuntimeDataSourceState_RejectsMalformedDuplicateLaunchCurrent()
+        {
+            RuntimeDataSourceState.UseCsvPath("telemetry.csv");
+
+            try
+            {
+                var applied = RuntimeDataSourceState.ApplyCommandLineArguments(
+                    new[]
+                    {
+                        "player.exe",
+                        "--simulation-current", "0.35", "-0.12",
+                        "--simulation-current", "bad", "0.2"
+                    });
+
+                Assert.That(applied, Is.False);
+                Assert.That(RuntimeDataSourceState.CurrentMode, Is.EqualTo(RuntimeDataSourceMode.Csv));
+            }
+            finally
+            {
+                RuntimeDataSourceState.UseCsvPath("telemetry.csv");
+            }
+        }
+
+        [Test]
         public void RuntimeDataSourceState_AppliesLaunchDepthToSimulationProfile()
         {
             RuntimeDataSourceState.UseCsvPath("telemetry.csv");

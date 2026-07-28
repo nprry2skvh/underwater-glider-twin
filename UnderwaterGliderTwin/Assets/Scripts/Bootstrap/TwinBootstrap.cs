@@ -44,7 +44,6 @@ namespace UnderwaterGliderTwin.Bootstrap
         {
             var loadTimer = System.Diagnostics.Stopwatch.StartNew();
             var commandLineArgs = Environment.GetCommandLineArgs();
-            RuntimeDataSourceState.ApplyCommandLineArguments(commandLineArgs);
             var screenshotOptions = RuntimeScreenshotOptions.Parse(commandLineArgs);
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
             {
@@ -73,6 +72,10 @@ namespace UnderwaterGliderTwin.Bootstrap
             if (LoadResult.Frames.Count == 0)
             {
                 throw new InvalidOperationException("CSV did not contain any usable telemetry frames.");
+            }
+            if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Csv)
+            {
+                LaunchCoordinator.SaveSuccessfulCsvPath(CurrentCsvPath);
             }
 
             var originIndex = TelemetryPositionUtility.FindFirstUsableCoordinateIndex(LoadResult.Frames);

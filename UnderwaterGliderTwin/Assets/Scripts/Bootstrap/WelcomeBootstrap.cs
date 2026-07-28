@@ -20,7 +20,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             var request = LaunchRequestParser.Parse(Environment.GetCommandLineArgs(), lastCsv, SimulationProfile.Default);
             if (request.Mode != LaunchMode.Welcome && coordinator.ApplyAndLaunch(request)) return;
             BuildUi(lastCsv);
-            if (request.HasErrors) SetError(string.Join("\n", request.Errors));
+            if (request.HasErrors || !string.IsNullOrWhiteSpace(coordinator.LastError)) SetError(GetLaunchError(request));
         }
 
         private void BuildUi(string initialCsv)
@@ -51,7 +51,7 @@ namespace UnderwaterGliderTwin.Bootstrap
         private void ConfirmCsv()
         {
             var request = coordinator.CreateCsvRequest(csvInput.text);
-            if (!coordinator.ApplyAndLaunch(request)) SetError(string.Join("\n", request.Errors));
+            if (!coordinator.ApplyAndLaunch(request)) SetError(GetLaunchError(request));
         }
 
         private void StartPreferredCsv()
@@ -60,10 +60,16 @@ namespace UnderwaterGliderTwin.Bootstrap
             try { if (string.IsNullOrWhiteSpace(path)) path = RuntimePathResolver.ResolveCsvPath(); }
             catch (Exception ex) { SetError(ex.Message); return; }
             var request = coordinator.CreateCsvRequest(path);
-            if (!coordinator.ApplyAndLaunch(request)) SetError(string.Join("\n", request.Errors));
+            if (!coordinator.ApplyAndLaunch(request)) SetError(GetLaunchError(request));
         }
 
         private void SetError(string message) { if (status != null) status.text = message; }
+
+        private string GetLaunchError(LaunchRequest request)
+        {
+            if (!string.IsNullOrWhiteSpace(coordinator.LastError)) return coordinator.LastError;
+            return request != null && request.HasErrors ? string.Join("\n", request.Errors) : "Launch request could not be started.";
+        }
 
         private static Image CreateImage(Transform parent, string name, Color color, Vector2 min, Vector2 max)
         {

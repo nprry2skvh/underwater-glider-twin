@@ -55,6 +55,10 @@ namespace UnderwaterGliderTwin.Bootstrap
             {
                 var profile = defaultProfile != null ? defaultProfile.Clone() : SimulationProfile.Default;
                 if (hasDepth) { profile.TargetDepthM = depth; profile.WaterColumnDepthM = Math.Max(profile.WaterColumnDepthM, depth); }
+                profile.CycleDurationSeconds = MissionProfileConstraints.NormalizeEngineeringCycleDuration(
+                    profile.CycleDurationSeconds,
+                    profile.TargetDepthM,
+                    profile.HorizontalSpeedMps);
                 if (hasCurrent) profile.OceanCurrentProfile = new OceanCurrentProfile(new[] { new OceanCurrentLayer(0f, profile.TargetDepthM, east, north) });
                 return new LaunchRequest(simulationErrors.Count > 0 ? LaunchMode.Welcome : LaunchMode.Simulation, csv, profile, simulationErrors);
             }

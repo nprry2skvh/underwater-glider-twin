@@ -11,6 +11,7 @@ namespace UnderwaterGliderTwin.Bootstrap
         public const string MainSceneName = "Main";
         public const string LastCsvPlayerPrefsKey = "UnderwaterGliderTwin.LastSuccessfulCsv";
         private readonly Action<string> loadScene;
+        public string LastError { get; private set; } = string.Empty;
 
         public LaunchCoordinator(Action<string> sceneLoader = null)
         {
@@ -19,15 +20,61 @@ namespace UnderwaterGliderTwin.Bootstrap
 
         public bool ApplyAndLaunch(LaunchRequest request)
         {
-            if (request == null || request.HasErrors || request.Mode == LaunchMode.Welcome) return false;
+            LastError = string.Empty;
+            if (request == null)
+            {
+                LastError = "Launch request is missing.";
+                return false;
+            }
+
+            if (request.HasErrors)
+            {
+                LastError = string.Join("\n", request.Errors);
+                return false;
+            }
+
+            if (request.Mode == LaunchMode.Welcome)
+            {
+                LastError = "No launch mode was selected.";
+                return false;
+            }
+
             if (request.Mode == LaunchMode.Simulation)
+            {
                 RuntimeDataSourceState.UseSimulation(request.SimulationProfile);
+            }
             else
             {
-                if (!File.Exists(request.CsvPath)) return false;
+                if (!ValidateCsvForLaunch(request.CsvPath)) return false;
                 RuntimePathResolver.SetCsvPathOverride(request.CsvPath);
+                SaveSuccessfulCsvPath(request.CsvPath);
             }
+
             loadScene(MainSceneName);
+            return true;
+        }
+
+        private bool ValidateCsvForLaunch(string csvPath)
+        {
+            if (string.IsNullOrWhiteSpace(csvPath) || !File.Exists(csvPath))
+            {
+                LastError = $"CSV file does not exist: {csvPath}";
+                return false;
+            }
+
+            var loadResult = new CsvTelemetrySource(csvPath).Load();
+            if (loadResult.Errors.Count > 0)
+            {
+                LastError = string.Join("\n", loadResult.Errors);
+                return false;
+            }
+
+            if (loadResult.Frames.Count == 0)
+            {
+                LastError = "CSV did not contain any usable telemetry frames.";
+                return false;
+            }
+
             return true;
         }
 

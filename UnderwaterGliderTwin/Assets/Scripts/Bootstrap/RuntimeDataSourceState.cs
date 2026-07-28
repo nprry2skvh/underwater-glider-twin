@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using UnderwaterGliderTwin.Telemetry;
 
 namespace UnderwaterGliderTwin.Bootstrap
@@ -39,72 +38,13 @@ namespace UnderwaterGliderTwin.Bootstrap
                 return false;
             }
 
-            var simulationRequested = false;
-            var hasLaunchCurrent = false;
-            var hasLaunchDepth = false;
-            var eastwardMps = 0f;
-            var northwardMps = 0f;
-            var targetDepthM = 0f;
-            for (var i = 0; i < args.Count; i++)
-            {
-                if (string.Equals(args[i], "--simulation", StringComparison.OrdinalIgnoreCase))
-                {
-                    simulationRequested = true;
-                    continue;
-                }
-
-                if (string.Equals(args[i], "--simulation-depth", StringComparison.OrdinalIgnoreCase)
-                    && i + 1 < args.Count
-                    && float.TryParse(args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out targetDepthM)
-                    && !float.IsNaN(targetDepthM)
-                    && !float.IsInfinity(targetDepthM)
-                    && targetDepthM >= 0f)
-                {
-                    simulationRequested = true;
-                    hasLaunchDepth = true;
-                    i += 1;
-                    continue;
-                }
-
-                if (!string.Equals(args[i], "--simulation-current", StringComparison.OrdinalIgnoreCase)
-                    || i + 2 >= args.Count
-                    || !float.TryParse(args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out eastwardMps)
-                    || !float.TryParse(args[i + 2], NumberStyles.Float, CultureInfo.InvariantCulture, out northwardMps))
-                {
-                    continue;
-                }
-
-                simulationRequested = true;
-                hasLaunchCurrent = true;
-                i += 2;
-            }
-
-            if (!simulationRequested)
+            var request = LaunchRequestParser.Parse(args, string.Empty, SimulationProfile.Default);
+            if (request.HasErrors || request.Mode != LaunchMode.Simulation)
             {
                 return false;
             }
 
-            var profile = SimulationProfile.Default;
-            if (hasLaunchDepth)
-            {
-                profile.TargetDepthM = targetDepthM;
-                profile.WaterColumnDepthM = Math.Max(profile.WaterColumnDepthM, targetDepthM);
-            }
-
-            profile.CycleDurationSeconds = MissionProfileConstraints.NormalizeEngineeringCycleDuration(
-                profile.CycleDurationSeconds,
-                profile.TargetDepthM,
-                profile.HorizontalSpeedMps);
-
-            if (hasLaunchCurrent)
-            {
-                profile.OceanCurrentProfile = new OceanCurrentProfile(new[]
-                {
-                    new OceanCurrentLayer(0f, profile.TargetDepthM, eastwardMps, northwardMps)
-                });
-            }
-
-            UseSimulation(profile);
+            UseSimulation(request.SimulationProfile);
             return true;
         }
     }
