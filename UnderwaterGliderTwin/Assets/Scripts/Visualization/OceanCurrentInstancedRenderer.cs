@@ -41,6 +41,7 @@ namespace UnderwaterGliderTwin.Visualization
         private float missionDepthM;
 
         public int VisibleArrowCount => instanceCount;
+        public SimulationProfile CurrentProfile => profile;
 
         public void Initialize(
             SimulationProfile profile,
@@ -99,6 +100,17 @@ namespace UnderwaterGliderTwin.Visualization
                 ? playback.Model.CurrentFrame.ElapsedSeconds
                 : 0f;
             RefreshForTime(elapsedSeconds);
+        }
+
+        public void UpdateProfile(SimulationProfile updatedProfile)
+        {
+            if (updatedProfile == null)
+            {
+                return;
+            }
+
+            profile = updatedProfile;
+            RebuildSourceAndCandidateCache();
         }
 
         private void LateUpdate()

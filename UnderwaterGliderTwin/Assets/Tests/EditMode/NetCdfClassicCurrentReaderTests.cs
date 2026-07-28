@@ -58,6 +58,26 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void TryRead_AppliesScaleOffsetAndSkipsClassicFillValues()
+        {
+            var variables = new List<FixtureVariable>
+            {
+                new FixtureVariable("longitude", new[] { 0 }, new[] { 120f }), new FixtureVariable("latitude", new[] { 1 }, new[] { 25f }), new FixtureVariable("depth", new[] { 2 }, new[] { 5f, 10f }),
+                new FixtureVariable("uo", new[] { 2, 1, 0 }, new[] { -9999f, 4f }, "m/s", new Dictionary<string, float> { { "_FillValue", -9999f }, { "scale_factor", .5f }, { "add_offset", 1f } }),
+                new FixtureVariable("vo", new[] { 2, 1, 0 }, new[] { -9999f, 2f }, "m/s", new Dictionary<string, float> { { "_FillValue", -9999f }, { "scale_factor", 2f }, { "add_offset", -1f } })
+            };
+            var path = WriteFixture(Build(1, new[] { new FixtureDimension("longitude", 1), new FixtureDimension("latitude", 1), new FixtureDimension("depth", 2) }, variables));
+            try
+            {
+                Assert.That(NetCdfClassicCurrentReader.TryRead(path, DateTime.UtcNow, out var result, out var error), Is.True, error);
+                Assert.That(result.Field.Samples, Has.Count.EqualTo(1));
+                Assert.That(result.Field.Samples[0].EastwardMps, Is.EqualTo(3f));
+                Assert.That(result.Field.Samples[0].NorthwardMps, Is.EqualTo(3f));
+            }
+            finally { Directory.Delete(Path.GetDirectoryName(path), true); }
+        }
+
+        [Test]
         public void TryRead_SortsDescendingCoordinatesWithoutSeparatingVelocityComponents()
         {
             var path = WriteFixture(BuildGridFixture("longitude", "latitude", "uo", "vo", "m/s", "m/s", new[] { 121f, 120f }, new[] { 26f, 25f }, new[] { 10f, 5f }, new[] { 1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f }, new[] { -1f, -2f, -3f, -4f, -5f, -6f, -7f, -8f }));
@@ -204,21 +224,24 @@ namespace UnderwaterGliderTwin.Tests
             foreach (var variable in variables)
             {
                 WriteName(stream, variable.Name); WriteInt(stream, variable.Dimensions.Length); foreach (var dimension in variable.Dimensions) WriteInt(stream, dimension);
-                WriteAttributes(stream, variable.Units); WriteInt(stream, 5); WriteInt(stream, variable.Values.Length * 4);
+                WriteAttributes(stream, variable.Units, variable.NumericAttributes); WriteInt(stream, 5); WriteInt(stream, variable.Values.Length * 4);
                 if (version == 2) { WriteInt(stream, 0); WriteInt(stream, (int)variable.Begin); } else WriteInt(stream, (int)variable.Begin);
             }
         }
 
-        private static void WriteAttributes(Stream stream, string units)
+        private static void WriteAttributes(Stream stream, string units, Dictionary<string, float> numericAttributes)
         {
-            if (string.IsNullOrEmpty(units)) { WriteInt(stream, 0); return; }
-            WriteInt(stream, 12); WriteInt(stream, 1); WriteName(stream, "units"); WriteInt(stream, 2); WriteInt(stream, units.Length); foreach (var value in units) stream.WriteByte((byte)value); while (stream.Length % 4 != 0) stream.WriteByte(0);
+            var count = (string.IsNullOrEmpty(units) ? 0 : 1) + (numericAttributes?.Count ?? 0);
+            if (count == 0) { WriteInt(stream, 0); return; }
+            WriteInt(stream, 12); WriteInt(stream, count);
+            if (!string.IsNullOrEmpty(units)) { WriteName(stream, "units"); WriteInt(stream, 2); WriteInt(stream, units.Length); foreach (var value in units) stream.WriteByte((byte)value); while (stream.Length % 4 != 0) stream.WriteByte(0); }
+            if (numericAttributes != null) foreach (var attribute in numericAttributes) { WriteName(stream, attribute.Key); WriteInt(stream, 5); WriteInt(stream, 1); WriteSingle(stream, attribute.Value); }
         }
 
         private static void WriteName(Stream stream, string value) { WriteInt(stream, value.Length); foreach (var character in value) stream.WriteByte((byte)character); while (stream.Length % 4 != 0) stream.WriteByte(0); }
         private static void WriteInt(Stream stream, int value) { stream.WriteByte((byte)(value >> 24)); stream.WriteByte((byte)(value >> 16)); stream.WriteByte((byte)(value >> 8)); stream.WriteByte((byte)value); }
         private static void WriteSingle(Stream stream, float value) { WriteInt(stream, BitConverter.SingleToInt32Bits(value)); }
         private sealed class FixtureDimension { public FixtureDimension(string name, int length) { Name = name; Length = length; } public string Name; public int Length; }
-        private sealed class FixtureVariable { public FixtureVariable(string name, int[] dimensions, float[] values, string units = null) { Name = name; Dimensions = dimensions; Values = values; Units = units; } public string Name; public int[] Dimensions; public float[] Values; public string Units; public long Begin; }
+        private sealed class FixtureVariable { public FixtureVariable(string name, int[] dimensions, float[] values, string units = null, Dictionary<string, float> numericAttributes = null) { Name = name; Dimensions = dimensions; Values = values; Units = units; NumericAttributes = numericAttributes; } public string Name; public int[] Dimensions; public float[] Values; public string Units; public Dictionary<string, float> NumericAttributes; public long Begin; }
     }
 }

@@ -364,6 +364,23 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(FindText("MissionConfigurationStatus").text, Does.Contain("质量"));
         }
 
+        [Test]
+        public void NonlinearDynamicsControls_RejectInvalidProfileWithoutInvokingSimulation()
+        {
+            var view = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile submitted = null;
+            view.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => submitted = profile);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+
+            var exponent = GameObject.Find("DynamicsBuoyancyExponentInput");
+            Assert.That(exponent, Is.Not.Null, "The nonlinear buoyancy exponent must be exposed as a runtime control.");
+            exponent.GetComponent<InputField>().text = "4";
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(submitted, Is.Null);
+            Assert.That(FindText("MissionConfigurationStatus").text, Does.Contain("浮力曲线"));
+        }
+
         [TestCase("NaN")]
         [TestCase("Infinity")]
         public void NonFiniteDrawerInputDoesNotInvokeSimulationCallback(string invalidValue)

@@ -18,7 +18,7 @@ namespace UnderwaterGliderTwin.Tests
         [Test]
         public void Parse_BuildsProfileFromCurrentLayers()
         {
-            const string json = "{\"source\":\"Copernicus Marine\",\"datasetId\":\"cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m\",\"retrievedAtUtc\":\"2026-07-13T05:00:00Z\",\"layers\":[{\"minDepthM\":0.0,\"maxDepthM\":12.0,\"eastwardMps\":0.31,\"northwardMps\":-0.18},{\"minDepthM\":12.0,\"maxDepthM\":50.0,\"eastwardMps\":-0.05,\"northwardMps\":0.42}]}";
+            const string json = "{\"source\":\"Copernicus Marine\",\"datasetId\":\"cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m\",\"retrievedAtUtc\":\"2026-07-13T05:00:00Z\",\"layers\":[{\"minDepthM\":0.0,\"maxDepthM\":12.0,\"eastwardMps\":0.31,\"northwardMps\":-0.18},{\"minDepthM\":12.0,\"maxDepthM\":50.0,\"eastwardMps\":-0.05,\"northwardMps\":0.42}],\"fieldSamples\":[{\"longitudeDeg\":120,\"latitudeDeg\":25,\"depthM\":30,\"elapsedSeconds\":0,\"eastwardMps\":-0.05,\"northwardMps\":0.42}]}";
 
             var result = CopernicusCurrentResponseParser.Parse(json);
 
@@ -26,6 +26,14 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(result.DatasetId, Is.EqualTo("cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m"));
             Assert.That(result.Profile.Layers, Has.Count.EqualTo(2));
             Assert.That(result.Profile.GetVelocity(30f), Is.EqualTo(new Vector2(-0.05f, 0.42f)));
+        }
+
+        [Test]
+        public void Parse_RejectsProfileOnlyPayloadBecauseAcquisitionRequiresSpatialField()
+        {
+            const string json = "{\"layers\":[{\"minDepthM\":0,\"maxDepthM\":1,\"eastwardMps\":0,\"northwardMps\":0}]}";
+
+            Assert.That(() => CopernicusCurrentResponseParser.Parse(json), Throws.ArgumentException.With.Message.Contains("spatial field"));
         }
 
         [Test]

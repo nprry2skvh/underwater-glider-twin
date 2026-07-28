@@ -120,12 +120,48 @@ namespace UnderwaterGliderTwin.Tests
                 FutureFrame(seed, 4, 6f)
             });
 
+            Assert.That(generator.StartCount, Is.EqualTo(2), "A completion seeded before playback advanced must be discarded and rebuilt from the latest frame.");
+            var latestSeed = model.CurrentFrame;
+            generator.CompleteWith(new[]
+            {
+                FutureFrame(latestSeed, 1, latestSeed.ElapsedSeconds + 1f),
+                FutureFrame(latestSeed, 2, latestSeed.ElapsedSeconds + 2f)
+            });
+
             Assert.That(model.CurrentIndex, Is.EqualTo(commitIndex));
             for (var i = 0; i <= commitIndex; i++)
             {
                 Assert.That(CaptureFrameSnapshot(model.Frames[i]), Is.EqualTo(historyAtCommit[i]));
             }
             Assert.That(model.Frames[commitIndex + 1].ElapsedSeconds, Is.GreaterThan(model.CurrentFrame.ElapsedSeconds));
+        }
+
+        [Test]
+        public void SeededFutureGeneration_PreservesElapsedLegPhaseAndControlDirection()
+        {
+            var profile = SimulationProfile.Default;
+            profile.CycleCount = 3;
+            profile.CycleDurationSeconds = 120f;
+            profile.SampleIntervalSeconds = 10f;
+            profile.TargetDepthM = 120f;
+            profile.HeadingDeltaPerCycleDeg = 30f;
+            profile.PitchAmplitudeDeg = 20f;
+            profile.RollAmplitudeDeg = 10f;
+            var seed = BuildFrames(8)[4];
+            seed = new TelemetryFrame(seed.RowIndex, seed.RawTime, 75f, seed.LongitudeDeg, seed.LatitudeDeg,
+                90f, seed.AltitudeM, 18.75f, 6f, 4f, seed.Voltage24V, seed.Current24A, seed.BatteryPercent,
+                seed.WorkMode, seed.RunState, 1f, 18.75f, 90f, seed.TargetAltitudeM, seed.PropellerRpm,
+                seed.PistonMm, seed.TurnAngleDeg, seed.Diagnostics, seed.PlannedLongitudeDeg, seed.PlannedLatitudeDeg);
+
+            var snapshot = SimulationStateSnapshot.FromFrame(seed, profile);
+            using (var slices = SimulationTrajectoryGenerator.GenerateFutureSlices(snapshot, profile, 1).GetEnumerator())
+            {
+                Assert.That(slices.MoveNext(), Is.True);
+                var future = slices.Current[0];
+                Assert.That(future.TargetDepthM, Is.GreaterThan(0f), "The 85-second continuation must not reset to the surface phase.");
+                Assert.That(future.TargetHeadingDeg, Is.GreaterThan(seed.TargetHeadingDeg));
+                Assert.That(future.TargetSegment, Is.EqualTo(1f));
+            }
         }
 
         [Test]

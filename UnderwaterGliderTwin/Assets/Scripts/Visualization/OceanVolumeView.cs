@@ -241,6 +241,16 @@ namespace UnderwaterGliderTwin.Visualization
             }
         }
 
+        public void UpdateCurrentProfile(SimulationProfile profile)
+        {
+            if (currentRenderer == null)
+            {
+                currentRenderer = GetComponent<OceanCurrentInstancedRenderer>();
+            }
+
+            currentRenderer?.UpdateProfile(profile);
+        }
+
         private void CreateCurrentArrow(LayerSample sample, Vector3 position, float verticalScale)
         {
             var geometry = BuildCurrentArrowGeometry(sample.VelocityMps);

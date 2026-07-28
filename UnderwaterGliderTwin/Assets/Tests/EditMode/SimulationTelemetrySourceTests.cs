@@ -7,6 +7,18 @@ namespace UnderwaterGliderTwin.Tests
     public sealed class SimulationTelemetrySourceTests
     {
         [Test]
+        public void Load_RejectsInvalidInitialDynamicsProfileBeforeGeneratingFrames()
+        {
+            var profile = SimulationProfile.Default;
+            profile.Dynamics.BuoyancyCurveExponent = 4f;
+
+            var result = new SimulationTelemetrySource(profile).Load();
+
+            Assert.That(result.Frames, Is.Empty);
+            Assert.That(result.Errors, Has.Some.Contains("BuoyancyCurveExponent"));
+        }
+
+        [Test]
         public void Load_GeneratesSurfaceToSurfaceCyclesFromProfile()
         {
             var profile = SimulationProfile.Default;

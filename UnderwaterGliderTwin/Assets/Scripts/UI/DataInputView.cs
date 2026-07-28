@@ -65,12 +65,19 @@ namespace UnderwaterGliderTwin.UI
         private InputField dynamicsLiftSlopeInput;
         private InputField dynamicsBaseDragInput;
         private InputField dynamicsTurnaroundDurationInput;
+        private InputField dynamicsBuoyancyExponentInput;
+        private InputField dynamicsBuoyancyDeadbandInput;
+        private InputField dynamicsPistonHysteresisInput;
+        private InputField dynamicsRollExponentInput;
+        private InputField dynamicsRollDeadbandInput;
+        private InputField dynamicsRollRestoringGainInput;
+        private InputField dynamicsMaxRollMomentInput;
         private InputField missionLongitudeInput;
         private InputField missionLatitudeInput;
         private Button predictionToggleButton;
         private Action<string> loadRequested;
         private Action<SimulationProfile> simulationRequested;
-        private Action oceanCurrentSettingsApplied;
+        private Action<SimulationProfile> oceanCurrentSettingsApplied;
         private PredictionController predictionController;
         private string initialPredictionStatus;
         private SimulationProfile simulationProfileTemplate;
@@ -86,7 +93,7 @@ namespace UnderwaterGliderTwin.UI
             PredictionController controller,
             Action<string> onLoadRequested = null,
             Action<SimulationProfile> onSimulationRequested = null,
-            Action onOceanCurrentSettingsApplied = null)
+            Action<SimulationProfile> onOceanCurrentSettingsApplied = null)
         {
             loadRequested = onLoadRequested;
             simulationRequested = onSimulationRequested;

@@ -15,6 +15,8 @@ namespace UnderwaterGliderTwin.Telemetry
         private ISimulationRebuildOperation pendingOperation;
         private DateTime pendingDeadline;
         private int requestVersion;
+        private int pendingSeedRowIndex;
+        private float pendingSeedElapsedSeconds;
 
         public event Action StatusChanged;
 
@@ -53,7 +55,6 @@ namespace UnderwaterGliderTwin.Telemetry
             }
 
             var candidateSnapshot = candidate.Clone();
-            var seed = SimulationStateSnapshot.FromFrame(playback.CurrentFrame, activeProfile);
             var version = ++requestVersion;
             LastError = null;
             IsRebuildPending = true;
@@ -62,20 +63,7 @@ namespace UnderwaterGliderTwin.Telemetry
 
             try
             {
-                var operation = generator.GenerateFuture(
-                    seed,
-                    candidateSnapshot,
-                    frameSliceBudget,
-                    result => CompleteRequest(version, candidateSnapshot, result));
-                if (IsRebuildPending && version == requestVersion)
-                {
-                    pendingOperation = operation;
-                }
-                else
-                {
-                    operation?.Cancel();
-                }
-
+                StartGeneration(version, candidateSnapshot);
                 return true;
             }
             catch (Exception ex)
@@ -130,6 +118,14 @@ namespace UnderwaterGliderTwin.Telemetry
 
             try
             {
+                if (playback.CurrentFrame.RowIndex != pendingSeedRowIndex
+                    || Math.Abs(playback.CurrentFrame.ElapsedSeconds - pendingSeedElapsedSeconds) > 0.0001f)
+                {
+                    pendingOperation = null;
+                    StartGeneration(++requestVersion, candidate);
+                    return;
+                }
+
                 var preservedIndex = playback.CurrentIndex;
                 if (!TryValidateGeneratedFuture(result.Frames, out var futureError))
                 {
@@ -156,6 +152,29 @@ namespace UnderwaterGliderTwin.Telemetry
                 FailRequest(version, "Simulation rebuild failed: " + ex.Message);
             }
         }
+
+        private void StartGeneration(int version, SimulationProfile candidate)
+        {
+            var seedFrame = playback.CurrentFrame;
+            pendingSeedRowIndex = seedFrame.RowIndex;
+            pendingSeedElapsedSeconds = seedFrame.ElapsedSeconds;
+            var seed = SimulationStateSnapshot.FromFrame(seedFrame, activeProfile);
+            var operation = generator.GenerateFuture(
+                seed,
+                candidate,
+                frameSliceBudget,
+                result => CompleteRequest(version, candidate, result));
+            if (IsRebuildPending && version == requestVersion)
+            {
+                pendingOperation = operation;
+            }
+            else
+            {
+                operation?.Cancel();
+            }
+        }
+
+        internal SimulationProfile ActiveProfileReference => activeProfile;
 
         private IReadOnlyList<TelemetryFrame> BuildStagingFrames(
             IReadOnlyList<TelemetryFrame> future,

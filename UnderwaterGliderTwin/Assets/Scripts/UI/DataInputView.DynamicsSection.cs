@@ -86,7 +86,14 @@ namespace UnderwaterGliderTwin.UI
                 || !TryParseFloat(dynamicsYawInertiaInput, "偏航惯量", 0.001f, 100000f, out var yawInertia)
                 || !TryParseFloat(dynamicsLiftSlopeInput, "升力斜率", -20f, 20f, out var liftSlope)
                 || !TryParseFloat(dynamicsBaseDragInput, "基础阻力系数", 0f, 20f, out var baseDrag)
-                || !TryParseFloat(dynamicsTurnaroundDurationInput, "转向过渡时间", 10f, 1800f, out var turnaroundDuration))
+                || !TryParseFloat(dynamicsTurnaroundDurationInput, "转向过渡时间", 10f, 1800f, out var turnaroundDuration)
+                || !TryParseFloat(dynamicsBuoyancyExponentInput, "浮力曲线指数", 0.5f, 3f, out var buoyancyExponent)
+                || !TryParseFloat(dynamicsBuoyancyDeadbandInput, "浮力死区", 0f, 0.2f, out var buoyancyDeadband)
+                || !TryParseFloat(dynamicsPistonHysteresisInput, "活塞滞回", 0f, 0.1f, out var pistonHysteresis)
+                || !TryParseFloat(dynamicsRollExponentInput, "横滚曲线指数", 0.5f, 3f, out var rollExponent)
+                || !TryParseFloat(dynamicsRollDeadbandInput, "横滚死区", 0f, 0.25f, out var rollDeadband)
+                || !TryParseFloat(dynamicsRollRestoringGainInput, "横滚恢复增益", 0f, float.MaxValue, out var restoringGain)
+                || !TryParseFloat(dynamicsMaxRollMomentInput, "最大横滚力矩", 0f, float.MaxValue, out var maxRollMoment))
             {
                 return false;
             }
@@ -102,6 +109,18 @@ namespace UnderwaterGliderTwin.UI
             dynamics.LiftSlopePerRad = liftSlope;
             dynamics.BaseDragCoefficient = baseDrag;
             dynamics.TurnaroundDurationSeconds = turnaroundDuration;
+            dynamics.BuoyancyCurveExponent = buoyancyExponent;
+            dynamics.BuoyancyDeadbandFraction = buoyancyDeadband;
+            dynamics.PistonHysteresisFraction = pistonHysteresis;
+            dynamics.RollCurveExponent = rollExponent;
+            dynamics.RollDeadbandFraction = rollDeadband;
+            dynamics.NonlinearRollRestoringGain = restoringGain;
+            dynamics.MaxRollMomentNm = maxRollMoment;
+            if (!GliderDynamicsProfileValidator.TryValidate(dynamics, out var validationError))
+            {
+                SetStatus("动力学参数无效：" + validationError, new Color(1f, 0.5f, 0.5f));
+                return false;
+            }
             return true;
         }
 
@@ -124,6 +143,13 @@ namespace UnderwaterGliderTwin.UI
             dynamicsLiftSlopeInput.text = dynamics.LiftSlopePerRad.ToString("0.###", CultureInfo.InvariantCulture);
             dynamicsBaseDragInput.text = dynamics.BaseDragCoefficient.ToString("0.###", CultureInfo.InvariantCulture);
             dynamicsTurnaroundDurationInput.text = dynamics.TurnaroundDurationSeconds.ToString("0.###", CultureInfo.InvariantCulture);
+            dynamicsBuoyancyExponentInput.text = dynamics.BuoyancyCurveExponent.ToString("0.###", CultureInfo.InvariantCulture);
+            dynamicsBuoyancyDeadbandInput.text = dynamics.BuoyancyDeadbandFraction.ToString("0.###", CultureInfo.InvariantCulture);
+            dynamicsPistonHysteresisInput.text = dynamics.PistonHysteresisFraction.ToString("0.###", CultureInfo.InvariantCulture);
+            dynamicsRollExponentInput.text = dynamics.RollCurveExponent.ToString("0.###", CultureInfo.InvariantCulture);
+            dynamicsRollDeadbandInput.text = dynamics.RollDeadbandFraction.ToString("0.###", CultureInfo.InvariantCulture);
+            dynamicsRollRestoringGainInput.text = dynamics.NonlinearRollRestoringGain.ToString("0.###", CultureInfo.InvariantCulture);
+            dynamicsMaxRollMomentInput.text = dynamics.MaxRollMomentNm.ToString("0.###", CultureInfo.InvariantCulture);
         }
 
         private GliderDynamicsProfile GetDynamicsProfile()

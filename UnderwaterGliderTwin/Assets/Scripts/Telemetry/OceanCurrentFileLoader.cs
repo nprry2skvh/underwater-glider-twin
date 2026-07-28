@@ -8,7 +8,7 @@ namespace UnderwaterGliderTwin.Telemetry
 {
     public interface IOceanCurrentFileConverter
     {
-        void Convert(string inputPath, string outputPath, Action onCompleted, Action<string> onFailure, Action<string> onProgress);
+        void Convert(string inputPath, string outputPath, DateTime referenceTimeUtc, Action onCompleted, Action<string> onFailure, Action<string> onProgress);
     }
 
     public static class OceanCurrentFileLoader
@@ -82,7 +82,7 @@ namespace UnderwaterGliderTwin.Telemetry
                 Directory.CreateDirectory(directory);
                 // Converter callbacks may originate on a worker thread; only this coroutine calls Unity-facing callbacks.
                 onProgress?.Invoke("Converting local NetCDF current file...");
-                Converter.Convert(Path.GetFullPath(path), stagingPath, () => completed = true, value => conversionError = value, null);
+                Converter.Convert(Path.GetFullPath(path), stagingPath, referenceTimeUtc, () => completed = true, value => conversionError = value, null);
                 var deadline = DateTime.UtcNow.AddSeconds(ConverterTimeoutSeconds);
                 while (!completed && string.IsNullOrWhiteSpace(conversionError) && DateTime.UtcNow < deadline) yield return null;
                 if (!completed || !string.IsNullOrWhiteSpace(conversionError) || !File.Exists(stagingPath))
@@ -147,14 +147,14 @@ namespace UnderwaterGliderTwin.Telemetry
 
     internal sealed class PythonOceanCurrentFileConverter : IOceanCurrentFileConverter
     {
-        public void Convert(string inputPath, string outputPath, Action onCompleted, Action<string> onFailure, Action<string> onProgress)
+        public void Convert(string inputPath, string outputPath, DateTime referenceTimeUtc, Action onCompleted, Action<string> onFailure, Action<string> onProgress)
         {
             var scriptPath = Path.Combine(UnityEngine.Application.streamingAssetsPath, "CopernicusCurrentFetcher.py");
             if (!File.Exists(scriptPath)) { onFailure?.Invoke("Python converter script was not found."); return; }
             try
             {
                 var configuredPython = Environment.GetEnvironmentVariable("COPERNICUS_PYTHON");
-                var process = new Process { StartInfo = new ProcessStartInfo { FileName = string.IsNullOrWhiteSpace(configuredPython) ? "python" : configuredPython, Arguments = Quote(scriptPath) + " --convert " + Quote(inputPath) + " --output " + Quote(outputPath), CreateNoWindow = true, UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true } };
+                var process = new Process { StartInfo = new ProcessStartInfo { FileName = string.IsNullOrWhiteSpace(configuredPython) ? "python" : configuredPython, Arguments = Quote(scriptPath) + " --convert " + Quote(inputPath) + " --output " + Quote(outputPath) + " --reference-time " + Quote(referenceTimeUtc.ToUniversalTime().ToString("o")), CreateNoWindow = true, UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true } };
                 process.Start();
                 Task.Run(() =>
                 {

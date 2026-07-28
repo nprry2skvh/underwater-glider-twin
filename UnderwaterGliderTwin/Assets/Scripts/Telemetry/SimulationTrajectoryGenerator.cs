@@ -76,15 +76,17 @@ namespace UnderwaterGliderTwin.Telemetry
             for (var frameOffset = 1; frameOffset <= frameCount; frameOffset++)
             {
                 var relativeSeconds = frameOffset * sampleInterval;
-                var cyclePosition = relativeSeconds / cycleDuration;
-                var cycleIndex = Mathf.Min(profile.CycleCount - 1, Mathf.FloorToInt(cyclePosition));
+                var elapsedSeconds = seed.ElapsedSeconds + relativeSeconds;
+                var cyclePosition = elapsedSeconds / cycleDuration;
+                var absoluteCycleIndex = Mathf.Max(0, Mathf.FloorToInt(cyclePosition));
+                var cycleIndex = absoluteCycleIndex % Mathf.Max(1, profile.CycleCount);
                 var phase = cyclePosition - Mathf.Floor(cyclePosition);
                 var descending = phase <= 0.5f;
                 var targetDepthM = Mathf.Max(
                     0f,
                     profile.TargetDepthM * 0.5f * (1f - Mathf.Cos(phase * Mathf.PI * 2f)));
                 var targetHeadingDeg = profile.StartHeadingDeg
-                    + (cycleIndex + phase) * profile.HeadingDeltaPerCycleDeg;
+                    + (absoluteCycleIndex + phase) * profile.HeadingDeltaPerCycleDeg;
                 var legPhase = descending ? phase * 2f : (phase - 0.5f) * 2f;
                 var envelope = Mathf.Sin(Mathf.Clamp01(legPhase) * Mathf.PI);
                 var turnDirection = Mathf.Abs(profile.HeadingDeltaPerCycleDeg) > 0.0001f
@@ -102,7 +104,6 @@ namespace UnderwaterGliderTwin.Telemetry
                         ? profile.ResolveDescentNetBuoyancyForceN(-dynamics.MaxBuoyancyForceN * 0.7f)
                         : profile.ResolveAscentNetBuoyancyForceN(dynamics.MaxBuoyancyForceN * 0.7f)) * envelope
                     : float.NaN;
-                var elapsedSeconds = seed.ElapsedSeconds + relativeSeconds;
                 var latitudeDeg = stateOrigin.OriginLatitudeDeg + state.PositionEndM.z / MetersPerDegreeLatitude;
                 var metersPerDegreeLongitude = MetersPerDegreeLatitude * Math.Cos(latitudeDeg * Math.PI / 180.0);
                 var longitudeDeg = Math.Abs(metersPerDegreeLongitude) > 0.001

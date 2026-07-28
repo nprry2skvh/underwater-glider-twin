@@ -77,7 +77,7 @@ namespace UnderwaterGliderTwin.UI
             lastOceanCurrentResult = null;
             simulationProfileTemplate.OceanCurrentSourcePreference = OceanCurrentSourcePreference.LayeredPreferred;
             RefreshOceanCurrentLayerEditor();
-            oceanCurrentSettingsApplied?.Invoke();
+            NotifyOceanCurrentSettingsApplied();
         }
 
         private void DeleteOceanCurrentLayer()
@@ -90,7 +90,7 @@ namespace UnderwaterGliderTwin.UI
             }
 
             RefreshOceanCurrentLayerEditor();
-            oceanCurrentSettingsApplied?.Invoke();
+            NotifyOceanCurrentSettingsApplied();
         }
 
         private void SelectOceanCurrentLayer(int index)
@@ -147,7 +147,7 @@ namespace UnderwaterGliderTwin.UI
                     lastOceanCurrentResult = result;
                     SetActualCurrentSource(result);
                     RefreshOceanCurrentLayerEditor();
-                    oceanCurrentSettingsApplied?.Invoke();
+                    NotifyOceanCurrentSettingsApplied();
                     SetCurrentLookupStatus(result.Profile, targetDepth, SetStatus);
                 },
                 error => SetStatus(BuildCurrentLookupFailureMessage(profile, error), new Color(1f, 0.58f, 0.58f)),
@@ -237,6 +237,13 @@ namespace UnderwaterGliderTwin.UI
             dynamicsLiftSlopeInput = AddLabeledInput(oceanCurrentDrawer, "升力斜率 (/rad)", "DynamicsLiftSlopeInput", "2.8", 564f, -424f, 168f);
             dynamicsBaseDragInput = AddLabeledInput(oceanCurrentDrawer, "基础阻力系数", "DynamicsBaseDragInput", "0.32", 24f, -494f, 168f);
             dynamicsTurnaroundDurationInput = AddLabeledInput(oceanCurrentDrawer, "转向过渡 (s)", "DynamicsTurnaroundDurationInput", "360", 204f, -494f, 168f);
+            dynamicsBuoyancyExponentInput = AddLabeledInput(oceanCurrentDrawer, "浮力曲线指数", "DynamicsBuoyancyExponentInput", "1", 384f, -494f, 168f);
+            dynamicsBuoyancyDeadbandInput = AddLabeledInput(oceanCurrentDrawer, "浮力死区", "DynamicsBuoyancyDeadbandInput", "0", 564f, -494f, 168f);
+            dynamicsPistonHysteresisInput = AddLabeledInput(oceanCurrentDrawer, "活塞滞回", "DynamicsPistonHysteresisInput", "0", 24f, -564f, 168f);
+            dynamicsRollExponentInput = AddLabeledInput(oceanCurrentDrawer, "横滚曲线指数", "DynamicsRollExponentInput", "1", 204f, -564f, 168f);
+            dynamicsRollDeadbandInput = AddLabeledInput(oceanCurrentDrawer, "横滚死区", "DynamicsRollDeadbandInput", "0", 384f, -564f, 168f);
+            dynamicsRollRestoringGainInput = AddLabeledInput(oceanCurrentDrawer, "横滚恢复增益", "DynamicsRollRestoringGainInput", "0", 564f, -564f, 168f);
+            dynamicsMaxRollMomentInput = AddLabeledInput(oceanCurrentDrawer, "最大横滚力矩", "DynamicsMaxRollMomentInput", "1000", 24f, -634f, 168f);
             oceanCurrentDrawerStatus = UiFactory.Text("OceanCurrentDrawerStatus", oceanCurrentDrawer, "手动配置或按起点经纬度获取在线海流。", 13, TextAnchor.MiddleLeft, new Color(0.78f, 0.92f, 0.98f), new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 30f), new Vector2(-44f, 48f));
             oceanCurrentDrawer.gameObject.SetActive(false);
         }
@@ -459,6 +466,11 @@ namespace UnderwaterGliderTwin.UI
                 oceanCurrentDrawerStatus.text = message;
                 oceanCurrentDrawerStatus.color = color;
             }
+        }
+
+        private void NotifyOceanCurrentSettingsApplied()
+        {
+            oceanCurrentSettingsApplied?.Invoke(simulationProfileTemplate);
         }
 
         private void SetOceanCurrentAcquisitionMode(OceanCurrentAcquisitionMode mode)

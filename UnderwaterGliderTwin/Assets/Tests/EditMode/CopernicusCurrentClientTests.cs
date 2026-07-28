@@ -31,7 +31,7 @@ namespace UnderwaterGliderTwin.Tests
         public IEnumerator CacheOnlyMode_DoesNotInvokeRemoteBackendAndUsesOnlyCache()
         {
             var request = RequestForTest();
-            CopernicusCurrentCache.Store(request, "{\"source\":\"fixture\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}]}");
+            CopernicusCurrentCache.Store(request, "{\"source\":\"fixture\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}],\"fieldSamples\":[{\"longitudeDeg\":120.1,\"latitudeDeg\":25.6,\"depthM\":5,\"elapsedSeconds\":0,\"eastwardMps\":1,\"northwardMps\":2}]}");
             var backend = new SpyCurrentFetchBackend();
             var client = new CopernicusCurrentClient(backend);
             CopernicusCurrentResult loaded = null;
@@ -54,7 +54,7 @@ namespace UnderwaterGliderTwin.Tests
         [UnityTest]
         public IEnumerator CacheOnlyMiss_DoesNotReplaceCallerOwnedResult()
         {
-            var active = new ResultHolder(CopernicusCurrentResponseParser.Parse("{\"source\":\"existing\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":1,\"eastwardMps\":0,\"northwardMps\":0}]}"));
+            var active = new ResultHolder(CopernicusCurrentResponseParser.Parse("{\"source\":\"existing\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":1,\"eastwardMps\":0,\"northwardMps\":0}],\"fieldSamples\":[{\"longitudeDeg\":19.876543,\"latitudeDeg\":11.234567,\"depthM\":0,\"elapsedSeconds\":0,\"eastwardMps\":0,\"northwardMps\":0}]}"));
             var before = active.Current;
             var backend = new SpyCurrentFetchBackend();
             var failure = string.Empty;
@@ -128,7 +128,7 @@ namespace UnderwaterGliderTwin.Tests
         public void TryReadCompletedResponse_AcceptsAValidResponseBeforeTheFetcherExits()
         {
             var responsePath = Path.Combine(Application.temporaryCachePath, "copernicus-response-" + System.Guid.NewGuid().ToString("N") + ".json");
-            const string json = "{\"source\":\"Copernicus Marine\",\"datasetId\":\"dataset\",\"retrievedAtUtc\":\"2026-07-15T03:21:10Z\",\"layers\":[{\"minDepthM\":0.0,\"maxDepthM\":12.0,\"eastwardMps\":0.31,\"northwardMps\":-0.18}]}";
+            const string json = "{\"source\":\"Copernicus Marine\",\"datasetId\":\"dataset\",\"retrievedAtUtc\":\"2026-07-15T03:21:10Z\",\"layers\":[{\"minDepthM\":0.0,\"maxDepthM\":12.0,\"eastwardMps\":0.31,\"northwardMps\":-0.18}],\"fieldSamples\":[{\"longitudeDeg\":120,\"latitudeDeg\":25,\"depthM\":4,\"elapsedSeconds\":0,\"eastwardMps\":0.31,\"northwardMps\":-0.18}]}";
             File.WriteAllText(responsePath, json);
 
             try
@@ -155,7 +155,7 @@ namespace UnderwaterGliderTwin.Tests
             public void Run(CopernicusCurrentRequest request, string requestPath, string responsePath, Action<string> onCompleted, Action<string> onFailure, Action<string> onProgress)
             {
                 RunCount++;
-                File.WriteAllText(responsePath, "{\"source\":\"backend\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}]}");
+                File.WriteAllText(responsePath, "{\"source\":\"backend\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}],\"fieldSamples\":[{\"longitudeDeg\":120.1,\"latitudeDeg\":25.6,\"depthM\":5,\"elapsedSeconds\":0,\"eastwardMps\":1,\"northwardMps\":2}]}");
                 onCompleted?.Invoke(responsePath);
             }
         }
@@ -179,7 +179,7 @@ namespace UnderwaterGliderTwin.Tests
         private sealed class SuccessfulConverter : IOceanCurrentFileConverter
         {
             public int RunCount { get; private set; }
-            public void Convert(string inputPath, string outputPath, Action onCompleted, Action<string> onFailure, Action<string> onProgress)
+            public void Convert(string inputPath, string outputPath, DateTime referenceTimeUtc, Action onCompleted, Action<string> onFailure, Action<string> onProgress)
             {
                 RunCount++;
                 File.WriteAllText(outputPath, "{\"source\":\"converter\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}],\"fieldSamples\":[{\"longitudeDeg\":120,\"latitudeDeg\":25,\"depthM\":5,\"elapsedSeconds\":0,\"eastwardMps\":1,\"northwardMps\":2,\"verticalMps\":0}]}");

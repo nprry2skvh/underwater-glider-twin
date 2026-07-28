@@ -27,6 +27,7 @@ namespace UnderwaterGliderTwin.Bootstrap
         public SimulationRuntimeSession SimulationSession { get; private set; }
 
         private TrajectoryView trajectoryView;
+        private OceanVolumeView oceanVolume;
 
         private void Awake()
         {
@@ -132,7 +133,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             environment.Build();
             var missionHorizontalExtents = new Vector2(64f, 64f);
             var missionHorizontalCenter = Vector3.zero;
-            OceanVolumeView oceanVolume = null;
+            oceanVolume = null;
 
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
             {
@@ -168,7 +169,7 @@ namespace UnderwaterGliderTwin.Bootstrap
                 prediction,
                 ReloadFromCsvPath,
                 ReloadFromSimulationProfile,
-                oceanVolume != null ? oceanVolume.RebuildCurrentSourceAndCandidateCache : null);
+                oceanVolume != null ? oceanVolume.UpdateCurrentProfile : null);
             canvasRoot.AddComponent<DashboardView>().Initialize(PlaybackController, prediction);
             canvasRoot.AddComponent<StatusPanelView>().Initialize(PlaybackController, AlarmEvaluator, Logger, prediction);
             canvasRoot.AddComponent<OceanCommandToolbarView>().Initialize(cameraController, trajectoryView);
@@ -234,7 +235,8 @@ namespace UnderwaterGliderTwin.Bootstrap
         {
             if (RuntimeDataSourceState.CurrentMode != RuntimeDataSourceMode.Simulation || SimulationSession == null)
             {
-                Logger.AppendLoad("Simulation profile update ignored because no simulation session is active.");
+                RuntimeDataSourceState.UseSimulation(profile);
+                SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
                 return;
             }
 
@@ -258,6 +260,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             }
 
             RuntimeDataSourceState.UseSimulation(SimulationSession.ActiveProfile);
+            oceanVolume?.UpdateCurrentProfile(SimulationSession.ActiveProfileReference);
             Logger.AppendLoad("Simulation profile update applied without reloading the scene.");
         }
 

@@ -14,6 +14,7 @@ def parse_args():
     parser.add_argument("--request", help="Path to the Unity-generated request JSON.")
     parser.add_argument("--output", required=True, help="Path for the current-profile JSON result.")
     parser.add_argument("--convert", help="Convert a local NetCDF4/HDF5 file to the Unity current JSON schema.")
+    parser.add_argument("--reference-time", help="UTC reference time used to choose the nearest dataset frame.")
     return parser.parse_args()
 
 
@@ -40,7 +41,13 @@ def coordinate_name(dataset, preferred_name):
     raise ValueError(f"Copernicus response has no '{preferred_name}' coordinate.")
 
 
-def build_layers(dataset):
+def select_nearest_time(dataset, reference_time):
+    if "time" not in dataset.dims:
+        return dataset
+    return dataset.sel(time=reference_time.replace(tzinfo=None), method="nearest")
+
+
+def build_layers(dataset, reference_time):
     import numpy as np
 
     longitude_name = coordinate_name(dataset, "longitude")
@@ -52,8 +59,7 @@ def build_layers(dataset):
         },
         method="nearest",
     )
-    if "time" in selected.dims:
-        selected = selected.isel(time=-1)
+    selected = select_nearest_time(selected, reference_time)
 
     if "depth" not in selected.coords:
         raise ValueError("Copernicus response has no depth coordinate.")
@@ -97,7 +103,8 @@ def build_field_samples(dataset, reference_time):
     if "depth" not in dataset.coords:
         raise ValueError("Copernicus response has no depth coordinate.")
 
-    table = dataset[["uo", "vo"]].to_dataframe().reset_index()
+    selected = select_nearest_time(dataset, reference_time)
+    table = selected[["uo", "vo"]].to_dataframe().reset_index()
     samples = []
     reference = np.datetime64(reference_time.replace(tzinfo=None))
     for _, row in table.iterrows():
@@ -125,7 +132,7 @@ def build_field_samples(dataset, reference_time):
     return samples
 
 
-def convert_local_netcdf(input_path, output_path):
+def convert_local_netcdf(input_path, output_path, reference_time):
     """Fallback invoked by Unity only when its bounded classic-NetCDF reader rejects HDF5."""
     import xarray as xr
 
@@ -142,13 +149,13 @@ def convert_local_netcdf(input_path, output_path):
                 raise ValueError(f"Local NetCDF has no unambiguous '{required}' variable.")
         dataset.attrs["requested_longitude"] = float(dataset["longitude"].values.reshape(-1)[0])
         dataset.attrs["requested_latitude"] = float(dataset["latitude"].values.reshape(-1)[0])
-        now = datetime.now(timezone.utc)
+        requested_time = reference_time or datetime.now(timezone.utc)
         response = {
             "source": "Local NetCDF conversion",
             "datasetId": Path(input_path).name,
-            "retrievedAtUtc": now.isoformat(),
-            "layers": build_layers(dataset),
-            "fieldSamples": build_field_samples(dataset, now),
+            "retrievedAtUtc": requested_time.isoformat(),
+            "layers": build_layers(dataset, requested_time),
+            "fieldSamples": build_field_samples(dataset, requested_time),
         }
     Path(output_path).write_text(json.dumps(response, separators=(",", ":")), encoding="utf-8")
 
@@ -156,7 +163,8 @@ def convert_local_netcdf(input_path, output_path):
 def main():
     args = parse_args()
     if args.convert:
-        convert_local_netcdf(args.convert, args.output)
+        reference_time = datetime.fromisoformat(args.reference_time.replace("Z", "+00:00")) if args.reference_time else None
+        convert_local_netcdf(args.convert, args.output, reference_time)
         return
     if not args.request:
         raise ValueError("--request is required unless --convert is used.")
@@ -206,7 +214,7 @@ def main():
         with xr.open_dataset(netcdf_path) as dataset:
             dataset.attrs["requested_longitude"] = float(request["longitudeDeg"])
             dataset.attrs["requested_latitude"] = float(request["latitudeDeg"])
-            layers = build_layers(dataset)
+            layers = build_layers(dataset, now)
             field_samples = build_field_samples(dataset, now)
 
     response = {

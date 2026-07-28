@@ -167,7 +167,21 @@ namespace UnderwaterGliderTwin.Telemetry
                 var raw = reader.ReadBytes(bytes);
                 if (raw.Length != bytes) throw new EndOfStreamException();
                 SkipPadding(reader, bytes);
-                if (type == 2) values[name] = System.Text.Encoding.ASCII.GetString(raw).TrimEnd('\0');
+                if (type == 2)
+                {
+                    values[name] = System.Text.Encoding.ASCII.GetString(raw).TrimEnd('\0');
+                }
+                else
+                {
+                    using (var numericReader = new BinaryReader(new MemoryStream(raw, false)))
+                    {
+                        var numeric = ReadNumeric(numericReader, type, length);
+                        if (numeric.Length > 0)
+                        {
+                            values[name] = numeric[0].ToString("R", CultureInfo.InvariantCulture);
+                        }
+                    }
+                }
             }
             return values;
         }
@@ -274,11 +288,23 @@ namespace UnderwaterGliderTwin.Telemetry
         }
         private static double ConvertVelocity(double value, Variable variable)
         {
+            if (IsFillValue(value, variable)) return double.NaN;
+            value = value * NumericAttribute(variable, "scale_factor", 1d) + NumericAttribute(variable, "add_offset", 0d);
             var units = Attribute(variable, "units").Trim().ToLowerInvariant();
             if (units.Length == 0 || units == "m/s" || units == "m s-1" || units == "m s^-1") return value;
             if (units == "cm/s" || units == "cm s-1" || units == "cm s^-1") return value / 100d;
             if (units == "knot" || units == "knots" || units == "kt") return value * 0.514444d;
             throw new InvalidDataException("NetCDF velocity uses unknown units '" + units + "'.");
+        }
+        private static bool IsFillValue(double value, Variable variable)
+        {
+            return NumericAttribute(variable, "_FillValue", double.NaN) == value
+                || NumericAttribute(variable, "missing_value", double.NaN) == value;
+        }
+        private static double NumericAttribute(Variable variable, string name, double fallback)
+        {
+            var raw = Attribute(variable, name);
+            return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ? parsed : fallback;
         }
         private static string Attribute(Variable variable, string name) { string value; return variable.Attributes.TryGetValue(name, out value) ? value ?? string.Empty : string.Empty; }
         private static bool SameDimensions(Variable first, Variable second) { return first.DimensionIds.SequenceEqual(second.DimensionIds); }

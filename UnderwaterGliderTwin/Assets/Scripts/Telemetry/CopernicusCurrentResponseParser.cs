@@ -48,6 +48,11 @@ namespace UnderwaterGliderTwin.Telemetry
                 throw new ArgumentException("Copernicus current response contains no layers.", nameof(json));
             }
 
+            if (payload.fieldSamples == null || payload.fieldSamples.Length == 0)
+            {
+                throw new ArgumentException("Copernicus current response contains no spatial field samples.", nameof(json));
+            }
+
             var layers = new OceanCurrentLayer[payload.layers.Length];
             for (var index = 0; index < payload.layers.Length; index++)
             {
@@ -59,9 +64,7 @@ namespace UnderwaterGliderTwin.Telemetry
                     layer.northwardMps);
             }
 
-            var fieldSamples = payload.fieldSamples == null
-                ? Array.Empty<OceanCurrentFieldSample>()
-                : Array.ConvertAll(payload.fieldSamples, sample => new OceanCurrentFieldSample(
+            var fieldSamples = Array.ConvertAll(payload.fieldSamples, sample => new OceanCurrentFieldSample(
                     sample.longitudeDeg,
                     sample.latitudeDeg,
                     sample.depthM,

@@ -94,7 +94,7 @@ namespace UnderwaterGliderTwin.Tests
             private readonly Action<string> writeOutput;
             private readonly bool complete;
             public FakeConverter(Action<string> writeOutput, bool complete = true) { this.writeOutput = writeOutput; this.complete = complete; }
-            public void Convert(string inputPath, string outputPath, Action onCompleted, Action<string> onFailure, Action<string> onProgress)
+            public void Convert(string inputPath, string outputPath, DateTime referenceTimeUtc, Action onCompleted, Action<string> onFailure, Action<string> onProgress)
             {
                 writeOutput?.Invoke(outputPath);
                 if (complete) onCompleted?.Invoke();
