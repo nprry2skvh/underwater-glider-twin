@@ -167,7 +167,7 @@ namespace UnderwaterGliderTwin.UI
             content.anchorMax = new Vector2(0.5f, 1f);
             content.pivot = new Vector2(0.5f, 1f);
             content.anchoredPosition = Vector2.zero;
-            content.sizeDelta = new Vector2(760f, 620f);
+            content.sizeDelta = new Vector2(760f, drawer.name == "FlightLegDrawerPanel" ? 350f : 620f);
             foreach (var child in existingChildren)
             {
                 child.SetParent(content, false);

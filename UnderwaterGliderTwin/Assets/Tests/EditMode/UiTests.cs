@@ -409,6 +409,39 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(drawer.sizeDelta.y, Is.LessThanOrEqualTo(1080f * .35f));
         }
 
+        [TestCase(1280, 720)]
+        [TestCase(1920, 1080)]
+        public void BottomEditorsKeepScrolledControlsInsideMaskedViewport(int width, int height)
+        {
+            var canvasObject = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = canvasObject.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(width, height);
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+            var oceanScroll = canvas.transform.Find("OceanCurrentDrawerPanel").GetComponent<ScrollRect>();
+            oceanScroll.verticalNormalizedPosition = 1f;
+            Canvas.ForceUpdateCanvases();
+            AssertRectInsideViewport(GameObject.Find("OceanCurrentDrawerMinDepthInput").GetComponent<RectTransform>(), oceanScroll.viewport, width, height);
+            oceanScroll.verticalNormalizedPosition = 0f;
+            Canvas.ForceUpdateCanvases();
+            AssertRectInsideViewport(GameObject.Find("DynamicsBaseDragInput").GetComponent<RectTransform>(), oceanScroll.viewport, width, height);
+            AssertRectInsideViewport(GameObject.Find("DynamicsTurnaroundDurationInput").GetComponent<RectTransform>(), oceanScroll.viewport, width, height);
+
+            GameObject.Find("FlightLegSettingsButton").GetComponent<Button>().onClick.Invoke();
+            var flightScroll = canvas.transform.Find("FlightLegDrawerPanel").GetComponent<ScrollRect>();
+            flightScroll.verticalNormalizedPosition = 1f;
+            Canvas.ForceUpdateCanvases();
+            AssertRectInsideViewport(GameObject.Find("DescentNetBuoyancyInput").GetComponent<RectTransform>(), flightScroll.viewport, width, height);
+            flightScroll.verticalNormalizedPosition = 0f;
+            Canvas.ForceUpdateCanvases();
+            AssertRectInsideViewport(GameObject.Find("AscentRollInput").GetComponent<RectTransform>(), flightScroll.viewport, width, height);
+        }
+
         [Test]
         public void OutOfRangeMissionCoordinateDoesNotInvokeSimulationCallback()
         {
@@ -1025,6 +1058,23 @@ namespace UnderwaterGliderTwin.Tests
         private static Text FindText(string name)
         {
             return GameObject.Find(name).GetComponent<Text>();
+        }
+
+        private static void AssertRectInsideViewport(RectTransform control, RectTransform viewport, int width, int height)
+        {
+            var controlCorners = new Vector3[4];
+            var viewportCorners = new Vector3[4];
+            control.GetWorldCorners(controlCorners);
+            viewport.GetWorldCorners(viewportCorners);
+            var minimumX = viewportCorners[0].x - 0.1f;
+            var minimumY = viewportCorners[0].y - 0.1f;
+            var maximumX = viewportCorners[2].x + 0.1f;
+            var maximumY = viewportCorners[2].y + 0.1f;
+            foreach (var corner in controlCorners)
+            {
+                Assert.That(corner.x, Is.InRange(minimumX, maximumX), $"{control.name} x must fit {width}x{height} viewport");
+                Assert.That(corner.y, Is.InRange(minimumY, maximumY), $"{control.name} y must fit {width}x{height} viewport");
+            }
         }
 
         private static string CreateTempCsv()
