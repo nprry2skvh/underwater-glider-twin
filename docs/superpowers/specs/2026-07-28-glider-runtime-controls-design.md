@@ -45,9 +45,13 @@ UI 同时显示“策略”和“实际来源”，例如“Online / local cache
 - 多时间帧使用最近时间帧，不做插值。参考时间优先级：用户请求时间 → 仿真开始时间 → 当前系统 UTC。存在 `time` 维时，时间单位缺失或无法解析时拒绝，不默认使用第一帧；静态三维文件不需要时间单位。
 - `w` 缺失时填 0。
 
+### Python 转换器失败契约
+
+NetCDF4/HDF5 fallback 使用独立临时目录（位于 `Application.temporaryCachePath` 下，以请求/文件 hash 命名），输入文件只读，输出 JSON 使用临时文件名写入，完成后再原子改名。以下情况均返回可读错误并保留旧海流：Python 不存在、依赖缺失、进程启动失败、超时、非零退出码、输出文件缺失、JSON 不合法或 schema validation 失败。转换输出必须重新经过现有 JSON parser 和同一结构校验；成功或失败回调结束后清理 request、临时 JSON 和 staging 文件，清理失败只记录日志，不覆盖有效缓存。
+
 ### 缓存 key
 
-缓存 key 为规范化字段的稳定哈希，至少包含：schema version、dataset/provider version、u/v 变量映射、请求时间 UTC 小时桶、完整 bbox、最小/最大深度、prefetch 宽度、forecast window、时间选择策略。任何字段变化都不能命中旧场。
+缓存 key 为规范化字段的稳定哈希，至少包含：schema version、dataset/provider version、u/v 变量映射、请求时间 UTC 小时桶、完整 bbox、最小/最大深度、prefetch 宽度、forecast window、时间选择策略。在线来源的 provider version 来自数据集/转换器版本；本地来源的 identity 使用 loader schema version + 规范化绝对路径 + 文件内容 SHA-256，文件大小/mtime 只能作为诊断字段，不能单独作为可信 key。任何字段变化都不能命中旧场。
 
 修复现有缓存读取时丢失 `Field` 的问题，并保证缓存 JSON 与内存结果使用同一 manifest/schema 语义。
 
@@ -81,6 +85,8 @@ UI 同时显示“策略”和“实际来源”，例如“Online / local cache
 6. 重建失败时完全保留旧 profile、旧 future frames、当前帧和相机状态。
 
 运行时可热更新动力学、海流和目标控制参数；改变航段数量、采样间隔等结构参数也只能重建 future，不得加载场景或回到起点。非法输入不改变任何旧状态。
+
+future 重建必须异步或分帧执行。重建期间显示 pending 状态，旧轨迹继续播放；只有完整 future 生成、结构校验和数值边界校验均通过后，才在主线程一次性替换 future 容器。取消、超时或失败都丢弃 staging 结果，不改变旧 profile、旧轨迹、播放状态和相机。
 
 ## UI 布局
 
