@@ -74,6 +74,61 @@ namespace UnderwaterGliderTwin.Tests
             finally { Directory.Delete(Path.GetDirectoryName(path), true); }
         }
 
+        [Test]
+        public void TryRead_SelectsNearestCfTimeSlice()
+        {
+            var path = WriteFixture(BuildTimedFixture("hours since 2026-07-28T00:00:00Z", new[] { 0f, 2f }, new[] { 1f, 9f }, new[] { -1f, -9f }));
+            try
+            {
+                Assert.That(NetCdfClassicCurrentReader.TryRead(path, new DateTime(2026, 7, 28, 1, 40, 0, DateTimeKind.Utc), out var result, out var error), Is.True, error);
+                Assert.That(result.Field.Samples[0].EastwardMps, Is.EqualTo(9f));
+                Assert.That(result.Field.Samples[0].NorthwardMps, Is.EqualTo(-9f));
+            }
+            finally { Directory.Delete(Path.GetDirectoryName(path), true); }
+        }
+
+        [TestCase(null)]
+        [TestCase("hours since not-a-date")]
+        public void TryRead_RejectsMissingOrInvalidTimeUnits(string units)
+        {
+            var path = WriteFixture(BuildTimedFixture(units, new[] { 0f, 1f }, new[] { 1f, 2f }, new[] { 1f, 2f }));
+            try
+            {
+                Assert.That(NetCdfClassicCurrentReader.TryRead(path, DateTime.UtcNow, out _, out var error), Is.False);
+                Assert.That(error, Does.Contain("time"));
+            }
+            finally { Directory.Delete(Path.GetDirectoryName(path), true); }
+        }
+
+        [Test]
+        public void TryRead_RejectsMismatchedVelocityDimensions()
+        {
+            var variables = new List<FixtureVariable>
+            {
+                new FixtureVariable("longitude", new[] { 0 }, new[] { 120f }), new FixtureVariable("latitude", new[] { 1 }, new[] { 25f }), new FixtureVariable("depth", new[] { 2 }, new[] { 5f }),
+                new FixtureVariable("uo", new[] { 2, 1, 0 }, new[] { 1f }), new FixtureVariable("vo", new[] { 2, 0, 1 }, new[] { 1f })
+            };
+            var path = WriteFixture(Build(1, new[] { new FixtureDimension("longitude", 1), new FixtureDimension("latitude", 1), new FixtureDimension("depth", 1) }, variables));
+            try
+            {
+                Assert.That(NetCdfClassicCurrentReader.TryRead(path, DateTime.UtcNow, out _, out var error), Is.False);
+                Assert.That(error, Does.Contain("same dimensions"));
+            }
+            finally { Directory.Delete(Path.GetDirectoryName(path), true); }
+        }
+
+        [Test]
+        public void TryRead_RejectsMissingCoordinateMappingInsteadOfGuessingLengths()
+        {
+            var path = WriteFixture(BuildGridFixture("x_unknown", "y_unknown", "uo", "vo", "m/s", "m/s", new[] { 120f }, new[] { 25f }, new[] { 5f }, new[] { 1f }, new[] { 1f }));
+            try
+            {
+                Assert.That(NetCdfClassicCurrentReader.TryRead(path, DateTime.UtcNow, out _, out var error), Is.False);
+                Assert.That(error, Does.Contain("longitude"));
+            }
+            finally { Directory.Delete(Path.GetDirectoryName(path), true); }
+        }
+
         private static string WriteFixture(byte[] bytes)
         {
             var directory = Path.Combine(Path.GetTempPath(), "ocean-current-" + Guid.NewGuid().ToString("N"));
@@ -96,6 +151,15 @@ namespace UnderwaterGliderTwin.Tests
             {
                 new FixtureVariable(longitudeName, new[] { 0 }, longitude), new FixtureVariable(latitudeName, new[] { 1 }, latitude), new FixtureVariable("depth", new[] { 2 }, depth),
                 new FixtureVariable(uName, new[] { 2, 1, 0 }, u, uUnits), new FixtureVariable(vName, new[] { 2, 1, 0 }, v, vUnits)
+            });
+        }
+
+        private static byte[] BuildTimedFixture(string timeUnits, float[] time, float[] u, float[] v)
+        {
+            return Build(1, new[] { new FixtureDimension("longitude", 1), new FixtureDimension("latitude", 1), new FixtureDimension("depth", 1), new FixtureDimension("time", time.Length) }, new List<FixtureVariable>
+            {
+                new FixtureVariable("longitude", new[] { 0 }, new[] { 120f }), new FixtureVariable("latitude", new[] { 1 }, new[] { 25f }), new FixtureVariable("depth", new[] { 2 }, new[] { 5f }), new FixtureVariable("time", new[] { 3 }, time, timeUnits),
+                new FixtureVariable("uo", new[] { 3, 2, 1, 0 }, u, "m/s"), new FixtureVariable("vo", new[] { 3, 2, 1, 0 }, v, "m/s")
             });
         }
 
