@@ -11,11 +11,29 @@ short-horizon prediction.
 - Data file: `2.csv` encoded as GBK
 - The helper scripts auto-detect the matching Unity Hub installation.
 
+## Launch and Run
+
+The first build scene is `Welcome.unity`; it provides path input for CSV replay,
+a last/default CSV shortcut, simulation mode, and project notes. CSV files must
+use GBK encoding. The last CSV path is remembered only after Main successfully
+loads at least one usable telemetry frame.
+
+Valid command-line launch arguments skip Welcome:
+
+```powershell
+.\UnderwaterGliderTwin.exe --csv ".\2.csv"
+.\UnderwaterGliderTwin.exe --csv=.\2.csv
+.\UnderwaterGliderTwin.exe --simulation
+```
+
+Simulation arguments take precedence over CSV arguments. Invalid CSV arguments
+stay on Welcome and show an inline error.
+
 ## Run In Unity
 
 1. Open `UnderwaterGliderTwin` in Unity Hub.
 2. Open `Assets/Scenes/Main.unity`.
-3. Enter the CSV path in the Mission Configuration panel, or launch with `--csv`.
+3. Press Play; use Welcome to enter a CSV path or choose simulation mode.
 4. Press Play.
 
 ## Run Build

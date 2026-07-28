@@ -182,5 +182,7 @@
     "max_origins_per_segment": 100,
     "history_length": 30,
     "sample_interval_seconds": 10
-  }
+  },
+  "artifact_schema_version": 1,
+  "artifact_manifest_sha256": "7e7ba9fdb7002f42cc359121cdf53a25e043a74a8879d155baf3ee0f29a8a02c"
 }
