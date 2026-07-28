@@ -3,6 +3,7 @@
   "rootNamespace": "UnderwaterGliderTwin.Tests",
   "references": [
     "UnderwaterGliderTwin.Runtime",
+    "UnderwaterGliderTwin.Editor",
     "UnityEngine.UI"
   ],
   "includePlatforms": [

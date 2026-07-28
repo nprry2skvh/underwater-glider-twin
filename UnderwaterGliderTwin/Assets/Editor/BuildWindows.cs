@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
@@ -6,68 +7,89 @@ namespace UnderwaterGliderTwin.Editor
 {
     public static class BuildWindows
     {
+        public static readonly string[] BuildScenePaths = { "Assets/Scenes/Welcome.unity", "Assets/Scenes/Main.unity" };
+
         public static void Build()
         {
             var projectRoot = Path.GetFullPath(".");
             var workspaceRoot = Path.GetFullPath(Path.Combine(projectRoot, ".."));
             var outputDirectory = Path.GetFullPath(Path.Combine(workspaceRoot, "Builds", "UnderwaterGliderTwin"));
-            Directory.CreateDirectory(outputDirectory);
-            var outputPath = Path.Combine(outputDirectory, "UnderwaterGliderTwin.exe");
+            var buildsRoot = Path.GetDirectoryName(outputDirectory);
+            Directory.CreateDirectory(buildsRoot);
+            var stagingDirectory = Path.Combine(buildsRoot, "UnderwaterGliderTwin.staging-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(stagingDirectory);
+
+            var sourceArtifactRoot = Path.GetFullPath(Path.Combine(workspaceRoot, "Models", "XGBoost"));
+            var outputPath = Path.Combine(stagingDirectory, "UnderwaterGliderTwin.exe");
 
             var options = new BuildPlayerOptions
             {
-                scenes = new[] { "Assets/Scenes/Main.unity" },
+                scenes = BuildScenePaths,
                 locationPathName = outputPath,
                 target = BuildTarget.StandaloneWindows64,
                 options = BuildOptions.None
             };
 
-            var report = BuildPipeline.BuildPlayer(options);
-            if (report.summary.result != BuildResult.Succeeded)
+            try
             {
-                throw new System.Exception($"Build failed: {report.summary.result}");
-            }
+                if (!BuildArtifactValidator.TryValidateSource(sourceArtifactRoot, out var manifest, out var sourceError))
+                {
+                    throw new Exception("Build source artifact validation failed: " + sourceError);
+                }
 
-            CopyModelArtifacts(workspaceRoot, outputDirectory);
+                var report = BuildPipeline.BuildPlayer(options);
+                if (report.summary.result != BuildResult.Succeeded)
+                {
+                    throw new Exception($"Build failed: {report.summary.result}");
+                }
+
+                CopyModelArtifacts(sourceArtifactRoot, stagingDirectory, manifest);
+                var stagedArtifactRoot = Path.Combine(stagingDirectory, "Models", "XGBoost");
+                if (!BuildArtifactValidator.TryValidateOutput(stagedArtifactRoot, manifest, out var outputError))
+                {
+                    throw new Exception("Build output artifact validation failed: " + outputError);
+                }
+
+                PublishDirectoryWithRollback(
+                    stagingDirectory,
+                    outputDirectory,
+                    () =>
+                    {
+                        var finalArtifactRoot = Path.Combine(outputDirectory, "Models", "XGBoost");
+                        if (!BuildArtifactValidator.TryValidateOutput(finalArtifactRoot, manifest, out var finalError))
+                        {
+                            throw new Exception("Published artifact validation failed: " + finalError);
+                        }
+                    });
+            }
+            catch
+            {
+                DeleteDirectoryIfExists(stagingDirectory);
+                throw;
+            }
         }
 
-        private static void CopyModelArtifacts(string workspaceRoot, string outputDirectory)
+        private static void CopyModelArtifacts(string sourceArtifactRoot, string outputDirectory, BuildArtifactManifest manifest)
         {
-            var sourceRoot = Path.GetFullPath(Path.Combine(workspaceRoot, "Models"));
-            if (!Directory.Exists(sourceRoot))
-            {
-                return;
-            }
+            var destinationArtifactRoot = Path.Combine(outputDirectory, "Models", "XGBoost");
+            Directory.CreateDirectory(destinationArtifactRoot);
+            CopyRequiredFile(
+                Path.Combine(sourceArtifactRoot, "manifest.json"),
+                Path.Combine(destinationArtifactRoot, "manifest.json"));
 
-            var destinationRoot = Path.Combine(outputDirectory, "Models");
-            CopyDirectoryIfPresent(Path.Combine(sourceRoot, "XGBoost"), Path.Combine(destinationRoot, "XGBoost"));
-            CopyFileIfPresent(Path.Combine(sourceRoot, "training_summary.json"), Path.Combine(destinationRoot, "training_summary.json"));
-        }
-
-        private static void CopyDirectoryIfPresent(string sourceDirectory, string destinationDirectory)
-        {
-            if (!Directory.Exists(sourceDirectory))
+            foreach (var file in manifest.files)
             {
-                return;
-            }
-
-            Directory.CreateDirectory(destinationDirectory);
-            foreach (var file in Directory.GetFiles(sourceDirectory))
-            {
-                CopyFileIfPresent(file, Path.Combine(destinationDirectory, Path.GetFileName(file)));
-            }
-
-            foreach (var subDirectory in Directory.GetDirectories(sourceDirectory))
-            {
-                CopyDirectoryIfPresent(subDirectory, Path.Combine(destinationDirectory, Path.GetFileName(subDirectory)));
+                CopyRequiredFile(
+                    Path.Combine(sourceArtifactRoot, file.path.Replace('/', Path.DirectorySeparatorChar)),
+                    Path.Combine(destinationArtifactRoot, file.path.Replace('/', Path.DirectorySeparatorChar)));
             }
         }
 
-        private static void CopyFileIfPresent(string sourceFile, string destinationFile)
+        private static void CopyRequiredFile(string sourceFile, string destinationFile)
         {
             if (!File.Exists(sourceFile))
             {
-                return;
+                throw new FileNotFoundException("Required build artifact file is missing.", sourceFile);
             }
 
             var destinationDirectory = Path.GetDirectoryName(destinationFile);
@@ -77,6 +99,48 @@ namespace UnderwaterGliderTwin.Editor
             }
 
             File.Copy(sourceFile, destinationFile, true);
+        }
+
+        private static void PublishDirectoryWithRollback(string stagingDirectory, string destinationDirectory, Action validatePublishedDirectory)
+        {
+            var parent = Path.GetDirectoryName(destinationDirectory);
+            Directory.CreateDirectory(parent);
+            var backupDirectory = destinationDirectory + ".backup-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N");
+            var hasBackup = false;
+
+            try
+            {
+                if (Directory.Exists(destinationDirectory))
+                {
+                    Directory.Move(destinationDirectory, backupDirectory);
+                    hasBackup = true;
+                }
+
+                Directory.Move(stagingDirectory, destinationDirectory);
+                validatePublishedDirectory?.Invoke();
+                if (hasBackup)
+                {
+                    DeleteDirectoryIfExists(backupDirectory);
+                }
+            }
+            catch
+            {
+                DeleteDirectoryIfExists(destinationDirectory);
+                if (hasBackup && Directory.Exists(backupDirectory))
+                {
+                    Directory.Move(backupDirectory, destinationDirectory);
+                }
+
+                throw;
+            }
+        }
+
+        private static void DeleteDirectoryIfExists(string directory)
+        {
+            if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
         }
     }
 }
