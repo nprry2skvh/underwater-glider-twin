@@ -322,7 +322,7 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void CommandCenterConfigurationStrip_UsesFramedSurfaceBelowSystemHeader()
+        public void CommandCenterConfigurationStrip_UsesFramedBottomDrawer()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
 
@@ -330,7 +330,38 @@ namespace UnderwaterGliderTwin.Tests
 
             var strip = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
             Assert.That(strip.GetComponent<Outline>(), Is.Not.Null);
-            Assert.That(strip.anchoredPosition.y, Is.LessThanOrEqualTo(-56f));
+            Assert.That(strip.anchorMin, Is.EqualTo(new Vector2(0f, 0f)));
+            Assert.That(strip.anchorMax, Is.EqualTo(new Vector2(1f, 0f)));
+            Assert.That(strip.sizeDelta.y, Is.LessThanOrEqualTo(48f));
+        }
+
+        [Test]
+        public void BottomDrawerIsCollapsedByDefaultAndCapsItsExpandedHeight()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            var drawer = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
+            Assert.That(drawer.sizeDelta.y, Is.LessThanOrEqualTo(48f));
+            GameObject.Find("MissionConfigurationDrawerToggleButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(drawer.sizeDelta.y, Is.LessThanOrEqualTo(1080f * 0.35f));
+            Assert.That(GameObject.Find("MissionConfigurationViewport").GetComponent<Mask>(), Is.Not.Null);
+            Assert.That(GameObject.Find("MissionConfigurationContent").GetComponent<GridLayoutGroup>(), Is.Not.Null);
+        }
+
+        [Test]
+        public void InvalidDrawerInputDoesNotInvokeSimulationCallback()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile submitted = null;
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => submitted = profile);
+
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+            GameObject.Find("DynamicsMassInput").GetComponent<InputField>().text = "not-a-number";
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(submitted, Is.Null);
+            Assert.That(FindText("MissionConfigurationStatus").text, Does.Contain("质量"));
         }
 
         [Test]

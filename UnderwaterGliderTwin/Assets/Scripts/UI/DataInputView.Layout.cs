@@ -1,0 +1,148 @@
+using UnityEngine;
+using UnityEngine.UI;
+using UnderwaterGliderTwin.Telemetry;
+
+namespace UnderwaterGliderTwin.UI
+{
+    public sealed partial class DataInputView
+    {
+        private RectTransform bottomDrawerContent;
+        private RectTransform bottomDrawerViewport;
+        private ScrollRect bottomDrawerScrollRect;
+        private Button bottomDrawerToggleButton;
+        private bool bottomDrawerExpanded;
+
+        private void ConfigureResponsiveBottomDrawer(RectTransform drawer)
+        {
+            if (drawer == null || bottomDrawerContent != null)
+            {
+                return;
+            }
+
+            drawer.anchorMin = new Vector2(0f, 0f);
+            drawer.anchorMax = new Vector2(1f, 0f);
+            drawer.pivot = new Vector2(0.5f, 0f);
+            drawer.anchoredPosition = Vector2.zero;
+            drawer.sizeDelta = new Vector2(0f, 48f);
+
+            var header = UiFactory.Panel("MissionConfigurationDrawerHeader", drawer, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(-16f, 44f), new Color(0.02f, 0.12f, 0.18f, 0.98f));
+            UiFactory.Text("MissionConfigurationDrawerLabel", header, "任务参数", 16, TextAnchor.MiddleLeft, UiFactory.CommandText, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(16f, 0f), new Vector2(180f, -8f));
+            bottomDrawerToggleButton = UiFactory.Button("MissionConfigurationDrawerToggleButton", header, "展开参数", new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(-12f, 0f), new Vector2(108f, 30f));
+            bottomDrawerToggleButton.onClick.AddListener(ToggleBottomDrawer);
+
+            bottomDrawerViewport = UiFactory.Panel("MissionConfigurationViewport", drawer, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, 22f), new Vector2(-20f, -72f), new Color(0f, 0f, 0f, 0.08f));
+            bottomDrawerViewport.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+            bottomDrawerContent = UiFactory.Panel("MissionConfigurationContent", bottomDrawerViewport, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 0f), Color.clear);
+            var grid = bottomDrawerContent.gameObject.AddComponent<GridLayoutGroup>();
+            grid.padding = new RectOffset(10, 10, 8, 8);
+            grid.spacing = new Vector2(8f, 8f);
+            grid.cellSize = new Vector2(352f, 42f);
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 5;
+            grid.childAlignment = TextAnchor.UpperLeft;
+            var fitter = bottomDrawerContent.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            bottomDrawerScrollRect = drawer.gameObject.AddComponent<ScrollRect>();
+            bottomDrawerScrollRect.viewport = bottomDrawerViewport;
+            bottomDrawerScrollRect.content = bottomDrawerContent;
+            bottomDrawerScrollRect.horizontal = false;
+            bottomDrawerScrollRect.vertical = true;
+            bottomDrawerScrollRect.movementType = ScrollRect.MovementType.Clamped;
+
+            // The legacy field builders keep their stable object names and handlers.  Reparenting
+            // them into a grid removes fixed x coordinates while retaining their public UI contract.
+            for (var index = drawer.childCount - 1; index >= 0; index--)
+            {
+                var child = drawer.GetChild(index) as RectTransform;
+                if (child == null || child == header || child == bottomDrawerViewport)
+                {
+                    continue;
+                }
+
+                child.SetParent(bottomDrawerContent, false);
+                child.anchorMin = new Vector2(0.5f, 0.5f);
+                child.anchorMax = new Vector2(0.5f, 0.5f);
+                child.pivot = new Vector2(0.5f, 0.5f);
+                child.anchoredPosition = Vector2.zero;
+                child.sizeDelta = grid.cellSize;
+                var element = child.gameObject.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
+                element.minWidth = grid.cellSize.x;
+                element.preferredWidth = grid.cellSize.x;
+                element.minHeight = grid.cellSize.y;
+                element.preferredHeight = grid.cellSize.y;
+            }
+
+            SetBottomDrawerExpanded(false);
+        }
+
+        private void ToggleBottomDrawer()
+        {
+            SetBottomDrawerExpanded(!bottomDrawerExpanded);
+        }
+
+        private void SetBottomDrawerExpanded(bool expanded)
+        {
+            bottomDrawerExpanded = expanded;
+            var drawer = bottomDrawerContent != null ? bottomDrawerContent.parent?.parent as RectTransform : null;
+            if (drawer == null)
+            {
+                return;
+            }
+
+            // CanvasScaler makes this 35% at both 1280x720 and 1920x1080.
+            drawer.sizeDelta = new Vector2(0f, expanded ? 378f : 48f);
+            if (bottomDrawerToggleButton != null)
+            {
+                UiFactory.SetButtonText(bottomDrawerToggleButton, expanded ? "收起参数" : "展开参数");
+            }
+        }
+
+        private void OnActiveRuntimeSessionChanged(SimulationRuntimeSession session)
+        {
+            AttachRuntimeSession(session);
+        }
+
+        private void AttachRuntimeSession(SimulationRuntimeSession session)
+        {
+            if (ReferenceEquals(subscribedRuntimeSession, session))
+            {
+                return;
+            }
+
+            if (subscribedRuntimeSession != null)
+            {
+                subscribedRuntimeSession.StatusChanged -= RefreshRuntimeStatus;
+            }
+
+            subscribedRuntimeSession = session;
+            if (subscribedRuntimeSession != null)
+            {
+                subscribedRuntimeSession.StatusChanged += RefreshRuntimeStatus;
+                RefreshRuntimeStatus();
+            }
+        }
+
+        private void RefreshRuntimeStatus()
+        {
+            if (subscribedRuntimeSession == null)
+            {
+                return;
+            }
+
+            if (subscribedRuntimeSession.IsRebuildPending)
+            {
+                SetStatus("参数仿真正在重建，当前轨迹保持不变…", new Color(0.62f, 0.85f, 0.92f));
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(subscribedRuntimeSession.LastError))
+            {
+                SetStatus("参数仿真未更新：" + subscribedRuntimeSession.LastError, new Color(1f, 0.58f, 0.58f));
+                return;
+            }
+
+            SetStatus("参数仿真已更新", new Color(0.74f, 0.95f, 1f));
+        }
+    }
+}

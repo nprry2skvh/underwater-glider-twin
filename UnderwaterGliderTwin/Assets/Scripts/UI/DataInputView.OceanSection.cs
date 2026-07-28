@@ -129,9 +129,9 @@ namespace UnderwaterGliderTwin.UI
                 Mathf.Max(0f, targetDepth),
                 profile.OceanCurrentPrefetchHalfWidthKm,
                 profile.OceanCurrentForecastWindowHours);
-            SetStatus("正在从 Copernicus 获取海流...", new Color(0.62f, 0.85f, 0.92f));
+            SetStatus(GetCurrentAcquisitionPendingText(), new Color(0.62f, 0.85f, 0.92f));
             StartCoroutine(new CopernicusCurrentClient().Fetch(
-                request,
+                request, oceanCurrentAcquisitionMode, GetLocalCurrentPath(), DateTime.UtcNow,
                 result =>
                 {
                     var downloadedProfile = result.Profile?.Clone();
@@ -147,6 +147,7 @@ namespace UnderwaterGliderTwin.UI
                     profile.OceanCurrentSourcePreference = OceanCurrentSourcePreference.NetworkPreferred;
                     selectedOceanCurrentLayerIndex = GetOceanCurrentProfile().Layers.Count > 0 ? 0 : -1;
                     lastOceanCurrentResult = result;
+                    SetActualCurrentSource(result);
                     RefreshOceanCurrentLayerEditor();
                     oceanCurrentSettingsApplied?.Invoke();
                     SetCurrentLookupStatus(result.Profile, targetDepth, SetStatus);
@@ -207,6 +208,14 @@ namespace UnderwaterGliderTwin.UI
             oceanCurrentPrefetchHalfWidthInput = AddLabeledInput(oceanCurrentDrawer, "区域半宽 (km)", "OceanCurrentPrefetchHalfWidthInput", "25", 24f, -174f, 150f);
             oceanCurrentForecastWindowInput = AddLabeledInput(oceanCurrentDrawer, "预报时窗 (h)", "OceanCurrentForecastWindowInput", "72", 194f, -174f, 150f);
             oceanCurrentFieldSummary = UiFactory.Text("OceanCurrentFieldSummary", oceanCurrentDrawer, "网格：未加载", 13, TextAnchor.MiddleLeft, new Color(0.74f, 0.95f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(364f, -181f), new Vector2(360f, 24f));
+
+            UiFactory.Text("OceanCurrentAcquisitionLabel", oceanCurrentDrawer, "获取策略", 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.96f, 1f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(24f, 92f), new Vector2(70f, 20f));
+            UiFactory.Button("OceanCurrentOnlineModeButton", oceanCurrentDrawer, "在线", new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(100f, 92f), new Vector2(66f, 28f)).onClick.AddListener(() => SetOceanCurrentAcquisitionMode(OceanCurrentAcquisitionMode.Online));
+            UiFactory.Button("OceanCurrentCacheOnlyModeButton", oceanCurrentDrawer, "仅缓存", new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(174f, 92f), new Vector2(76f, 28f)).onClick.AddListener(() => SetOceanCurrentAcquisitionMode(OceanCurrentAcquisitionMode.CacheOnly));
+            UiFactory.Button("OceanCurrentLocalFileModeButton", oceanCurrentDrawer, "本地文件", new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(258f, 92f), new Vector2(86f, 28f)).onClick.AddListener(() => SetOceanCurrentAcquisitionMode(OceanCurrentAcquisitionMode.LocalFile));
+            oceanCurrentAcquisitionModeText = UiFactory.Text("OceanCurrentAcquisitionMode", oceanCurrentDrawer, "策略：在线", 12, TextAnchor.MiddleLeft, new Color(0.74f, 0.95f, 1f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(356f, 92f), new Vector2(130f, 22f));
+            oceanCurrentLocalFileInput = UiFactory.InputField("OceanCurrentLocalFileInput", oceanCurrentDrawer, string.Empty, "本地 JSON 或 NetCDF 路径", new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(24f, 54f), new Vector2(460f, 30f));
+            oceanCurrentActualSourceText = UiFactory.Text("OceanCurrentActualSource", oceanCurrentDrawer, "实际来源：未加载", 12, TextAnchor.MiddleLeft, new Color(0.74f, 0.95f, 1f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(494f, 54f), new Vector2(236f, 30f));
 
             UiFactory.Button("OceanCurrentDrawerPreviousButton", oceanCurrentDrawer, "上一层", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f, -246f), new Vector2(88f, 32f)).onClick.AddListener(() => SelectOceanCurrentLayer(selectedOceanCurrentLayerIndex - 1));
             UiFactory.Button("OceanCurrentDrawerNextButton", oceanCurrentDrawer, "下一层", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(120f, -246f), new Vector2(88f, 32f)).onClick.AddListener(() => SelectOceanCurrentLayer(selectedOceanCurrentLayerIndex + 1));
@@ -424,15 +433,21 @@ namespace UnderwaterGliderTwin.UI
                 Mathf.Max(0f, targetDepth),
                 profile.OceanCurrentPrefetchHalfWidthKm,
                 profile.OceanCurrentForecastWindowHours);
-            SetOceanCurrentDrawerStatus("正在从 Copernicus 获取海流...", new Color(0.62f, 0.85f, 0.92f));
+            SetOceanCurrentDrawerStatus(GetCurrentAcquisitionPendingText(), new Color(0.62f, 0.85f, 0.92f));
             StartCoroutine(new CopernicusCurrentClient().Fetch(
-                request,
+                request, oceanCurrentAcquisitionMode, GetLocalCurrentPath(), DateTime.UtcNow,
                 result =>
                 {
+                    if (result?.Profile == null || result.Field == null)
+                    {
+                        SetOceanCurrentDrawerStatus("海流获取失败：响应不完整，已保留当前海流。", new Color(1f, 0.58f, 0.58f));
+                        return;
+                    }
                     GetOceanCurrentProfile().ReplaceLayers(result.Profile.Layers);
                     profile.OceanCurrentField = result.Field.Clone();
                     selectedOceanCurrentLayerIndex = GetOceanCurrentProfile().Layers.Count > 0 ? 0 : -1;
                     lastOceanCurrentResult = result;
+                    SetActualCurrentSource(result);
                     SetCurrentLookupStatus(result.Profile, targetDepth, SetOceanCurrentDrawerStatus);
                     RefreshOceanCurrentLayerEditor();
                 },
@@ -447,6 +462,48 @@ namespace UnderwaterGliderTwin.UI
                 oceanCurrentDrawerStatus.text = message;
                 oceanCurrentDrawerStatus.color = color;
             }
+        }
+
+        private void SetOceanCurrentAcquisitionMode(OceanCurrentAcquisitionMode mode)
+        {
+            oceanCurrentAcquisitionMode = mode;
+            if (oceanCurrentAcquisitionModeText != null)
+            {
+                oceanCurrentAcquisitionModeText.text = "策略：" + GetOceanCurrentAcquisitionModeLabel(mode);
+            }
+        }
+
+        private string GetLocalCurrentPath()
+        {
+            return oceanCurrentLocalFileInput == null ? string.Empty : oceanCurrentLocalFileInput.text.Trim();
+        }
+
+        private string GetCurrentAcquisitionPendingText()
+        {
+            return "正在获取海流：" + GetOceanCurrentAcquisitionModeLabel(oceanCurrentAcquisitionMode) + "…";
+        }
+
+        private static string GetOceanCurrentAcquisitionModeLabel(OceanCurrentAcquisitionMode mode)
+        {
+            switch (mode)
+            {
+                case OceanCurrentAcquisitionMode.CacheOnly: return "仅缓存";
+                case OceanCurrentAcquisitionMode.LocalFile: return "本地文件";
+                default: return "在线";
+            }
+        }
+
+        private void SetActualCurrentSource(CopernicusCurrentResult result)
+        {
+            if (oceanCurrentActualSourceText == null)
+            {
+                return;
+            }
+
+            var source = string.IsNullOrWhiteSpace(result?.Source)
+                ? GetOceanCurrentAcquisitionModeLabel(oceanCurrentAcquisitionMode)
+                : result.Source;
+            oceanCurrentActualSourceText.text = "实际来源：" + source;
         }
     }
 }

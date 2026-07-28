@@ -50,6 +50,10 @@ namespace UnderwaterGliderTwin.UI
         private InputField oceanCurrentPrefetchHalfWidthInput;
         private InputField oceanCurrentForecastWindowInput;
         private Text oceanCurrentFieldSummary;
+        private InputField oceanCurrentLocalFileInput;
+        private Text oceanCurrentAcquisitionModeText;
+        private Text oceanCurrentActualSourceText;
+        private OceanCurrentAcquisitionMode oceanCurrentAcquisitionMode = OceanCurrentAcquisitionMode.Online;
         private InputField dynamicsMassInput;
         private InputField dynamicsReferenceAreaInput;
         private InputField dynamicsReferenceLengthInput;
@@ -74,6 +78,7 @@ namespace UnderwaterGliderTwin.UI
         private CopernicusCurrentResult lastOceanCurrentResult;
         private bool flightLegSettingsEdited;
         private bool refreshingFlightLegInputs;
+        private SimulationRuntimeSession subscribedRuntimeSession;
 
         public void Initialize(
             string currentCsvPath,
@@ -98,11 +103,11 @@ namespace UnderwaterGliderTwin.UI
             var panel = UiFactory.CommandPanel(
                 "MissionConfigurationPanel",
                 canvas.transform,
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(0.5f, 1f),
-                new Vector2(0f, -56f),
-                new Vector2(-100f, 250f));
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.5f, 0f),
+                Vector2.zero,
+                new Vector2(0f, 48f));
             CreateConfigurationGroups(panel);
 
             UiFactory.Text("MissionConfigurationTitle", panel, "任务配置", 18, TextAnchor.MiddleLeft, new Color(0.92f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -22f), new Vector2(300f, 28f));
@@ -163,6 +168,21 @@ namespace UnderwaterGliderTwin.UI
             BuildFlightLegDrawer(canvas.transform);
             RefreshPredictionSelection();
             RefreshOceanCurrentLayerEditor();
+            ConfigureResponsiveBottomDrawer(panel);
+            AttachRuntimeSession(SimulationRuntimeRegistry.Active);
+        }
+
+        private void OnEnable()
+        {
+            SimulationRuntimeRegistry.ActiveChanged -= OnActiveRuntimeSessionChanged;
+            SimulationRuntimeRegistry.ActiveChanged += OnActiveRuntimeSessionChanged;
+            AttachRuntimeSession(SimulationRuntimeRegistry.Active);
+        }
+
+        private void OnDisable()
+        {
+            SimulationRuntimeRegistry.ActiveChanged -= OnActiveRuntimeSessionChanged;
+            AttachRuntimeSession(null);
         }
 
         private void OnLoadClicked()
@@ -344,6 +364,10 @@ namespace UnderwaterGliderTwin.UI
         private void ClearRuntimeUi()
         {
             modelButtons.Clear();
+            bottomDrawerContent = null;
+            bottomDrawerViewport = null;
+            bottomDrawerScrollRect = null;
+            bottomDrawerToggleButton = null;
             for (var index = transform.childCount - 1; index >= 0; index--)
             {
                 var child = transform.GetChild(index).gameObject;
