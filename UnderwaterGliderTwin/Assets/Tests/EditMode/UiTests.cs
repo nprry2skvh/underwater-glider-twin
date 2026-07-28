@@ -285,6 +285,43 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void DataInputView_ReinitializeReplacesThePanelOnce()
+        {
+            var view = new GameObject("DataInput").AddComponent<DataInputView>();
+            view.Initialize(CreateTempCsv(), SimulationProfile.Default, null);
+            var firstCount = FindChildrenNamed(view.transform, "MissionConfigurationPanel").Count;
+
+            view.Initialize(CreateTempCsv(), SimulationProfile.Default, null);
+            var secondCount = FindChildrenNamed(view.transform, "MissionConfigurationPanel").Count;
+
+            Assert.That(firstCount, Is.EqualTo(1));
+            Assert.That(secondCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void DataInputView_ReinitializeDoesNotDuplicateLoadListeners()
+        {
+            var view = new GameObject("DataInput").AddComponent<DataInputView>();
+            var count = 0;
+            view.Initialize(CreateTempCsv(), SimulationProfile.Default, null, onLoadRequested: _ => count++);
+            view.Initialize(CreateTempCsv(), SimulationProfile.Default, null, onLoadRequested: _ => count++);
+
+            FindChildNamed(view.transform, "LoadCsvButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void DataInputView_DoesNotLeaveDuplicatePanelsInTheScene()
+        {
+            var view = new GameObject("DataInput").AddComponent<DataInputView>();
+            view.Initialize(CreateTempCsv(), SimulationProfile.Default, null);
+            view.Initialize(CreateTempCsv(), SimulationProfile.Default, null);
+
+            Assert.That(FindChildrenNamed(view.transform, "MissionConfigurationPanel").Count, Is.EqualTo(1));
+        }
+
+        [Test]
         public void CommandCenterConfigurationStrip_UsesFramedSurfaceBelowSystemHeader()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
@@ -584,6 +621,17 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void DataInputView_HidesPredictionModelsThatAreNotRuntimeAvailable()
+        {
+            var prediction = new GameObject("Prediction").AddComponent<PredictionController>();
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, prediction);
+
+            Assert.That(GameObject.Find("XGBoostModelButton"), Is.Null);
+        }
+
+        [Test]
         public void DashboardView_HidesAdvancedTelemetryUntilDetailsAreRequested()
         {
             var playback = CreatePlayback(Frames(2));
@@ -873,6 +921,43 @@ namespace UnderwaterGliderTwin.Tests
         private static Text FindText(string name)
         {
             return GameObject.Find(name).GetComponent<Text>();
+        }
+
+        private static string CreateTempCsv()
+        {
+            var path = Path.Combine(Application.temporaryCachePath, "ui-test-" + System.Guid.NewGuid().ToString("N") + ".csv");
+            File.WriteAllText(path, "time,depth\n0,0");
+            return path;
+        }
+
+        private static Transform FindChildNamed(Transform root, string name)
+        {
+            foreach (var child in FindChildrenNamed(root, name))
+            {
+                return child;
+            }
+
+            return null;
+        }
+
+        private static List<Transform> FindChildrenNamed(Transform root, string name)
+        {
+            var matches = new List<Transform>();
+            CollectChildrenNamed(root, name, matches);
+            return matches;
+        }
+
+        private static void CollectChildrenNamed(Transform root, string name, List<Transform> matches)
+        {
+            foreach (Transform child in root)
+            {
+                if (child.name == name)
+                {
+                    matches.Add(child);
+                }
+
+                CollectChildrenNamed(child, name, matches);
+            }
         }
 
         private static PlaybackController CreatePlayback(IReadOnlyList<TelemetryFrame> frames)
