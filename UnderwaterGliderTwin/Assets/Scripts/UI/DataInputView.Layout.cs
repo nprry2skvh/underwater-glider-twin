@@ -22,7 +22,7 @@ namespace UnderwaterGliderTwin.UI
             drawer.anchorMin = new Vector2(0f, 0f);
             drawer.anchorMax = new Vector2(1f, 0f);
             drawer.pivot = new Vector2(0.5f, 0f);
-            drawer.anchoredPosition = Vector2.zero;
+            drawer.anchoredPosition = new Vector2(0f, UiFactory.PlaybackControlsBottomOffset);
             drawer.sizeDelta = new Vector2(0f, 48f);
 
             var header = UiFactory.Panel("MissionConfigurationDrawerHeader", drawer, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(-16f, 44f), new Color(0.02f, 0.12f, 0.18f, 0.98f));

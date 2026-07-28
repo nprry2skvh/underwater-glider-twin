@@ -336,6 +336,44 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void MissionConfigurationDrawerReservesPlaybackSafeArea()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
+            var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
+            var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            new GameObject("Controls").AddComponent<PlaybackControlsView>()
+                .Initialize(playback, cameraController, environment, trajectory);
+            dataInput.BringConfigurationToFront();
+
+            var drawer = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
+            var playbackPanel = GameObject.Find("PlaybackControlsPanel").GetComponent<RectTransform>();
+            Assert.That(drawer.anchoredPosition.y, Is.GreaterThanOrEqualTo(playbackPanel.anchoredPosition.y + playbackPanel.sizeDelta.y));
+            Assert.That(drawer.GetSiblingIndex(), Is.GreaterThan(playbackPanel.GetSiblingIndex()));
+        }
+
+        [Test]
+        public void MissionConfigurationIsReachableFromCommandCenterHeader()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            var button = GameObject.Find("CommandCenterMissionConfigButton");
+            var panel = GameObject.Find("MissionConfigurationPanel");
+            Assert.That(button, Is.Not.Null);
+            Assert.That(panel.activeSelf, Is.True);
+            button.GetComponent<Button>().onClick.Invoke();
+            Assert.That(panel.activeSelf, Is.False);
+        }
+
+        [Test]
         public void BottomDrawerIsCollapsedByDefaultAndCapsItsExpandedHeight()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();

@@ -86,6 +86,7 @@ namespace UnderwaterGliderTwin.UI
         private bool flightLegSettingsEdited;
         private bool refreshingFlightLegInputs;
         private SimulationRuntimeSession subscribedRuntimeSession;
+        private RectTransform configurationPanel;
 
         public void Initialize(
             string currentCsvPath,
@@ -107,6 +108,7 @@ namespace UnderwaterGliderTwin.UI
             EnsureRuntimeModelAvailable();
 
             var canvas = UiFactory.EnsureCanvas(transform);
+            var header = UiFactory.EnsureCommandCenterHeader(canvas.transform);
             var panel = UiFactory.CommandPanel(
                 "MissionConfigurationPanel",
                 canvas.transform,
@@ -115,6 +117,16 @@ namespace UnderwaterGliderTwin.UI
                 new Vector2(0.5f, 0f),
                 Vector2.zero,
                 new Vector2(0f, 48f));
+            configurationPanel = panel;
+            var headerButton = header.Find("CommandCenterMissionConfigButton")?.GetComponent<Button>();
+            if (headerButton == null)
+            {
+                headerButton = UiFactory.Button("CommandCenterMissionConfigButton", header, "任务参数",
+                    new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                    new Vector2(-332f, 0f), new Vector2(112f, 28f));
+            }
+            headerButton.onClick.RemoveAllListeners();
+            headerButton.onClick.AddListener(() => panel.gameObject.SetActive(!panel.gameObject.activeSelf));
             CreateConfigurationGroups(panel);
 
             UiFactory.Text("MissionConfigurationTitle", panel, "任务配置", 18, TextAnchor.MiddleLeft, new Color(0.92f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -22f), new Vector2(300f, 28f));
@@ -179,6 +191,11 @@ namespace UnderwaterGliderTwin.UI
             ConfigureInlineDrawer(oceanCurrentDrawer);
             ConfigureInlineDrawer(flightLegDrawer);
             AttachRuntimeSession(SimulationRuntimeRegistry.Active);
+        }
+
+        public void BringConfigurationToFront()
+        {
+            configurationPanel?.SetAsLastSibling();
         }
 
         private void OnEnable()

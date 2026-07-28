@@ -10,6 +10,7 @@ namespace UnderwaterGliderTwin.UI
         public static readonly Color CommandPanelEdge = new Color(0.08f, 0.68f, 0.92f, 0.62f);
         public static readonly Color CommandAccent = new Color(0.08f, 0.84f, 1f, 1f);
         public static readonly Color CommandText = new Color(0.87f, 0.97f, 1f, 1f);
+        public const float PlaybackControlsBottomOffset = 142f;
         private static Font font;
 
         public static Canvas EnsureCanvas(Transform parent)
@@ -55,11 +56,13 @@ namespace UnderwaterGliderTwin.UI
             return panel;
         }
 
-        public static void EnsureCommandCenterHeader(Transform parent)
+        public static RectTransform EnsureCommandCenterHeader(Transform parent)
         {
-            if (Object.FindObjectOfType<Canvas>().transform.Find("CommandCenterHeader") != null)
+            var canvas = Object.FindObjectOfType<Canvas>();
+            var existing = canvas != null ? canvas.transform.Find("CommandCenterHeader") as RectTransform : null;
+            if (existing != null)
             {
-                return;
+                return existing;
             }
 
             var header = Panel(
@@ -80,6 +83,7 @@ namespace UnderwaterGliderTwin.UI
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-176f, 0f), new Vector2(120f, 28f));
             Text("CommandCenterRuntime", header, "海流任务指挥舱", 12, TextAnchor.MiddleRight, new Color(0.55f, 0.82f, 0.94f, 1f),
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-24f, 0f), new Vector2(142f, 28f));
+            return header;
         }
 
         public static Text Text(string name, Transform parent, string value, int fontSize, TextAnchor anchor, Color color, Vector2 anchoredPosition, Vector2 size)

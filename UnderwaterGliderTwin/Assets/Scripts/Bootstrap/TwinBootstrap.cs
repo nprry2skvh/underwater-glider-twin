@@ -163,7 +163,8 @@ namespace UnderwaterGliderTwin.Bootstrap
             screenshotCapture.Initialize(screenshotOptions);
 
             var canvasRoot = new GameObject("RuntimeUI");
-            canvasRoot.AddComponent<DataInputView>().Initialize(
+            var dataInput = canvasRoot.AddComponent<DataInputView>();
+            dataInput.Initialize(
                 CurrentCsvPath,
                 RuntimeDataSourceState.SimulationProfile,
                 prediction,
@@ -187,6 +188,7 @@ namespace UnderwaterGliderTwin.Bootstrap
                     cameraController.SetMissionVolumeView(RuntimeDataSourceState.SimulationProfile.TargetDepthM, missionHorizontalExtents, missionDepthScale);
                     trajectoryView.SetCameraMode(CameraMode.Global);
                 });
+            dataInput.BringConfigurationToFront();
 
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
             {
