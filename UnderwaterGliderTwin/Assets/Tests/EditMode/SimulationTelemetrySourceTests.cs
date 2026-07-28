@@ -445,6 +445,26 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void Load_PopulatesFiniteDiagnosticsForNonlinearDynamics()
+        {
+            var profile = CreateCrossCurrentProfile(20f);
+            profile.Dynamics.BuoyancyCurveExponent = 2f;
+            profile.Dynamics.BuoyancyDeadbandFraction = 0.1f;
+            profile.Dynamics.PistonHysteresisFraction = 0.05f;
+            profile.Dynamics.RollCurveExponent = 2f;
+            profile.Dynamics.RollDeadbandFraction = 0.1f;
+            profile.Dynamics.NonlinearRollRestoringGain = 3f;
+            profile.Dynamics.MaxRollMomentNm = 6f;
+
+            var frames = new SimulationTelemetrySource(profile).Load().Frames;
+            var diagnostic = frames[^1].Diagnostics;
+
+            Assert.That(diagnostic.HasValue, Is.True);
+            Assert.That(float.IsNaN(diagnostic.Value.NetBuoyancyForceN) || float.IsInfinity(diagnostic.Value.NetBuoyancyForceN), Is.False);
+            Assert.That(float.IsNaN(diagnostic.Value.HydrodynamicMomentNm.x) || float.IsInfinity(diagnostic.Value.HydrodynamicMomentNm.x), Is.False);
+        }
+
+        [Test]
         public void TelemetryFrame_UsesSafeSimulationDefaults()
         {
             var frame = new TelemetryFrame(0, "t", 0f, 120d, 25d, 0f, 0f, 0f, 0f, 0f,

@@ -63,13 +63,23 @@ namespace UnderwaterGliderTwin.Telemetry
                 : commandedNetBuoyancyForceN;
             desiredBuoyancy = Mathf.Clamp(desiredBuoyancy, -settings.MaxBuoyancyForceN, settings.MaxBuoyancyForceN);
             var halfPistonStroke = Mathf.Max(0.1f, settings.PistonStrokeMm * 0.5f);
-            var desiredPistonPosition = desiredBuoyancy / Mathf.Max(0.1f, settings.MaxBuoyancyForceN) * halfPistonStroke;
+            var desiredPistonPosition = SignedPowerWithDeadband(
+                desiredBuoyancy / Mathf.Max(0.1f, settings.MaxBuoyancyForceN),
+                settings.BuoyancyCurveExponent,
+                settings.BuoyancyDeadbandFraction) * halfPistonStroke;
+            desiredPistonPosition = ApplyDirectionAwareHysteresis(
+                state.PistonPositionMm,
+                desiredPistonPosition,
+                halfPistonStroke * settings.PistonHysteresisFraction);
             var previousPistonPosition = state.PistonPositionMm;
             state.PistonPositionMm = Mathf.MoveTowards(
                 state.PistonPositionMm,
                 desiredPistonPosition,
                 halfPistonStroke / Mathf.Max(0.1f, settings.PistonResponseSeconds) * deltaSeconds);
-            state.NetBuoyancyForceN = state.PistonPositionMm / halfPistonStroke * settings.MaxBuoyancyForceN;
+            state.NetBuoyancyForceN = SignedPowerWithDeadband(
+                state.PistonPositionMm / halfPistonStroke,
+                settings.BuoyancyCurveExponent,
+                settings.BuoyancyDeadbandFraction) * settings.MaxBuoyancyForceN;
 
             var relativeWaterVelocity = state.EarthVelocityEndMps - currentEndMps;
             var bodyForwardSpeed = Vector3.Dot(relativeWaterVelocity, forward);
@@ -130,10 +140,10 @@ namespace UnderwaterGliderTwin.Telemetry
             var yawErrorRad = Mathf.DeltaAngle(state.HeadingDeg, desiredHeading) * Mathf.Deg2Rad;
             var maxControlSurfaceDeflection = Mathf.Max(0.1f, settings.MaxControlSurfaceDeflectionDeg);
             var controlSurfaceRate = maxControlSurfaceDeflection / Mathf.Max(0.1f, settings.ControlSurfaceResponseSeconds);
-            var desiredRollSurface = Mathf.Clamp(
-                rollErrorRad * Mathf.Rad2Deg * settings.ControlSurfaceCommandGain,
-                -maxControlSurfaceDeflection,
-                maxControlSurfaceDeflection);
+            var desiredRollSurface = SignedPowerWithDeadband(
+                rollErrorRad * Mathf.Rad2Deg * settings.ControlSurfaceCommandGain / maxControlSurfaceDeflection,
+                settings.RollCurveExponent,
+                settings.RollDeadbandFraction) * maxControlSurfaceDeflection;
             var desiredPitchSurface = Mathf.Clamp(
                 pitchErrorRad * Mathf.Rad2Deg * settings.ControlSurfaceCommandGain,
                 -maxControlSurfaceDeflection,
@@ -158,9 +168,16 @@ namespace UnderwaterGliderTwin.Telemetry
             var pitchHydrodynamicMoment = liftForce * Mathf.Max(0.1f, settings.MeanChordM) * 0.25f;
             var yawHydrodynamicMoment = sideForce * Mathf.Max(0.1f, settings.ReferenceLengthM) * 0.2f;
             var dampingScale = Mathf.Max(0f, settings.AngularDamping);
+            var nonlinearRollRestoringMoment = -settings.NonlinearRollRestoringGain * SignedPowerWithDeadband(
+                state.RollDeg / 30f,
+                settings.RollCurveExponent,
+                settings.RollDeadbandFraction);
             var rollMoment = rollHydrodynamicMoment
                 + settings.RollControlMomentNmPerRad * state.RollControlSurfaceDeflectionDeg * Mathf.Deg2Rad
+                + nonlinearRollRestoringMoment
                 - dampingScale * Mathf.Max(0.1f, settings.RollInertiaKgM2) * rollRateRad;
+            var maxRollMoment = Mathf.Max(0f, settings.MaxRollMomentNm);
+            rollMoment = Mathf.Clamp(rollMoment, -maxRollMoment, maxRollMoment);
             var pitchMoment = pitchHydrodynamicMoment
                 + settings.PitchControlMomentNmPerRad * state.PitchControlSurfaceDeflectionDeg * Mathf.Deg2Rad
                 - dampingScale * Mathf.Max(0.1f, settings.PitchInertiaKgM2) * pitchRateRad;
@@ -228,6 +245,31 @@ namespace UnderwaterGliderTwin.Telemetry
         {
             var normalized = headingDeg % 360f;
             return normalized < 0f ? normalized + 360f : normalized;
+        }
+
+        private static float SignedPowerWithDeadband(float value, float exponent, float deadbandFraction)
+        {
+            var magnitude = Mathf.Clamp01(Mathf.Abs(value));
+            var deadband = Mathf.Clamp01(deadbandFraction);
+            if (magnitude <= deadband)
+            {
+                return 0f;
+            }
+
+            var normalizedMagnitude = (magnitude - deadband) / Mathf.Max(0.0001f, 1f - deadband);
+            return Mathf.Sign(value) * Mathf.Pow(normalizedMagnitude, Mathf.Max(0.0001f, exponent));
+        }
+
+        private static float ApplyDirectionAwareHysteresis(float current, float desired, float band)
+        {
+            var distance = desired - current;
+            var threshold = Mathf.Max(0f, band);
+            if (Mathf.Abs(distance) <= threshold)
+            {
+                return current;
+            }
+
+            return desired - Mathf.Sign(distance) * threshold;
         }
     }
 }
