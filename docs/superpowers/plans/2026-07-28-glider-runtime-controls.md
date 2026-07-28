@@ -50,15 +50,44 @@
 
 ```csharp
 [UnityTest]
-public IEnumerator LocalFileAndCacheOnlyModesDoNotInvokeRemoteBackend()
+public IEnumerator LocalFileModeDoesNotInvokeRemoteBackendAndLoadsSelectedFile()
 {
     var path = WriteUniqueJsonFixture();
     var backend = new SpyCurrentFetchBackend();
     var client = new CopernicusCurrentClient(backend);
+    CopernicusCurrentResult loaded = null;
     yield return client.Fetch(RequestForTest(), OceanCurrentAcquisitionMode.LocalFile, path, DateTime.UtcNow,
-        _ => { }, error => Assert.Fail(error));
-    yield return client.Fetch(RequestForTest(), OceanCurrentAcquisitionMode.CacheOnly, path, DateTime.UtcNow,
-        _ => { }, error => Assert.Fail(error));
+        result => loaded = result, error => Assert.Fail(error));
+    Assert.That(loaded, Is.Not.Null);
+    Assert.That(backend.RunCount, Is.EqualTo(0));
+}
+
+[UnityTest]
+public IEnumerator CacheOnlyModeDoesNotInvokeRemoteBackendAndUsesOnlyCache()
+{
+    var request = RequestForTest();
+    CopernicusCurrentCache.Store(request, WriteUniqueJsonFixtureContent());
+    var backend = new SpyCurrentFetchBackend();
+    var client = new CopernicusCurrentClient(backend);
+    CopernicusCurrentResult loaded = null;
+    yield return client.Fetch(request, OceanCurrentAcquisitionMode.CacheOnly, null, DateTime.UtcNow,
+        result => loaded = result, error => Assert.Fail(error));
+    Assert.That(loaded, Is.Not.Null);
+    Assert.That(backend.RunCount, Is.EqualTo(0));
+}
+
+[UnityTest]
+public IEnumerator CacheOnlyMissFailsWithoutReplacingExistingResult()
+{
+    var active = new CurrentResultHolder(ParseKnownGoodResult());
+    var before = active.Current;
+    var backend = new SpyCurrentFetchBackend();
+    var client = new CopernicusCurrentClient(backend);
+    var failure = string.Empty;
+    yield return client.Fetch(RequestWithUniqueCacheKey(), OceanCurrentAcquisitionMode.CacheOnly, null, DateTime.UtcNow,
+        result => active.Current = result, error => failure = error);
+    Assert.That(failure, Does.Contain("cache"));
+    Assert.That(active.Current, Is.SameAs(before));
     Assert.That(backend.RunCount, Is.EqualTo(0));
 }
 
@@ -79,7 +108,7 @@ public void CacheKeyChangesWhenLocalFileContentChanges()
 }
 ```
 
-The client tests inject `SpyCurrentFetchBackend` and separately assert that `Online` invokes it exactly once. Loader tests never make mode assertions; they only test JSON/NetCDF parsing, normalization, and schema errors. Every fixture is beneath a GUID-named temporary directory and injects a fake `IOceanCurrentFileConverter`; no test starts Python or depends on credentials.
+The client tests inject `SpyCurrentFetchBackend` and separately assert that `Online` invokes it exactly once. `CurrentResultHolder` is a two-line test holder with a mutable `Current` property, so the cache-miss test proves the caller’s previous result reference is untouched. Loader tests never make mode assertions; they only test JSON/NetCDF parsing, normalization, and schema errors. Every fixture is beneath a GUID-named temporary directory and injects a fake `IOceanCurrentFileConverter`; no test starts Python or depends on credentials.
 
 - [ ] **Step 2: Run the focused tests and verify the new APIs fail to compile or assert.**
 
@@ -162,7 +191,7 @@ Expected: new validator/curve tests fail before implementation.
 
 - [ ] **Step 3: Add bounded fields and validation.**
 
-Enforce exponents `0.5–3`, buoyancy deadband `0–0.20`, piston hysteresis `0–0.10` and `<= deadband`, response times `0.1–120 s`, roll deadband `0–0.25`, and finite non-negative moment limits. Return field-specific errors and never mutate the input profile during validation.
+Enforce these exact ranges: `BuoyancyCurveExponent` is `0.5-3.0`; `BuoyancyDeadbandFraction` is `0-0.20`; `PistonHysteresisFraction` is `0-0.10` and `<= BuoyancyDeadbandFraction`; `BuoyancyResponseSeconds` and `PistonResponseSeconds` are `0.1-120`; `RollCurveExponent` is `0.5-3.0`; `RollDeadbandFraction` is `0-0.25`; moment limits are finite and non-negative. Return field-specific errors and never mutate the input profile during validation.
 
 - [ ] **Step 4: Replace only the actuator mappings.**
 
