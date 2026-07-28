@@ -441,6 +441,7 @@ namespace UnderwaterGliderTwin.UI
                     }
                     GetOceanCurrentProfile().ReplaceLayers(result.Profile.Layers);
                     profile.OceanCurrentField = result.Field.Clone();
+                    profile.OceanCurrentSourcePreference = OceanCurrentSourcePreference.NetworkPreferred;
                     selectedOceanCurrentLayerIndex = GetOceanCurrentProfile().Layers.Count > 0 ? 0 : -1;
                     lastOceanCurrentResult = result;
                     SetActualCurrentSource(result);

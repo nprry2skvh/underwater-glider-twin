@@ -138,6 +138,46 @@ namespace UnderwaterGliderTwin.UI
             drawer.pivot = new Vector2(0.5f, 0f);
             drawer.anchoredPosition = Vector2.zero;
             drawer.sizeDelta = new Vector2(-24f, 378f);
+
+            if (drawer.Find("EditorViewport") != null)
+            {
+                return;
+            }
+
+            // Preserve the stable child names and their existing event handlers, while placing
+            // the legacy fixed-coordinate editor surface inside a clipped vertical ScrollRect.
+            var existingChildren = new System.Collections.Generic.List<Transform>();
+            for (var index = 0; index < drawer.childCount; index++)
+            {
+                existingChildren.Add(drawer.GetChild(index));
+            }
+            var viewportObject = new GameObject("EditorViewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+            viewportObject.transform.SetParent(drawer, false);
+            var viewport = viewportObject.GetComponent<RectTransform>();
+            viewport.anchorMin = Vector2.zero;
+            viewport.anchorMax = Vector2.one;
+            viewport.offsetMin = new Vector2(8f, 8f);
+            viewport.offsetMax = new Vector2(-8f, -8f);
+            viewportObject.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
+            viewportObject.GetComponent<Mask>().showMaskGraphic = false;
+            var contentObject = new GameObject("EditorContent", typeof(RectTransform));
+            contentObject.transform.SetParent(viewport, false);
+            var content = contentObject.GetComponent<RectTransform>();
+            content.anchorMin = new Vector2(0.5f, 1f);
+            content.anchorMax = new Vector2(0.5f, 1f);
+            content.pivot = new Vector2(0.5f, 1f);
+            content.anchoredPosition = Vector2.zero;
+            content.sizeDelta = new Vector2(760f, 620f);
+            foreach (var child in existingChildren)
+            {
+                child.SetParent(content, false);
+            }
+            var scroll = drawer.gameObject.GetComponent<ScrollRect>() ?? drawer.gameObject.AddComponent<ScrollRect>();
+            scroll.viewport = viewport;
+            scroll.content = content;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
         }
 
         private void RefreshRuntimeStatus()

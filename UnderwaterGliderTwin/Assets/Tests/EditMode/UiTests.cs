@@ -391,6 +391,40 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void OceanEditorScrollsToEveryDynamicsControlInsideBottomSafeArea()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+            var canvas = Object.FindObjectOfType<Canvas>().transform;
+            var drawer = canvas.Find("OceanCurrentDrawerPanel").GetComponent<RectTransform>();
+            var scroll = drawer.GetComponent<ScrollRect>();
+            Assert.That(scroll, Is.Not.Null);
+            Assert.That(scroll.viewport, Is.Not.Null);
+            Assert.That(scroll.content, Is.Not.Null);
+            Assert.That(GameObject.Find("DynamicsBaseDragInput").transform.IsChildOf(scroll.content), Is.True);
+            Assert.That(GameObject.Find("DynamicsTurnaroundDurationInput").transform.IsChildOf(scroll.content), Is.True);
+            scroll.verticalNormalizedPosition = 0f;
+            Canvas.ForceUpdateCanvases();
+            Assert.That(drawer.sizeDelta.y, Is.LessThanOrEqualTo(1080f * .35f));
+        }
+
+        [Test]
+        public void OutOfRangeMissionCoordinateDoesNotInvokeSimulationCallback()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile submitted = null;
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => submitted = profile);
+            GameObject.Find("MissionLongitudeInput").GetComponent<InputField>().text = "180.01";
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(submitted, Is.Null);
+            GameObject.Find("MissionLongitudeInput").GetComponent<InputField>().text = "120";
+            GameObject.Find("MissionLatitudeInput").GetComponent<InputField>().text = "-90.01";
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(submitted, Is.Null);
+        }
+
+        [Test]
         public void InvalidOceanCurrentLayerLeavesTemplateUnchanged()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
