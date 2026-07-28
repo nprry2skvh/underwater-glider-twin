@@ -78,8 +78,9 @@ namespace UnderwaterGliderTwin.Telemetry
             if (!string.IsNullOrWhiteSpace(failure))
             {
                 Cleanup(workingDirectory);
-                if (TryFallback(request, localPath, referenceTimeUtc, out var fallback)) onSuccess?.Invoke(fallback);
-                else onFailure?.Invoke(failure);
+                var recovered = false;
+                yield return LoadFallback(request, localPath, referenceTimeUtc, result => { recovered = true; onSuccess?.Invoke(result); }, null);
+                if (!recovered) onFailure?.Invoke(failure);
                 yield break;
             }
             var deadline = DateTime.UtcNow.AddSeconds(RequestTimeoutSeconds);
@@ -93,15 +94,17 @@ namespace UnderwaterGliderTwin.Telemetry
             if (string.IsNullOrWhiteSpace(completedPath))
             {
                 Cleanup(workingDirectory);
-                if (TryFallback(request, localPath, referenceTimeUtc, out var fallback)) onSuccess?.Invoke(fallback);
-                else onFailure?.Invoke(string.IsNullOrWhiteSpace(failure) ? "Copernicus current request timed out." : failure);
+                var recovered = false;
+                yield return LoadFallback(request, localPath, referenceTimeUtc, result => { recovered = true; onSuccess?.Invoke(result); }, null);
+                if (!recovered) onFailure?.Invoke(string.IsNullOrWhiteSpace(failure) ? "Copernicus current request timed out." : failure);
                 yield break;
             }
             if (!TryReadCompletedResponse(completedPath, out var result))
             {
                 Cleanup(workingDirectory);
-                if (TryFallback(request, localPath, referenceTimeUtc, out var fallback)) onSuccess?.Invoke(fallback);
-                else onFailure?.Invoke("Copernicus current response could not be read or failed schema validation.");
+                var recovered = false;
+                yield return LoadFallback(request, localPath, referenceTimeUtc, value => { recovered = true; onSuccess?.Invoke(value); }, null);
+                if (!recovered) onFailure?.Invoke("Copernicus current response could not be read or failed schema validation.");
                 yield break;
             }
             try { CopernicusCurrentCache.Store(request, File.ReadAllText(completedPath), referenceTimeUtc, null); onSuccess?.Invoke(result); }
@@ -143,10 +146,19 @@ namespace UnderwaterGliderTwin.Telemetry
             try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch (IOException) { }
         }
 
-        private static bool TryFallback(CopernicusCurrentRequest request, string localPath, DateTime referenceTimeUtc, out CopernicusCurrentResult result)
+        private static IEnumerator LoadFallback(CopernicusCurrentRequest request, string localPath, DateTime referenceTimeUtc, Action<CopernicusCurrentResult> onSuccess, Action<string> onFailure)
         {
-            if (CopernicusCurrentCache.TryLoad(request, referenceTimeUtc, null, out result)) return true;
-            return !string.IsNullOrWhiteSpace(localPath) && OceanCurrentFileLoader.TryLoad(localPath, referenceTimeUtc, out result, out _);
+            if (CopernicusCurrentCache.TryLoad(request, referenceTimeUtc, null, out var cached))
+            {
+                onSuccess?.Invoke(cached);
+                yield break;
+            }
+            if (string.IsNullOrWhiteSpace(localPath))
+            {
+                onFailure?.Invoke("No cache or local current file is available for fallback.");
+                yield break;
+            }
+            yield return OceanCurrentFileLoader.Load(localPath, referenceTimeUtc, onSuccess, onFailure);
         }
     }
 

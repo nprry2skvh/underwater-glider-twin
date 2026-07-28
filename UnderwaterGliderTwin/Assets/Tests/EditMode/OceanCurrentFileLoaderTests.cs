@@ -1,7 +1,9 @@
 using System;
 using System.IO;
+using System.Collections;
 using NUnit.Framework;
 using UnderwaterGliderTwin.Telemetry;
+using UnityEngine.TestTools;
 
 namespace UnderwaterGliderTwin.Tests
 {
@@ -47,6 +49,56 @@ namespace UnderwaterGliderTwin.Tests
                 Assert.That(error, Does.Contain("field"));
             }
             finally { Directory.Delete(directory, true); }
+        }
+
+        [UnityTest]
+        public IEnumerator Load_RejectsConverterInvalidJsonOnTheCoroutinePath()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "ocean-current-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "field.nc");
+            File.WriteAllBytes(path, new byte[] { 0x89, (byte)'H', (byte)'D', (byte)'F' });
+            var previous = OceanCurrentFileLoader.Converter;
+            OceanCurrentFileLoader.Converter = new FakeConverter(output => File.WriteAllText(output, "not-json"));
+            var failure = string.Empty;
+            try
+            {
+                yield return OceanCurrentFileLoader.Load(path, DateTime.UtcNow, _ => Assert.Fail("Invalid converter output must not succeed."), error => failure = error);
+                Assert.That(failure, Does.Contain("converter"));
+            }
+            finally { OceanCurrentFileLoader.Converter = previous; Directory.Delete(directory, true); }
+        }
+
+        [UnityTest]
+        public IEnumerator Load_TimesOutWhenConverterDoesNotComplete()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "ocean-current-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "field.nc");
+            File.WriteAllBytes(path, new byte[] { 0x89, (byte)'H', (byte)'D', (byte)'F' });
+            var previous = OceanCurrentFileLoader.Converter;
+            var previousTimeout = OceanCurrentFileLoader.ConverterTimeoutSeconds;
+            OceanCurrentFileLoader.Converter = new FakeConverter(null, false);
+            OceanCurrentFileLoader.ConverterTimeoutSeconds = .01f;
+            var failure = string.Empty;
+            try
+            {
+                yield return OceanCurrentFileLoader.Load(path, DateTime.UtcNow, _ => Assert.Fail("Timed-out converter must not succeed."), error => failure = error);
+                Assert.That(failure, Does.Contain("timed out"));
+            }
+            finally { OceanCurrentFileLoader.Converter = previous; OceanCurrentFileLoader.ConverterTimeoutSeconds = previousTimeout; Directory.Delete(directory, true); }
+        }
+
+        private sealed class FakeConverter : IOceanCurrentFileConverter
+        {
+            private readonly Action<string> writeOutput;
+            private readonly bool complete;
+            public FakeConverter(Action<string> writeOutput, bool complete = true) { this.writeOutput = writeOutput; this.complete = complete; }
+            public void Convert(string inputPath, string outputPath, Action onCompleted, Action<string> onFailure, Action<string> onProgress)
+            {
+                writeOutput?.Invoke(outputPath);
+                if (complete) onCompleted?.Invoke();
+            }
         }
     }
 }

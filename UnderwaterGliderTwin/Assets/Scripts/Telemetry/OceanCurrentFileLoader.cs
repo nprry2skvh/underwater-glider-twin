@@ -14,6 +14,7 @@ namespace UnderwaterGliderTwin.Telemetry
     public static class OceanCurrentFileLoader
     {
         public static IOceanCurrentFileConverter Converter { get; set; } = new PythonOceanCurrentFileConverter();
+        public static float ConverterTimeoutSeconds { get; set; } = CopernicusCurrentClient.RequestTimeoutSeconds;
 
         public static bool TryLoad(string path, DateTime? referenceTimeUtc, out CopernicusCurrentResult result, out string error)
         {
@@ -79,8 +80,10 @@ namespace UnderwaterGliderTwin.Telemetry
             try
             {
                 Directory.CreateDirectory(directory);
-                Converter.Convert(Path.GetFullPath(path), stagingPath, () => completed = true, value => conversionError = value, onProgress);
-                var deadline = DateTime.UtcNow.AddSeconds(CopernicusCurrentClient.RequestTimeoutSeconds);
+                // Converter callbacks may originate on a worker thread; only this coroutine calls Unity-facing callbacks.
+                onProgress?.Invoke("Converting local NetCDF current file...");
+                Converter.Convert(Path.GetFullPath(path), stagingPath, () => completed = true, value => conversionError = value, null);
+                var deadline = DateTime.UtcNow.AddSeconds(ConverterTimeoutSeconds);
                 while (!completed && string.IsNullOrWhiteSpace(conversionError) && DateTime.UtcNow < deadline) yield return null;
                 if (!completed || !string.IsNullOrWhiteSpace(conversionError) || !File.Exists(stagingPath))
                 {
@@ -88,11 +91,17 @@ namespace UnderwaterGliderTwin.Telemetry
                     yield break;
                 }
                 File.Move(stagingPath, responsePath);
-                var converted = CopernicusCurrentResponseParser.Parse(File.ReadAllText(responsePath));
+                CopernicusCurrentResult converted;
+                try { converted = CopernicusCurrentResponseParser.Parse(File.ReadAllText(responsePath)); }
+                catch (Exception exception)
+                {
+                    onFailure?.Invoke("LocalFile converter produced invalid JSON: " + exception.Message);
+                    yield break;
+                }
                 if (!HasSpatialField(converted, out var fieldError)) { onFailure?.Invoke(fieldError); yield break; }
                 onSuccess?.Invoke(converted);
             }
-            finally { try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch (IOException) { } }
+            finally { CleanupDirectory(directory); }
         }
 
         private static bool HasSpatialField(CopernicusCurrentResult result, out string error)
@@ -100,6 +109,28 @@ namespace UnderwaterGliderTwin.Telemetry
             if (result != null && result.Field != null && result.Field.Samples.Count > 0) { error = string.Empty; return true; }
             error = "LocalFile acquisition requires a non-empty spatial current field.";
             return false;
+        }
+
+        private static void CleanupDirectory(string directory)
+        {
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                try
+                {
+                    if (!Directory.Exists(directory)) return;
+                    Directory.Delete(directory, true);
+                    return;
+                }
+                catch (IOException)
+                {
+                    System.Threading.Thread.Sleep(50 * (attempt + 1));
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    System.Threading.Thread.Sleep(50 * (attempt + 1));
+                }
+            }
+            System.Diagnostics.Trace.TraceWarning("Ocean current converter temporary directory could not be removed: " + directory);
         }
 
         public static OceanCurrentSourceIdentity CreateIdentity(string path, int schemaVersion)
