@@ -41,6 +41,10 @@ namespace UnderwaterGliderTwin.Telemetry
         public float prefetchHalfWidthKm;
         public float forecastHours;
         public string datasetId;
+        public string providerSchemaVersion = "1";
+        public string variableMapping = "uo,vo,w";
+        public string timePolicy = "nearest";
+        public string sourceCacheToken;
 
         public string DatasetId => string.IsNullOrWhiteSpace(datasetId) ? DefaultDatasetId : datasetId;
 

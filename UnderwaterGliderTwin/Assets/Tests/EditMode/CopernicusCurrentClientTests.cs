@@ -1,12 +1,56 @@
+using System;
+using System.Collections;
 using System.IO;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using UnderwaterGliderTwin.Telemetry;
 
 namespace UnderwaterGliderTwin.Tests
 {
     public sealed class CopernicusCurrentClientTests
     {
+        [UnityTest]
+        public IEnumerator LocalFileMode_DoesNotInvokeRemoteBackendAndLoadsSelectedFile()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "ocean-current-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "field.json");
+            File.WriteAllText(path, "{\"source\":\"fixture\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}]}");
+            var backend = new SpyCurrentFetchBackend();
+            var client = new CopernicusCurrentClient(backend);
+            CopernicusCurrentResult loaded = null;
+            yield return client.Fetch(RequestForTest(), OceanCurrentAcquisitionMode.LocalFile, path, DateTime.UtcNow,
+                result => loaded = result, error => Assert.Fail(error));
+            Assert.That(loaded, Is.Not.Null);
+            Assert.That(backend.RunCount, Is.EqualTo(0));
+            Directory.Delete(directory, true);
+        }
+
+        [UnityTest]
+        public IEnumerator CacheOnlyMode_DoesNotInvokeRemoteBackendAndUsesOnlyCache()
+        {
+            var request = RequestForTest();
+            CopernicusCurrentCache.Store(request, "{\"source\":\"fixture\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}]}");
+            var backend = new SpyCurrentFetchBackend();
+            var client = new CopernicusCurrentClient(backend);
+            CopernicusCurrentResult loaded = null;
+            yield return client.Fetch(request, OceanCurrentAcquisitionMode.CacheOnly, null, DateTime.UtcNow,
+                result => loaded = result, error => Assert.Fail(error));
+            Assert.That(loaded, Is.Not.Null);
+            Assert.That(backend.RunCount, Is.EqualTo(0));
+        }
+
+        [UnityTest]
+        public IEnumerator OnlineMode_InvokesBackendExactlyOnce()
+        {
+            var backend = new SpyCurrentFetchBackend();
+            var client = new CopernicusCurrentClient(backend);
+            yield return client.Fetch(RequestForTest(), OceanCurrentAcquisitionMode.Online, null, DateTime.UtcNow,
+                result => { }, error => Assert.Fail(error));
+            Assert.That(backend.RunCount, Is.EqualTo(1));
+        }
+
         [Test]
         public void RequestTimeoutSeconds_AllowsTheInitialRemoteSubsetToComplete()
         {
@@ -59,6 +103,23 @@ namespace UnderwaterGliderTwin.Tests
             finally
             {
                 File.Delete(responsePath);
+            }
+        }
+
+        private static CopernicusCurrentRequest RequestForTest()
+        {
+            return new CopernicusCurrentRequest(120.1d, 25.6d, 0f, 100f);
+        }
+
+        private sealed class SpyCurrentFetchBackend : ICopernicusCurrentFetchBackend
+        {
+            public int RunCount { get; private set; }
+
+            public void Run(CopernicusCurrentRequest request, string requestPath, string responsePath, Action<string> onCompleted, Action<string> onFailure, Action<string> onProgress)
+            {
+                RunCount++;
+                File.WriteAllText(responsePath, "{\"source\":\"backend\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}]}");
+                onCompleted?.Invoke(responsePath);
             }
         }
     }

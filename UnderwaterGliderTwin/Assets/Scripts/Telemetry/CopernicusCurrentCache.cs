@@ -9,20 +9,22 @@ namespace UnderwaterGliderTwin.Telemetry
     {
         private static readonly TimeSpan MaximumAge = TimeSpan.FromHours(6);
 
-        public static string BuildCacheKey(CopernicusCurrentRequest request)
+        public static string BuildCacheKey(CopernicusCurrentRequest request, DateTime? referenceTimeUtc = null, OceanCurrentSourceIdentity sourceIdentity = null)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
-            return string.Format(
+            var material = string.Format(
                 CultureInfo.InvariantCulture,
-                "{0}_{1:F4}_{2:F4}_{3:F0}_{4:F0}_{5:F3}_{6:F3}_{7:F1}",
-                Sanitize(request.DatasetId),
-                request.longitudeDeg,
-                request.latitudeDeg,
-                request.minDepthM,
-                request.maxDepthM,
-                request.minimumLongitudeDeg,
-                request.maximumLatitudeDeg,
-                request.forecastHours);
+                "{0}|{1}|{2}|{3:yyyyMMddHH}|{4:R}|{5:R}|{6:R}|{7:R}|{8:R}|{9:R}|{10:R}|{11:R}|{12}|{13}",
+                request.providerSchemaVersion ?? "1",
+                request.DatasetId,
+                request.variableMapping ?? "uo,vo,w",
+                (referenceTimeUtc ?? DateTime.UtcNow).ToUniversalTime(),
+                request.minimumLongitudeDeg, request.maximumLongitudeDeg,
+                request.minimumLatitudeDeg, request.maximumLatitudeDeg,
+                request.minDepthM, request.maxDepthM, request.prefetchHalfWidthKm, request.forecastHours,
+                request.timePolicy ?? "nearest",
+                sourceIdentity == null ? request.sourceCacheToken ?? string.Empty : sourceIdentity.CacheToken);
+            return OceanCurrentSourceIdentity.Sha256(material);
         }
 
         public static bool TryLoad(CopernicusCurrentRequest request, out CopernicusCurrentResult result)
@@ -43,7 +45,8 @@ namespace UnderwaterGliderTwin.Telemetry
                     string.IsNullOrWhiteSpace(cached.Source) ? "Copernicus Marine (local cache)" : cached.Source + " (local cache)",
                     cached.DatasetId,
                     cached.RetrievedAtUtc,
-                    cached.Profile);
+                    cached.Profile,
+                    cached.Field);
                 return true;
             }
             catch (Exception)
@@ -60,7 +63,9 @@ namespace UnderwaterGliderTwin.Telemetry
             {
                 var cachePath = GetCachePath(request);
                 Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
-                var temporaryPath = cachePath + ".tmp";
+                // Parse before publishing: incomplete or invalid cache data must never replace a good entry.
+                CopernicusCurrentResponseParser.Parse(responseJson);
+                var temporaryPath = cachePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 File.WriteAllText(temporaryPath, responseJson);
                 File.Copy(temporaryPath, cachePath, true);
                 File.Delete(temporaryPath);

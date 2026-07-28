@@ -11,8 +11,9 @@ from pathlib import Path
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Fetch layered ocean currents from Copernicus Marine.")
-    parser.add_argument("--request", required=True, help="Path to the Unity-generated request JSON.")
+    parser.add_argument("--request", help="Path to the Unity-generated request JSON.")
     parser.add_argument("--output", required=True, help="Path for the current-profile JSON result.")
+    parser.add_argument("--convert", help="Convert a local NetCDF4/HDF5 file to the Unity current JSON schema.")
     return parser.parse_args()
 
 
@@ -124,8 +125,41 @@ def build_field_samples(dataset, reference_time):
     return samples
 
 
+def convert_local_netcdf(input_path, output_path):
+    """Fallback invoked by Unity only when its bounded classic-NetCDF reader rejects HDF5."""
+    import xarray as xr
+
+    aliases = {
+        "lon": "longitude", "x": "longitude", "lat": "latitude", "y": "latitude",
+        "lev": "depth", "z": "depth", "u": "uo", "eastward_sea_water_velocity": "uo",
+        "v": "vo", "northward_sea_water_velocity": "vo",
+    }
+    with xr.open_dataset(input_path) as source:
+        rename = {name: aliases[name] for name in source.variables if name in aliases and aliases[name] not in source.variables}
+        dataset = source.rename(rename)
+        for required in ("longitude", "latitude", "depth", "uo", "vo"):
+            if required not in dataset:
+                raise ValueError(f"Local NetCDF has no unambiguous '{required}' variable.")
+        dataset.attrs["requested_longitude"] = float(dataset["longitude"].values.reshape(-1)[0])
+        dataset.attrs["requested_latitude"] = float(dataset["latitude"].values.reshape(-1)[0])
+        now = datetime.now(timezone.utc)
+        response = {
+            "source": "Local NetCDF conversion",
+            "datasetId": Path(input_path).name,
+            "retrievedAtUtc": now.isoformat(),
+            "layers": build_layers(dataset),
+            "fieldSamples": build_field_samples(dataset, now),
+        }
+    Path(output_path).write_text(json.dumps(response, separators=(",", ":")), encoding="utf-8")
+
+
 def main():
     args = parse_args()
+    if args.convert:
+        convert_local_netcdf(args.convert, args.output)
+        return
+    if not args.request:
+        raise ValueError("--request is required unless --convert is used.")
     request = json.loads(Path(args.request).read_text(encoding="utf-8"))
     try:
         import copernicusmarine
