@@ -53,10 +53,8 @@ namespace UnderwaterGliderTwin.UI
 
         private void SaveOceanCurrentLayer()
         {
-            if (!TryParseFloat(oceanCurrentMinDepthInput, "海流最小深度", out var minimumDepth)
-                || !TryParseFloat(oceanCurrentMaxDepthInput, "海流最大深度", out var maximumDepth)
-                || !TryParseFloat(oceanCurrentEastwardInput, "东向海流", out var eastward)
-                || !TryParseFloat(oceanCurrentNorthwardInput, "北向海流", out var northward))
+            if (!TryReadValidCurrentLayer(oceanCurrentMinDepthInput, oceanCurrentMaxDepthInput, oceanCurrentEastwardInput, oceanCurrentNorthwardInput,
+                    out var minimumDepth, out var maximumDepth, out var eastward, out var northward))
             {
                 return;
             }
@@ -136,9 +134,9 @@ namespace UnderwaterGliderTwin.UI
                 {
                     var downloadedProfile = result.Profile?.Clone();
                     var downloadedField = result.Field?.Clone();
-                    if (downloadedProfile == null || downloadedField == null)
+                    if (!TryValidateCurrentResult(result, out var currentError))
                     {
-                        SetStatus("海流下载失败：响应不完整，可重试", new Color(1f, 0.58f, 0.58f));
+                        SetStatus("海流下载失败：" + currentError + "，已保留当前海流。", new Color(1f, 0.58f, 0.58f));
                         return;
                     }
 
@@ -381,10 +379,8 @@ namespace UnderwaterGliderTwin.UI
 
         private void SaveOceanCurrentDrawerLayer()
         {
-            if (!TryParseFloat(oceanCurrentDrawerMinDepthInput, "海流最小深度", out var minimumDepth)
-                || !TryParseFloat(oceanCurrentDrawerMaxDepthInput, "海流最大深度", out var maximumDepth)
-                || !TryParseFloat(oceanCurrentDrawerEastwardInput, "东向海流", out var eastward)
-                || !TryParseFloat(oceanCurrentDrawerNorthwardInput, "北向海流", out var northward))
+            if (!TryReadValidCurrentLayer(oceanCurrentDrawerMinDepthInput, oceanCurrentDrawerMaxDepthInput, oceanCurrentDrawerEastwardInput, oceanCurrentDrawerNorthwardInput,
+                    out var minimumDepth, out var maximumDepth, out var eastward, out var northward))
             {
                 return;
             }
@@ -438,9 +434,9 @@ namespace UnderwaterGliderTwin.UI
                 request, oceanCurrentAcquisitionMode, GetLocalCurrentPath(), DateTime.UtcNow,
                 result =>
                 {
-                    if (result?.Profile == null || result.Field == null)
+                    if (!TryValidateCurrentResult(result, out var currentError))
                     {
-                        SetOceanCurrentDrawerStatus("海流获取失败：响应不完整，已保留当前海流。", new Color(1f, 0.58f, 0.58f));
+                        SetOceanCurrentDrawerStatus("海流获取失败：" + currentError + "，已保留当前海流。", new Color(1f, 0.58f, 0.58f));
                         return;
                     }
                     GetOceanCurrentProfile().ReplaceLayers(result.Profile.Layers);
@@ -505,5 +501,60 @@ namespace UnderwaterGliderTwin.UI
                 : result.Source;
             oceanCurrentActualSourceText.text = "实际来源：" + source;
         }
+
+        private bool TryReadValidCurrentLayer(InputField minimumInput, InputField maximumInput, InputField eastwardInput, InputField northwardInput,
+            out float minimumDepth, out float maximumDepth, out float eastward, out float northward)
+        {
+            minimumDepth = maximumDepth = eastward = northward = 0f;
+            if (!TryParseFloat(minimumInput, "海流最小深度", 0f, 11000f, out minimumDepth)
+                || !TryParseFloat(maximumInput, "海流最大深度", 0f, 11000f, out maximumDepth)
+                || !TryParseFloat(eastwardInput, "东向海流", -20f, 20f, out eastward)
+                || !TryParseFloat(northwardInput, "北向海流", -20f, 20f, out northward))
+            {
+                return false;
+            }
+            if (maximumDepth < minimumDepth)
+            {
+                SetStatus("海流最大深度必须不小于最小深度", new Color(1f, 0.58f, 0.58f));
+                return false;
+            }
+            return true;
+        }
+
+        private static bool TryValidateCurrentResult(CopernicusCurrentResult result, out string error)
+        {
+            error = "响应不完整";
+            if (result?.Profile == null || result.Field == null || result.Field.Samples == null || result.Field.Samples.Count == 0)
+            {
+                return false;
+            }
+            foreach (var layer in result.Profile.Layers)
+            {
+                if (layer == null || !IsFinite(layer.MinDepthM) || !IsFinite(layer.MaxDepthM)
+                    || !IsFinite(layer.EastwardMps) || !IsFinite(layer.NorthwardMps)
+                    || layer.MinDepthM < 0f || layer.MaxDepthM < layer.MinDepthM || layer.MaxDepthM > 11000f
+                    || Mathf.Abs(layer.EastwardMps) > 20f || Mathf.Abs(layer.NorthwardMps) > 20f)
+                {
+                    error = "海流层数据无效";
+                    return false;
+                }
+            }
+            foreach (var sample in result.Field.Samples)
+            {
+                if (sample == null || !IsFinite(sample.DepthM) || !IsFinite(sample.ElapsedSeconds)
+                    || !IsFinite(sample.EastwardMps) || !IsFinite(sample.NorthwardMps) || !IsFinite(sample.VerticalMps)
+                    || double.IsNaN(sample.LongitudeDeg) || double.IsInfinity(sample.LongitudeDeg)
+                    || double.IsNaN(sample.LatitudeDeg) || double.IsInfinity(sample.LatitudeDeg)
+                    || sample.DepthM < 0f || sample.DepthM > 11000f || Mathf.Abs(sample.EastwardMps) > 20f || Mathf.Abs(sample.NorthwardMps) > 20f)
+                {
+                    error = "海流网格数据无效";
+                    return false;
+                }
+            }
+            error = null;
+            return true;
+        }
+
+        private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

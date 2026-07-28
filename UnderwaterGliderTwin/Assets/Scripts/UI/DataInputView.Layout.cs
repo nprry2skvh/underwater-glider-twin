@@ -107,6 +107,7 @@ namespace UnderwaterGliderTwin.UI
         {
             if (ReferenceEquals(subscribedRuntimeSession, session))
             {
+                RefreshRuntimeStatus();
                 return;
             }
 
@@ -121,6 +122,22 @@ namespace UnderwaterGliderTwin.UI
                 subscribedRuntimeSession.StatusChanged += RefreshRuntimeStatus;
                 RefreshRuntimeStatus();
             }
+        }
+
+        private static void ConfigureInlineDrawer(RectTransform drawer)
+        {
+            if (drawer == null)
+            {
+                return;
+            }
+
+            // Modal editors are constrained to the same bottom safe area as the main drawer.
+            // They never cover more than 35% of the screen, preserving the 3D interaction area.
+            drawer.anchorMin = new Vector2(0f, 0f);
+            drawer.anchorMax = new Vector2(1f, 0f);
+            drawer.pivot = new Vector2(0.5f, 0f);
+            drawer.anchoredPosition = Vector2.zero;
+            drawer.sizeDelta = new Vector2(-24f, 378f);
         }
 
         private void RefreshRuntimeStatus()

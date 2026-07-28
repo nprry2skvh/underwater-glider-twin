@@ -364,6 +364,45 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(FindText("MissionConfigurationStatus").text, Does.Contain("质量"));
         }
 
+        [TestCase("NaN")]
+        [TestCase("Infinity")]
+        public void NonFiniteDrawerInputDoesNotInvokeSimulationCallback(string invalidValue)
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile submitted = null;
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => submitted = profile);
+            GameObject.Find("SimulationDepthInput").GetComponent<InputField>().text = invalidValue;
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(submitted, Is.Null);
+        }
+
+        [Test]
+        public void CurrentAndFlightEditorsRemainInBottomSafeArea()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            var canvas = Object.FindObjectOfType<Canvas>().transform;
+            var current = canvas.Find("OceanCurrentDrawerPanel").GetComponent<RectTransform>();
+            var flight = canvas.Find("FlightLegDrawerPanel").GetComponent<RectTransform>();
+            Assert.That(current.anchorMin, Is.EqualTo(new Vector2(0f, 0f)));
+            Assert.That(flight.anchorMin, Is.EqualTo(new Vector2(0f, 0f)));
+            Assert.That(current.sizeDelta.y, Is.LessThanOrEqualTo(1080f * .35f));
+            Assert.That(flight.sizeDelta.y, Is.LessThanOrEqualTo(1080f * .35f));
+        }
+
+        [Test]
+        public void InvalidOceanCurrentLayerLeavesTemplateUnchanged()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile submitted = null;
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null, onSimulationRequested: profile => submitted = profile);
+            GameObject.Find("OceanCurrentMinDepthInput").GetComponent<InputField>().text = "100";
+            GameObject.Find("OceanCurrentMaxDepthInput").GetComponent<InputField>().text = "10";
+            GameObject.Find("OceanCurrentSaveLayerButton").GetComponent<Button>().onClick.Invoke();
+            GameObject.Find("SimulationApplyButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(submitted.OceanCurrentProfile.Layers, Is.Empty);
+        }
+
         [Test]
         public void DataInputView_UsesChineseMissionCopy()
         {

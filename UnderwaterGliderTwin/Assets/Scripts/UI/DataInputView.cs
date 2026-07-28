@@ -169,6 +169,8 @@ namespace UnderwaterGliderTwin.UI
             RefreshPredictionSelection();
             RefreshOceanCurrentLayerEditor();
             ConfigureResponsiveBottomDrawer(panel);
+            ConfigureInlineDrawer(oceanCurrentDrawer);
+            ConfigureInlineDrawer(flightLegDrawer);
             AttachRuntimeSession(SimulationRuntimeRegistry.Active);
         }
 
@@ -295,7 +297,8 @@ namespace UnderwaterGliderTwin.UI
 
         private bool TryParseFloat(InputField inputField, string label, float minValue, float maxValue, out float value)
         {
-            if (!float.TryParse(inputField.text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value) || value < minValue || value > maxValue)
+            if (!float.TryParse(inputField.text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+                || float.IsNaN(value) || float.IsInfinity(value) || value < minValue || value > maxValue)
             {
                 SetStatus($"{label}必须在 {minValue:0.##} 到 {maxValue:0.##} 之间", new Color(1f, 0.58f, 0.58f));
                 return false;
@@ -317,7 +320,8 @@ namespace UnderwaterGliderTwin.UI
 
         private bool TryParseFloat(InputField inputField, string label, out float value)
         {
-            if (!float.TryParse(inputField.text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            if (!float.TryParse(inputField.text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+                || float.IsNaN(value) || float.IsInfinity(value))
             {
                 SetStatus($"{label}必须是数字", new Color(1f, 0.58f, 0.58f));
                 return false;
