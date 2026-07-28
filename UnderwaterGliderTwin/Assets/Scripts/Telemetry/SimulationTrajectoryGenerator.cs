@@ -58,6 +58,11 @@ namespace UnderwaterGliderTwin.Telemetry
                 : Mathf.Max(0f, dynamics.CruiseSpeedMps);
             var state = snapshot.DynamicsState;
             var plannedState = state;
+            // The actual state is local to the source profile origin, whereas planned
+            // coordinates are emitted relative to the current planned seed position.
+            // Rebase only the planned horizontal state so its first generated point
+            // continues from that seed instead of adding the actual history offset twice.
+            plannedState.PositionEndM = new Vector3(0f, state.PositionEndM.y, 0f);
             plannedState.EarthVelocityEndMps = plannedState.WaterVelocityEndMps;
             var sampleInterval = Mathf.Max(0.1f, profile.SampleIntervalSeconds);
             var cycleDuration = Mathf.Max(sampleInterval, profile.CycleDurationSeconds);

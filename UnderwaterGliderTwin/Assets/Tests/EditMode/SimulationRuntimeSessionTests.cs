@@ -264,6 +264,42 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void SeededHotUpdate_NonOriginPlannedFutureStartsAtCurrentPlannedPosition()
+        {
+            var profile = SimulationProfile.Default;
+            profile.OriginLongitudeDeg = 120d;
+            profile.OriginLatitudeDeg = 25d;
+            profile.SampleIntervalSeconds = 1f;
+            profile.CycleDurationSeconds = 1f;
+            profile.CycleCount = 1;
+            profile.TargetDepthM = 10f;
+            profile.HorizontalSpeedMps = 0f;
+            profile.StartHeadingDeg = 0f;
+            profile.Dynamics.CruiseSpeedMps = 0f;
+            var seed = new TelemetryFrame(
+                10, "seed", 10f,
+                120.002d, 25.003d,
+                10f, 500f,
+                0f, 0f, 0f,
+                28f, 0.5f, 90f,
+                "Parameter Simulation", "Glide",
+                1f, 0f, 10f, 500f,
+                0f, 0f, 0f,
+                null,
+                120.005d, 25.006d);
+            var snapshot = SimulationStateSnapshot.FromFrame(seed, profile);
+
+            using (var slices = SimulationTrajectoryGenerator.GenerateFutureSlices(snapshot, profile, 1).GetEnumerator())
+            {
+                Assert.That(slices.MoveNext(), Is.True);
+                var firstFuture = slices.Current[0];
+
+                Assert.That(firstFuture.PlannedLongitudeDeg, Is.EqualTo(seed.PlannedLongitudeDeg).Within(0.0000001d));
+                Assert.That(firstFuture.PlannedLatitudeDeg, Is.EqualTo(seed.PlannedLatitudeDeg).Within(0.0000001d));
+            }
+        }
+
+        [Test]
         public void PredictionController_UsesReplacementFramesAfterPlaybackRebuild()
         {
             var original = BuildFrames(8);
