@@ -78,7 +78,7 @@ NetCDF4/HDF5 fallback 使用独立临时目录（位于 `Application.temporaryCa
 应用参数的事务规则：
 
 1. 从当前播放帧复制 snapshot 作为 future trajectory seed。
-2. 历史 frame 不修改；可创建新容器，但 `[0..currentIndex]` 的 frame 引用必须与旧容器一致。
+2. 历史 frame 不修改；可创建新容器，但 `[0..currentIndex]` 的 frame 值和顺序必须与旧容器完全一致。当前 `TelemetryFrame` 是 readonly struct，因此不使用对象引用身份作为契约。
 3. 只从 current time 生成 future frames。
 4. 轨迹显示分为历史段和预测段。
 5. 当前帧、播放速度、暂停状态、相机状态不变。

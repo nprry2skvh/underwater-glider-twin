@@ -154,7 +154,7 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/Telemetry UnderwaterGliderT
 
 **Interfaces:**
 - `GliderDynamicsProfileValidator.TryValidate(GliderDynamicsProfile profile, out string error)`.
-- New profile fields: `BuoyancyCurveExponent`, `BuoyancyDeadbandFraction`, `PistonHysteresisFraction`, `RollCurveExponent`, `RollDeadbandFraction`, `NonlinearRollRestoringGain`, `MaxRollMomentNm`.
+- Profile fields validated by this task: existing `BuoyancyResponseSeconds` and `PistonResponseSeconds`, plus new `BuoyancyCurveExponent`, `BuoyancyDeadbandFraction`, `PistonHysteresisFraction`, `RollCurveExponent`, `RollDeadbandFraction`, `NonlinearRollRestoringGain`, and `MaxRollMomentNm`.
 - `GliderDynamicsProfile.Clone()` copies every new field.
 
 - [ ] **Step 1: Write validator and compatibility tests first.**
@@ -226,7 +226,7 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/Telemetry/GliderDynamics* U
 - `SimulationStateSnapshot.FromFrame(TelemetryFrame frame, SimulationProfile profile)`.
 - `SimulationRuntimeSession.RequestProfileUpdate(SimulationProfile candidate)` returns `bool` and exposes `IsRebuildPending`, `LastError`, `StatusChanged`, and `ActiveProfile`.
 - `SimulationRuntimeRegistry.Active` exposes the current simulation session to UI without changing the existing `DataInputView.Initialize` callback signature. `SimulationRuntimeRegistry.ActiveChanged` fires whenever `SetActive` replaces the session; `SetActive(null)` clears it and fires once.
-- `PlaybackModel.ReplaceFrames(IReadOnlyList<TelemetryFrame> frames, int preservedIndex)` preserves frame references through `preservedIndex` and keeps playing/speed/direction state.
+- `PlaybackModel.ReplaceFrames(IReadOnlyList<TelemetryFrame> frames, int preservedIndex)` preserves the exact frame values and order through `preservedIndex` (the current `TelemetryFrame` is a readonly struct, so reference identity is not meaningful) and keeps playing/speed/direction state.
 - `TrajectoryView.ReplaceFutureTrajectory(...)` updates only the prediction segment.
 
 - [ ] **Step 1: Add failing playback and session transaction tests.**
@@ -239,17 +239,17 @@ public void ApplyProfileKeepsHistoryReferencesAndCurrentIndex()
     var model = new PlaybackModel(oldFrames, 1f);
     model.SeekNormalized(0.5f);
     var currentIndex = model.CurrentIndex;
-    var historyReference = model.Frames[0];
+    var historySnapshot = CaptureFrameSnapshot(model.Frames[0]);
     var fakeGenerator = new ManualFakeFutureGenerator();
     var session = CreateSessionForTest(oldFrames, fakeGenerator);
     Assert.That(session.RequestProfileUpdate(ChangedProfile), Is.True);
     fakeGenerator.CompleteWithDeterministicFuture();
     Assert.That(model.CurrentIndex, Is.EqualTo(currentIndex));
-    Assert.That(model.Frames[0].RowIndex, Is.EqualTo(historyReference.RowIndex));
+    Assert.That(CaptureFrameSnapshot(model.Frames[0]), Is.EqualTo(historySnapshot));
 }
 ```
 
-`CreateSessionForTest` returns a session wired to the supplied `PlaybackModel`; `ManualFakeFutureGenerator` captures the production completion callback and `CompleteWithDeterministicFuture` releases it after the pending-state assertions.
+`CaptureFrameSnapshot` returns an immutable value containing every `TelemetryFrame` field, including nullable diagnostics. `CreateSessionForTest` returns a session wired to the supplied `PlaybackModel`; `ManualFakeFutureGenerator` captures the production completion callback and `CompleteWithDeterministicFuture` releases it after the pending-state assertions.
 
 - [ ] **Step 2: Run focused tests and confirm transaction APIs fail.**
 
