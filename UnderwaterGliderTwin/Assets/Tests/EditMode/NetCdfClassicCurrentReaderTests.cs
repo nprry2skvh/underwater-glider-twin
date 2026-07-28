@@ -129,6 +129,23 @@ namespace UnderwaterGliderTwin.Tests
             finally { Directory.Delete(Path.GetDirectoryName(path), true); }
         }
 
+        [Test]
+        public void TryRead_RejectsAmbiguousLongitudeCoordinates()
+        {
+            var variables = new List<FixtureVariable>
+            {
+                new FixtureVariable("longitude", new[] { 0 }, new[] { 120f }), new FixtureVariable("x", new[] { 3 }, new[] { 120f }), new FixtureVariable("latitude", new[] { 1 }, new[] { 25f }), new FixtureVariable("depth", new[] { 2 }, new[] { 5f }),
+                new FixtureVariable("uo", new[] { 2, 1, 0 }, new[] { 1f }), new FixtureVariable("vo", new[] { 2, 1, 0 }, new[] { 1f })
+            };
+            var path = WriteFixture(Build(1, new[] { new FixtureDimension("longitude", 1), new FixtureDimension("latitude", 1), new FixtureDimension("depth", 1), new FixtureDimension("x", 1) }, variables));
+            try
+            {
+                Assert.That(NetCdfClassicCurrentReader.TryRead(path, DateTime.UtcNow, out _, out var error), Is.False);
+                Assert.That(error, Does.Contain("ambiguous longitude"));
+            }
+            finally { Directory.Delete(Path.GetDirectoryName(path), true); }
+        }
+
         private static string WriteFixture(byte[] bytes)
         {
             var directory = Path.Combine(Path.GetTempPath(), "ocean-current-" + Guid.NewGuid().ToString("N"));
