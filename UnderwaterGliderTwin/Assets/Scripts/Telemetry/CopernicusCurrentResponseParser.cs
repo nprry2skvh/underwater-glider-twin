@@ -1,10 +1,40 @@
 using System;
+using System.Linq;
 using UnityEngine;
 
 namespace UnderwaterGliderTwin.Telemetry
 {
     public static class CopernicusCurrentResponseParser
     {
+        public static string Serialize(CopernicusCurrentResult result)
+        {
+            if (result == null) throw new ArgumentNullException(nameof(result));
+            var payload = new CopernicusCurrentPayload
+            {
+                source = result.Source,
+                datasetId = result.DatasetId,
+                retrievedAtUtc = result.RetrievedAtUtc,
+                layers = Array.ConvertAll(result.Profile.Layers.ToArray(), layer => new CopernicusCurrentLayerPayload
+                {
+                    minDepthM = layer.MinDepthM,
+                    maxDepthM = layer.MaxDepthM,
+                    eastwardMps = layer.EastwardMps,
+                    northwardMps = layer.NorthwardMps
+                }),
+                fieldSamples = Array.ConvertAll(result.Field.Samples.ToArray(), sample => new CopernicusCurrentFieldSamplePayload
+                {
+                    longitudeDeg = sample.LongitudeDeg,
+                    latitudeDeg = sample.LatitudeDeg,
+                    depthM = sample.DepthM,
+                    elapsedSeconds = sample.ElapsedSeconds,
+                    eastwardMps = sample.EastwardMps,
+                    northwardMps = sample.NorthwardMps,
+                    verticalMps = sample.VerticalMps
+                })
+            };
+            return JsonUtility.ToJson(payload);
+        }
+
         public static CopernicusCurrentResult Parse(string json)
         {
             if (string.IsNullOrWhiteSpace(json))

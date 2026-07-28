@@ -31,14 +31,28 @@ namespace UnderwaterGliderTwin.Telemetry
 
             if (mode == OceanCurrentAcquisitionMode.LocalFile)
             {
-                if (OceanCurrentFileLoader.TryLoad(localPath, referenceTimeUtc, out var localResult, out var localError)) onSuccess?.Invoke(localResult);
-                else onFailure?.Invoke(localError);
+                OceanCurrentSourceIdentity identity;
+                try
+                {
+                    identity = OceanCurrentFileLoader.CreateIdentity(localPath, 1);
+                    request.sourceCacheToken = identity.CacheToken;
+                }
+                catch (Exception exception) { onFailure?.Invoke("LocalFile identity failed: " + exception.Message); yield break; }
+                CopernicusCurrentResult localResult = null;
+                string localError = null;
+                yield return OceanCurrentFileLoader.Load(localPath, referenceTimeUtc, result => localResult = result, error => localError = error, onProgress);
+                if (localResult != null)
+                {
+                    CopernicusCurrentCache.Store(request, CopernicusCurrentResponseParser.Serialize(localResult), referenceTimeUtc, identity);
+                    onSuccess?.Invoke(localResult);
+                }
+                else onFailure?.Invoke(localError ?? "LocalFile acquisition failed.");
                 yield break;
             }
 
             if (mode == OceanCurrentAcquisitionMode.CacheOnly)
             {
-                if (CopernicusCurrentCache.TryLoad(request, out var cached)) onSuccess?.Invoke(cached);
+                if (CopernicusCurrentCache.TryLoad(request, referenceTimeUtc, null, out var cached)) onSuccess?.Invoke(cached);
                 else onFailure?.Invoke("Current cache has no valid entry for this request.");
                 yield break;
             }
@@ -64,7 +78,8 @@ namespace UnderwaterGliderTwin.Telemetry
             if (!string.IsNullOrWhiteSpace(failure))
             {
                 Cleanup(workingDirectory);
-                onFailure?.Invoke(failure);
+                if (TryFallback(request, localPath, referenceTimeUtc, out var fallback)) onSuccess?.Invoke(fallback);
+                else onFailure?.Invoke(failure);
                 yield break;
             }
             var deadline = DateTime.UtcNow.AddSeconds(RequestTimeoutSeconds);
@@ -78,16 +93,18 @@ namespace UnderwaterGliderTwin.Telemetry
             if (string.IsNullOrWhiteSpace(completedPath))
             {
                 Cleanup(workingDirectory);
-                onFailure?.Invoke(string.IsNullOrWhiteSpace(failure) ? "Copernicus current request timed out." : failure);
+                if (TryFallback(request, localPath, referenceTimeUtc, out var fallback)) onSuccess?.Invoke(fallback);
+                else onFailure?.Invoke(string.IsNullOrWhiteSpace(failure) ? "Copernicus current request timed out." : failure);
                 yield break;
             }
             if (!TryReadCompletedResponse(completedPath, out var result))
             {
                 Cleanup(workingDirectory);
-                onFailure?.Invoke("Copernicus current response could not be read or failed schema validation.");
+                if (TryFallback(request, localPath, referenceTimeUtc, out var fallback)) onSuccess?.Invoke(fallback);
+                else onFailure?.Invoke("Copernicus current response could not be read or failed schema validation.");
                 yield break;
             }
-            try { CopernicusCurrentCache.Store(request, File.ReadAllText(completedPath)); onSuccess?.Invoke(result); }
+            try { CopernicusCurrentCache.Store(request, File.ReadAllText(completedPath), referenceTimeUtc, null); onSuccess?.Invoke(result); }
             finally { Cleanup(workingDirectory); }
         }
 
@@ -124,6 +141,12 @@ namespace UnderwaterGliderTwin.Telemetry
         private static void Cleanup(string directory)
         {
             try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch (IOException) { }
+        }
+
+        private static bool TryFallback(CopernicusCurrentRequest request, string localPath, DateTime referenceTimeUtc, out CopernicusCurrentResult result)
+        {
+            if (CopernicusCurrentCache.TryLoad(request, referenceTimeUtc, null, out result)) return true;
+            return !string.IsNullOrWhiteSpace(localPath) && OceanCurrentFileLoader.TryLoad(localPath, referenceTimeUtc, out result, out _);
         }
     }
 

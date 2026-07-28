@@ -75,7 +75,9 @@ namespace UnderwaterGliderTwin.Telemetry
                         var upper = index + 1 < depthOrder.Length ? (currentDepth + (float)depth[depthOrder[index + 1]]) * 0.5f : currentDepth + (index == 0 ? 1f : (currentDepth - (float)depth[depthOrder[index - 1]]) * .5f);
                         layers.Add(new OceanCurrentLayer(Math.Max(0f, lower), Math.Max(lower, upper), eastSums[sourceIndex] / totals[sourceIndex], northSums[sourceIndex] / totals[sourceIndex]));
                     }
-                    result = new CopernicusCurrentResult("Local NetCDF", Path.GetFileName(path), referenceTimeUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture), new OceanCurrentProfile(layers), new OceanCurrentField(samples));
+                    var normalized = new CopernicusCurrentResult("Local NetCDF", Path.GetFileName(path), referenceTimeUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture), new OceanCurrentProfile(layers), new OceanCurrentField(samples));
+                    // NetCDF crosses the same validated schema boundary as JSON and Python-converted files.
+                    result = CopernicusCurrentResponseParser.Parse(CopernicusCurrentResponseParser.Serialize(normalized));
                     return true;
                 }
             }

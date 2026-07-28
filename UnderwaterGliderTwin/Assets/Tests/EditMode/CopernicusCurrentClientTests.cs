@@ -16,7 +16,7 @@ namespace UnderwaterGliderTwin.Tests
             var directory = Path.Combine(Path.GetTempPath(), "ocean-current-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
             var path = Path.Combine(directory, "field.json");
-            File.WriteAllText(path, "{\"source\":\"fixture\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}]}");
+            File.WriteAllText(path, "{\"source\":\"fixture\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}],\"fieldSamples\":[{\"longitudeDeg\":120,\"latitudeDeg\":25,\"depthM\":5,\"elapsedSeconds\":0,\"eastwardMps\":1,\"northwardMps\":2,\"verticalMps\":0}]}");
             var backend = new SpyCurrentFetchBackend();
             var client = new CopernicusCurrentClient(backend);
             CopernicusCurrentResult loaded = null;
@@ -49,6 +49,20 @@ namespace UnderwaterGliderTwin.Tests
             yield return client.Fetch(RequestForTest(), OceanCurrentAcquisitionMode.Online, null, DateTime.UtcNow,
                 result => { }, error => Assert.Fail(error));
             Assert.That(backend.RunCount, Is.EqualTo(1));
+        }
+
+        [UnityTest]
+        public IEnumerator CacheOnlyMiss_DoesNotReplaceCallerOwnedResult()
+        {
+            var active = new ResultHolder(CopernicusCurrentResponseParser.Parse("{\"source\":\"existing\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":1,\"eastwardMps\":0,\"northwardMps\":0}]}"));
+            var before = active.Current;
+            var backend = new SpyCurrentFetchBackend();
+            var failure = string.Empty;
+            yield return new CopernicusCurrentClient(backend).Fetch(new CopernicusCurrentRequest(19.876543d, 11.234567d, 0f, 1f), OceanCurrentAcquisitionMode.CacheOnly, null, DateTime.UtcNow,
+                result => active.Current = result, error => failure = error);
+            Assert.That(failure, Does.Contain("cache"));
+            Assert.That(active.Current, Is.SameAs(before));
+            Assert.That(backend.RunCount, Is.EqualTo(0));
         }
 
         [Test]
@@ -121,6 +135,12 @@ namespace UnderwaterGliderTwin.Tests
                 File.WriteAllText(responsePath, "{\"source\":\"backend\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}]}");
                 onCompleted?.Invoke(responsePath);
             }
+        }
+
+        private sealed class ResultHolder
+        {
+            public ResultHolder(CopernicusCurrentResult current) { Current = current; }
+            public CopernicusCurrentResult Current { get; set; }
         }
     }
 }

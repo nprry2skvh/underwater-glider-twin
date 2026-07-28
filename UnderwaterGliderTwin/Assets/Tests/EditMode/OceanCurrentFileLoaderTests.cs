@@ -33,5 +33,20 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(first.CacheToken, Is.Not.EqualTo(second.CacheToken));
         }
+
+        [Test]
+        public void TryLoad_RejectsProfileOnlyJsonBecauseAcquisitionRequiresSpatialField()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "ocean-current-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "profile.json");
+            File.WriteAllText(path, "{\"source\":\"fixture\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":10,\"eastwardMps\":1,\"northwardMps\":2}]}");
+            try
+            {
+                Assert.That(OceanCurrentFileLoader.TryLoad(path, DateTime.UtcNow, out _, out var error), Is.False);
+                Assert.That(error, Does.Contain("field"));
+            }
+            finally { Directory.Delete(directory, true); }
+        }
     }
 }

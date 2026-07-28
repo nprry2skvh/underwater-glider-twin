@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
+using System.Threading.Tasks;
 
 namespace UnderwaterGliderTwin.Telemetry
 {
@@ -37,12 +38,12 @@ namespace UnderwaterGliderTwin.Telemetry
                 if (string.Equals(Path.GetExtension(normalizedPath), ".json", StringComparison.OrdinalIgnoreCase))
                 {
                     result = CopernicusCurrentResponseParser.Parse(File.ReadAllText(normalizedPath));
-                    return true;
+                    return HasSpatialField(result, out error);
                 }
 
                 if (NetCdfClassicCurrentReader.TryRead(normalizedPath, referenceTimeUtc ?? DateTime.UtcNow, out result, out error))
                 {
-                    return true;
+                    return HasSpatialField(result, out error);
                 }
 
                 if (!NetCdfClassicCurrentReader.IsUnsupportedFormat(error))
@@ -57,26 +58,48 @@ namespace UnderwaterGliderTwin.Telemetry
                     return false;
                 }
 
-                var directory = Path.Combine(UnityEngine.Application.temporaryCachePath, "OceanCurrentConvert", Guid.NewGuid().ToString("N"));
-                var outputPath = Path.Combine(directory, "converted.json");
-                Directory.CreateDirectory(directory);
-                var completed = false;
-                string conversionError = null;
-                Converter.Convert(normalizedPath, outputPath, () => completed = true, value => conversionError = value, null);
-                if (!completed || !string.IsNullOrWhiteSpace(conversionError) || !File.Exists(outputPath))
-                {
-                    error = "LocalFile converter failed for '" + normalizedPath + "': " + (conversionError ?? "no usable output was produced.");
-                    return false;
-                }
-
-                result = CopernicusCurrentResponseParser.Parse(File.ReadAllText(outputPath));
-                return true;
+                return false;
             }
             catch (Exception exception)
             {
                 error = "LocalFile parse failed for '" + path + "': " + exception.Message;
                 return false;
             }
+        }
+
+        public static System.Collections.IEnumerator Load(string path, DateTime referenceTimeUtc, Action<CopernicusCurrentResult> onSuccess, Action<string> onFailure, Action<string> onProgress = null)
+        {
+            if (TryLoad(path, referenceTimeUtc, out var directResult, out var directError)) { onSuccess?.Invoke(directResult); yield break; }
+            if (!NetCdfClassicCurrentReader.IsUnsupportedFormat(directError)) { onFailure?.Invoke(directError); yield break; }
+            var directory = Path.Combine(UnityEngine.Application.temporaryCachePath, "OceanCurrentConvert", Guid.NewGuid().ToString("N"));
+            var stagingPath = Path.Combine(directory, "converted.staging.json");
+            var responsePath = Path.Combine(directory, "converted.json");
+            var completed = false;
+            string conversionError = null;
+            try
+            {
+                Directory.CreateDirectory(directory);
+                Converter.Convert(Path.GetFullPath(path), stagingPath, () => completed = true, value => conversionError = value, onProgress);
+                var deadline = DateTime.UtcNow.AddSeconds(CopernicusCurrentClient.RequestTimeoutSeconds);
+                while (!completed && string.IsNullOrWhiteSpace(conversionError) && DateTime.UtcNow < deadline) yield return null;
+                if (!completed || !string.IsNullOrWhiteSpace(conversionError) || !File.Exists(stagingPath))
+                {
+                    onFailure?.Invoke("LocalFile converter failed for '" + path + "': " + (conversionError ?? "timed out or produced no output."));
+                    yield break;
+                }
+                File.Move(stagingPath, responsePath);
+                var converted = CopernicusCurrentResponseParser.Parse(File.ReadAllText(responsePath));
+                if (!HasSpatialField(converted, out var fieldError)) { onFailure?.Invoke(fieldError); yield break; }
+                onSuccess?.Invoke(converted);
+            }
+            finally { try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch (IOException) { } }
+        }
+
+        private static bool HasSpatialField(CopernicusCurrentResult result, out string error)
+        {
+            if (result != null && result.Field != null && result.Field.Samples.Count > 0) { error = string.Empty; return true; }
+            error = "LocalFile acquisition requires a non-empty spatial current field.";
+            return false;
         }
 
         public static OceanCurrentSourceIdentity CreateIdentity(string path, int schemaVersion)
@@ -102,17 +125,23 @@ namespace UnderwaterGliderTwin.Telemetry
                 var configuredPython = Environment.GetEnvironmentVariable("COPERNICUS_PYTHON");
                 var process = new Process { StartInfo = new ProcessStartInfo { FileName = string.IsNullOrWhiteSpace(configuredPython) ? "python" : configuredPython, Arguments = Quote(scriptPath) + " --convert " + Quote(inputPath) + " --output " + Quote(outputPath), CreateNoWindow = true, UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true } };
                 process.Start();
-                if (!process.WaitForExit((int)(CopernicusCurrentClient.RequestTimeoutSeconds * 1000f)))
+                Task.Run(() =>
                 {
-                    try { process.Kill(); } catch (InvalidOperationException) { }
-                    onFailure?.Invoke("Python converter timed out.");
-                    return;
-                }
-                var standardError = process.StandardError.ReadToEnd();
-                var standardOutput = process.StandardOutput.ReadToEnd();
-                if (process.ExitCode != 0 || !File.Exists(outputPath)) onFailure?.Invoke(CopernicusCurrentClient.SelectFailureReason(standardError, standardOutput));
-                else onCompleted?.Invoke();
-                process.Dispose();
+                    try
+                    {
+                        if (!process.WaitForExit((int)(CopernicusCurrentClient.RequestTimeoutSeconds * 1000f)))
+                        {
+                            try { process.Kill(); } catch (InvalidOperationException) { }
+                            onFailure?.Invoke("Python converter timed out.");
+                            return;
+                        }
+                        var standardError = process.StandardError.ReadToEnd();
+                        var standardOutput = process.StandardOutput.ReadToEnd();
+                        if (process.ExitCode != 0 || !File.Exists(outputPath)) onFailure?.Invoke(CopernicusCurrentClient.SelectFailureReason(standardError, standardOutput));
+                        else onCompleted?.Invoke();
+                    }
+                    finally { process.Dispose(); }
+                });
             }
             catch (Exception exception) { onFailure?.Invoke("Unable to start Python converter: " + exception.Message); }
         }

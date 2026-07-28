@@ -29,12 +29,17 @@ namespace UnderwaterGliderTwin.Telemetry
 
         public static bool TryLoad(CopernicusCurrentRequest request, out CopernicusCurrentResult result)
         {
+            return TryLoad(request, DateTime.UtcNow, null, out result);
+        }
+
+        public static bool TryLoad(CopernicusCurrentRequest request, DateTime referenceTimeUtc, OceanCurrentSourceIdentity sourceIdentity, out CopernicusCurrentResult result)
+        {
             result = null;
             if (request == null) return false;
 
             try
             {
-                var cachePath = GetCachePath(request);
+                var cachePath = GetCachePath(request, referenceTimeUtc, sourceIdentity);
                 if (!File.Exists(cachePath) || DateTime.UtcNow - File.GetLastWriteTimeUtc(cachePath) > MaximumAge)
                 {
                     return false;
@@ -57,28 +62,52 @@ namespace UnderwaterGliderTwin.Telemetry
 
         public static void Store(CopernicusCurrentRequest request, string responseJson)
         {
+            Store(request, responseJson, DateTime.UtcNow, null);
+        }
+
+        public static void Store(CopernicusCurrentRequest request, string responseJson, DateTime referenceTimeUtc, OceanCurrentSourceIdentity sourceIdentity)
+        {
             if (request == null || string.IsNullOrWhiteSpace(responseJson)) return;
 
+            string temporaryPath = null;
+            string backupPath = null;
             try
             {
-                var cachePath = GetCachePath(request);
+                var cachePath = GetCachePath(request, referenceTimeUtc, sourceIdentity);
                 Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
                 // Parse before publishing: incomplete or invalid cache data must never replace a good entry.
                 CopernicusCurrentResponseParser.Parse(responseJson);
-                var temporaryPath = cachePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                temporaryPath = cachePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 File.WriteAllText(temporaryPath, responseJson);
-                File.Copy(temporaryPath, cachePath, true);
-                File.Delete(temporaryPath);
+                if (File.Exists(cachePath))
+                {
+                    backupPath = cachePath + "." + Guid.NewGuid().ToString("N") + ".bak";
+                    File.Replace(temporaryPath, cachePath, backupPath, true);
+                }
+                else
+                {
+                    File.Move(temporaryPath, cachePath);
+                }
             }
             catch (Exception)
             {
                 // A cache write must never make an otherwise valid current lookup fail.
             }
+            finally
+            {
+                TryDelete(temporaryPath);
+                TryDelete(backupPath);
+            }
         }
 
-        private static string GetCachePath(CopernicusCurrentRequest request)
+        private static string GetCachePath(CopernicusCurrentRequest request, DateTime referenceTimeUtc, OceanCurrentSourceIdentity sourceIdentity)
         {
-            return Path.Combine(Application.persistentDataPath, "CopernicusCurrentCache", BuildCacheKey(request) + ".json");
+            return Path.Combine(Application.persistentDataPath, "CopernicusCurrentCache", BuildCacheKey(request, referenceTimeUtc, sourceIdentity) + ".json");
+        }
+
+        private static void TryDelete(string path)
+        {
+            try { if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) File.Delete(path); } catch (IOException) { }
         }
 
         private static string Sanitize(string value)
