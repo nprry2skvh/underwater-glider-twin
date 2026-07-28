@@ -415,16 +415,23 @@ namespace UnderwaterGliderTwin.Tests
         {
             var canvasObject = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             var canvas = canvasObject.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.renderMode = RenderMode.WorldSpace;
+            var canvasRect = canvas.GetComponent<RectTransform>();
+            canvasRect.anchorMin = new Vector2(.5f, .5f);
+            canvasRect.anchorMax = new Vector2(.5f, .5f);
+            canvasRect.pivot = new Vector2(.5f, .5f);
+            canvasRect.sizeDelta = new Vector2(width, height);
             var scaler = canvasObject.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(width, height);
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            Canvas.ForceUpdateCanvases();
+            Assert.That(canvasRect.rect.width, Is.EqualTo((float)width).Within(.1f));
+            Assert.That(canvasRect.rect.height, Is.EqualTo((float)height).Within(.1f));
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
 
             GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
             var oceanScroll = canvas.transform.Find("OceanCurrentDrawerPanel").GetComponent<ScrollRect>();
-            Assert.That(oceanScroll.GetComponent<RectTransform>().rect.height, Is.LessThanOrEqualTo(canvas.GetComponent<RectTransform>().rect.height * .35f + .1f));
+            Assert.That(oceanScroll.GetComponent<RectTransform>().rect.height, Is.LessThanOrEqualTo(canvasRect.rect.height * .35f + .1f));
             oceanScroll.verticalNormalizedPosition = 1f;
             Canvas.ForceUpdateCanvases();
             AssertRectInsideViewport(GameObject.Find("OceanCurrentDrawerMinDepthInput").GetComponent<RectTransform>(), oceanScroll.viewport, width, height);
@@ -435,7 +442,7 @@ namespace UnderwaterGliderTwin.Tests
 
             GameObject.Find("FlightLegSettingsButton").GetComponent<Button>().onClick.Invoke();
             var flightScroll = canvas.transform.Find("FlightLegDrawerPanel").GetComponent<ScrollRect>();
-            Assert.That(flightScroll.GetComponent<RectTransform>().rect.height, Is.LessThanOrEqualTo(canvas.GetComponent<RectTransform>().rect.height * .35f + .1f));
+            Assert.That(flightScroll.GetComponent<RectTransform>().rect.height, Is.LessThanOrEqualTo(canvasRect.rect.height * .35f + .1f));
             flightScroll.verticalNormalizedPosition = 1f;
             Canvas.ForceUpdateCanvases();
             AssertRectInsideViewport(GameObject.Find("DescentNetBuoyancyInput").GetComponent<RectTransform>(), flightScroll.viewport, width, height);
