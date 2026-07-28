@@ -137,7 +137,9 @@ namespace UnderwaterGliderTwin.UI
             drawer.anchorMax = new Vector2(1f, 0f);
             drawer.pivot = new Vector2(0.5f, 0f);
             drawer.anchoredPosition = Vector2.zero;
-            drawer.sizeDelta = new Vector2(-24f, 378f);
+            drawer.sizeDelta = new Vector2(-24f, 48f);
+            var heightLimiter = drawer.gameObject.GetComponent<DrawerHeightLimiter>() ?? drawer.gameObject.AddComponent<DrawerHeightLimiter>();
+            heightLimiter.Apply();
 
             if (drawer.Find("EditorViewport") != null)
             {
@@ -156,8 +158,8 @@ namespace UnderwaterGliderTwin.UI
             var viewport = viewportObject.GetComponent<RectTransform>();
             viewport.anchorMin = Vector2.zero;
             viewport.anchorMax = Vector2.one;
-            viewport.offsetMin = new Vector2(8f, 8f);
-            viewport.offsetMax = new Vector2(-8f, -8f);
+            viewport.offsetMin = Vector2.zero;
+            viewport.offsetMax = Vector2.zero;
             viewportObject.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
             viewportObject.GetComponent<Mask>().showMaskGraphic = false;
             var contentObject = new GameObject("EditorContent", typeof(RectTransform));
@@ -178,6 +180,41 @@ namespace UnderwaterGliderTwin.UI
             scroll.horizontal = false;
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
+        }
+
+        private sealed class DrawerHeightLimiter : MonoBehaviour
+        {
+            private RectTransform rect;
+
+            private void Awake()
+            {
+                rect = transform as RectTransform;
+            }
+
+            private void OnEnable()
+            {
+                Apply();
+            }
+
+            private void OnRectTransformDimensionsChange()
+            {
+                Apply();
+            }
+
+            public void Apply()
+            {
+                if (rect == null)
+                {
+                    rect = transform as RectTransform;
+                }
+                var canvas = GetComponentInParent<Canvas>();
+                var canvasRect = canvas != null ? canvas.transform as RectTransform : null;
+                if (rect == null || canvasRect == null || canvasRect.rect.height <= 0f)
+                {
+                    return;
+                }
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, canvasRect.rect.height * 0.35f);
+            }
         }
 
         private void RefreshRuntimeStatus()
