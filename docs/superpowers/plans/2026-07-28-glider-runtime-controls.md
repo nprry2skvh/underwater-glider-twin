@@ -27,6 +27,7 @@
 - Create: `UnderwaterGliderTwin/Assets/Scripts/Telemetry/OceanCurrentSourceIdentity.cs`
 - Create: `UnderwaterGliderTwin/Assets/Scripts/Telemetry/OceanCurrentFileLoader.cs`
 - Create: `UnderwaterGliderTwin/Assets/Scripts/Telemetry/NetCdfClassicCurrentReader.cs`
+- Create: `UnderwaterGliderTwin/Assets/Scripts/Telemetry/ICopernicusCurrentFetchBackend.cs`
 - Modify: `UnderwaterGliderTwin/Assets/Scripts/Telemetry/CopernicusCurrentRequest.cs`
 - Modify: `UnderwaterGliderTwin/Assets/Scripts/Telemetry/CopernicusCurrentCache.cs`
 - Modify: `UnderwaterGliderTwin/Assets/Scripts/Telemetry/CopernicusCurrentClient.cs`
@@ -42,16 +43,29 @@
 - `NetCdfClassicCurrentReader.TryRead(string path, DateTime referenceTimeUtc, out CopernicusCurrentResult result, out string error)`.
 - `OceanCurrentSourceIdentity.ForLocalFile(string normalizedPath, string contentSha256, int schemaVersion)`.
 - `IOceanCurrentFileConverter.Convert(string inputPath, string outputPath, Action onCompleted, Action<string> onFailure, Action<string> onProgress)` is the injectable process seam used only after the direct reader reports unsupported NetCDF.
+- `ICopernicusCurrentFetchBackend.Run(CopernicusCurrentRequest request, string requestPath, string responsePath, Action<string> onCompleted, Action<string> onFailure, Action<string> onProgress)` is the injectable online/Python process seam used by `CopernicusCurrentClient`.
 - `CopernicusCurrentClient.Fetch(request, mode, localPath, referenceTimeUtc, onSuccess, onFailure, onProgress)`; keep the old overload delegating to `Online` for callers not yet migrated.
 
 - [ ] **Step 1: Add failing acquisition-mode and cache tests.**
 
 ```csharp
-[Test]
-public void LocalFileModeDoesNotStartNetworkOrPython()
+[UnityTest]
+public IEnumerator LocalFileAndCacheOnlyModesDoNotInvokeRemoteBackend()
 {
     var path = WriteUniqueJsonFixture();
-    var result = OceanCurrentAcquisitionMode.LocalFile;
+    var backend = new SpyCurrentFetchBackend();
+    var client = new CopernicusCurrentClient(backend);
+    yield return client.Fetch(RequestForTest(), OceanCurrentAcquisitionMode.LocalFile, path, DateTime.UtcNow,
+        _ => { }, error => Assert.Fail(error));
+    yield return client.Fetch(RequestForTest(), OceanCurrentAcquisitionMode.CacheOnly, path, DateTime.UtcNow,
+        _ => { }, error => Assert.Fail(error));
+    Assert.That(backend.RunCount, Is.EqualTo(0));
+}
+
+[Test]
+public void FileLoaderOnlyTestsParsingAndNormalization()
+{
+    var path = WriteUniqueJsonFixture();
     Assert.That(OceanCurrentFileLoader.TryLoad(path, DateTime.UtcNow, out var loaded, out var error), Is.True, error);
     Assert.That(loaded.Field.Samples.Count, Is.GreaterThan(0));
 }
@@ -65,7 +79,7 @@ public void CacheKeyChangesWhenLocalFileContentChanges()
 }
 ```
 
-The test fixture creates each file beneath a GUID-named temporary directory and injects a fake `IOceanCurrentFileConverter`; no test starts Python or depends on credentials.
+The client tests inject `SpyCurrentFetchBackend` and separately assert that `Online` invokes it exactly once. Loader tests never make mode assertions; they only test JSON/NetCDF parsing, normalization, and schema errors. Every fixture is beneath a GUID-named temporary directory and injects a fake `IOceanCurrentFileConverter`; no test starts Python or depends on credentials.
 
 - [ ] **Step 2: Run the focused tests and verify the new APIs fail to compile or assert.**
 
@@ -182,7 +196,7 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/Telemetry/GliderDynamics* U
 **Interfaces:**
 - `SimulationStateSnapshot.FromFrame(TelemetryFrame frame, SimulationProfile profile)`.
 - `SimulationRuntimeSession.RequestProfileUpdate(SimulationProfile candidate)` returns `bool` and exposes `IsRebuildPending`, `LastError`, `StatusChanged`, and `ActiveProfile`.
-- `SimulationRuntimeRegistry.Active` exposes the current simulation session to UI without changing the existing `DataInputView.Initialize` callback signature.
+- `SimulationRuntimeRegistry.Active` exposes the current simulation session to UI without changing the existing `DataInputView.Initialize` callback signature. `SimulationRuntimeRegistry.ActiveChanged` fires whenever `SetActive` replaces the session; `SetActive(null)` clears it and fires once.
 - `PlaybackModel.ReplaceFrames(IReadOnlyList<TelemetryFrame> frames, int preservedIndex)` preserves frame references through `preservedIndex` and keeps playing/speed/direction state.
 - `TrajectoryView.ReplaceFutureTrajectory(...)` updates only the prediction segment.
 
@@ -223,7 +237,7 @@ Build a staging list from the unchanged history plus generated future. Validate 
 
 - [ ] **Step 5: Integrate without scene reload.**
 
-Change only `TwinBootstrap.ReloadFromSimulationProfile` so it calls `SimulationRuntimeSession.RequestProfileUpdate` in simulation mode. Register the session in `SimulationRuntimeRegistry`; do not call `SceneManager.LoadScene`. Keep CSV reload behavior unchanged.
+Keep the existing simulation callback signature. `TwinBootstrap` owns the only bootstrap integration: it creates/registers the session once, and its existing `ReloadFromSimulationProfile(SimulationProfile)` method forwards to `RequestProfileUpdate` in simulation mode. It must not reload the scene; CSV reload behavior remains unchanged. Task 4 must not modify `TwinBootstrap`.
 
 - [ ] **Step 6: Update playback and trajectory views.**
 
@@ -252,7 +266,8 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/Telemetry/Simulation* Under
 - Modify: `UnderwaterGliderTwin/Assets/Tests/EditMode/UiTests.cs`
 
 **Interfaces:**
-- Reuse `SimulationRuntimeRegistry.Active.StatusChanged` for pending/success/failure text; do not change `TwinBootstrap` or the existing simulation callback signature.
+- Reuse `SimulationRuntimeRegistry.Active.StatusChanged` for pending/success/failure text; the existing simulation callback signature remains unchanged and all `TwinBootstrap` integration stays in Task 3.
+- Subscribe to `SimulationRuntimeRegistry.ActiveChanged` in `OnEnable`; detach from the old session before attaching to the new one, then detach from both registry and session in `OnDisable`.
 - Add local-file path and `OceanCurrentAcquisitionMode` controls that call Task 1’s acquisition API.
 - Keep `MissionConfigurationPanel`, `FlightLegDrawerPanel`, and existing button names stable.
 
