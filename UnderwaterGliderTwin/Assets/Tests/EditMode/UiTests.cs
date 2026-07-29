@@ -429,6 +429,21 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void NumericInputsUseCompactWidthWhileCsvInputStaysWide()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            Canvas.ForceUpdateCanvases();
+
+            var cycles = GameObject.Find("SimulationCyclesInput").GetComponent<RectTransform>();
+            var duration = GameObject.Find("SimulationDurationInput").GetComponent<RectTransform>();
+            var csv = GameObject.Find("CsvPathInput").GetComponent<RectTransform>();
+            Assert.That(cycles.rect.width, Is.LessThanOrEqualTo(180f));
+            Assert.That(duration.rect.width, Is.LessThanOrEqualTo(180f));
+            Assert.That(csv.rect.width, Is.GreaterThan(500f));
+        }
+
+        [Test]
         public void TaskParameterFieldsUseSectionCardsAndResponsiveColumns()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();

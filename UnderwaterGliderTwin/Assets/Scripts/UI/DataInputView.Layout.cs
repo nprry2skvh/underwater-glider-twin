@@ -166,7 +166,7 @@ namespace UnderwaterGliderTwin.UI
             cardLayout.spacing = 4f;
             cardLayout.childControlWidth = true;
             cardLayout.childControlHeight = true;
-            cardLayout.childForceExpandWidth = true;
+            cardLayout.childForceExpandWidth = false;
             cardLayout.childForceExpandHeight = false;
             var element = card.gameObject.AddComponent<LayoutElement>();
             element.preferredHeight = fullWidth ? 62f : 56f;
@@ -183,6 +183,7 @@ namespace UnderwaterGliderTwin.UI
             {
                 MoveLeaf(secondaryName, card, 28f);
             }
+            ConfigureCompositeWidths(card, fullWidth);
         }
 
         private void MoveToSection(Transform section, string childName)
@@ -294,7 +295,7 @@ namespace UnderwaterGliderTwin.UI
             layout.spacing = 3f;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
+            layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
             foreach (Transform child in field)
             {
@@ -307,6 +308,59 @@ namespace UnderwaterGliderTwin.UI
                 var input = child.GetComponent<InputField>();
                 var height = input != null ? 26f : 16f;
                 NormalizeLayoutChild(childRect, height);
+                var element = childRect.GetComponent<LayoutElement>();
+                if (input != null)
+                {
+                    element.minWidth = 150f;
+                    element.preferredWidth = 150f;
+                    element.flexibleWidth = 0f;
+                }
+                else
+                {
+                    element.minWidth = 0f;
+                    element.preferredWidth = 0f;
+                    element.flexibleWidth = 1f;
+                }
+            }
+        }
+
+        private static void ConfigureCompositeWidths(RectTransform card, bool fullWidth)
+        {
+            foreach (Transform child in card)
+            {
+                var childRect = child as RectTransform;
+                if (childRect == null)
+                {
+                    continue;
+                }
+
+                var element = childRect.GetComponent<LayoutElement>() ?? childRect.gameObject.AddComponent<LayoutElement>();
+                var input = childRect.GetComponent<InputField>();
+                var button = childRect.GetComponent<Button>();
+                if (input != null && fullWidth)
+                {
+                    element.minWidth = 180f;
+                    element.preferredWidth = 0f;
+                    element.flexibleWidth = 1f;
+                }
+                else if (input != null)
+                {
+                    element.minWidth = 150f;
+                    element.preferredWidth = 150f;
+                    element.flexibleWidth = 0f;
+                }
+                else if (button != null)
+                {
+                    element.minWidth = 112f;
+                    element.preferredWidth = 112f;
+                    element.flexibleWidth = 0f;
+                }
+                else
+                {
+                    element.minWidth = 0f;
+                    element.preferredWidth = 0f;
+                    element.flexibleWidth = 1f;
+                }
             }
         }
 
