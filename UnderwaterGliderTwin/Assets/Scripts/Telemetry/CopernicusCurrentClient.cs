@@ -162,16 +162,30 @@ namespace UnderwaterGliderTwin.Telemetry
         }
     }
 
-    internal sealed class PythonCurrentFetchBackend : ICopernicusCurrentFetchBackend
+    public sealed class PythonCurrentFetchBackend : ICopernicusCurrentFetchBackend
     {
+        public static string ResolvePythonCommand()
+        {
+            var configured = Environment.GetEnvironmentVariable("COPERNICUS_PYTHON");
+            if (!string.IsNullOrWhiteSpace(configured))
+            {
+                return configured;
+            }
+
+            return Application.platform == RuntimePlatform.WindowsEditor || Application.platform == RuntimePlatform.WindowsPlayer
+                ? "py"
+                : "python";
+        }
+
         public void Run(CopernicusCurrentRequest request, string requestPath, string responsePath, Action<string> onCompleted, Action<string> onFailure, Action<string> onProgress)
         {
             var scriptPath = Path.Combine(Application.streamingAssetsPath, "CopernicusCurrentFetcher.py");
             if (!File.Exists(scriptPath)) { onFailure?.Invoke("Copernicus current fetcher was not found in StreamingAssets."); return; }
             try
             {
-                var python = Environment.GetEnvironmentVariable("COPERNICUS_PYTHON");
-                var process = new Process { StartInfo = new ProcessStartInfo { FileName = string.IsNullOrWhiteSpace(python) ? "python" : python, Arguments = Quote(scriptPath) + " --request " + Quote(requestPath) + " --output " + Quote(responsePath), CreateNoWindow = true, UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true, WorkingDirectory = Path.GetDirectoryName(requestPath) } };
+                var python = ResolvePythonCommand();
+                var launcherArguments = string.Equals(python, "py", StringComparison.OrdinalIgnoreCase) ? "-3 " : string.Empty;
+                var process = new Process { StartInfo = new ProcessStartInfo { FileName = python, Arguments = launcherArguments + Quote(scriptPath) + " --request " + Quote(requestPath) + " --output " + Quote(responsePath), CreateNoWindow = true, UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true, WorkingDirectory = Path.GetDirectoryName(requestPath) } };
                 process.Start();
                 Task.Run(() =>
                 {

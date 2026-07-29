@@ -95,6 +95,21 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void PythonCurrentFetchBackend_UsesConfiguredInterpreterWhenProvided()
+        {
+            var previous = Environment.GetEnvironmentVariable("COPERNICUS_PYTHON");
+            try
+            {
+                Environment.SetEnvironmentVariable("COPERNICUS_PYTHON", "custom-python.exe");
+                Assert.That(PythonCurrentFetchBackend.ResolvePythonCommand(), Is.EqualTo("custom-python.exe"));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("COPERNICUS_PYTHON", previous);
+            }
+        }
+
+        [Test]
         public void BuildProgressMessage_ReportsTheRemoteDownloadStage()
         {
             var message = CopernicusCurrentClient.BuildProgressMessage(45f);
