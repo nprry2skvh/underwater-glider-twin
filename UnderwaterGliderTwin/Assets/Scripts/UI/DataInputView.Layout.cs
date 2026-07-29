@@ -13,6 +13,7 @@ namespace UnderwaterGliderTwin.UI
         private bool bottomDrawerExpanded;
         private Canvas oceanCurrentModalCanvas;
         private bool bottomDrawerExpandedBeforeModal;
+        private const float ExpandedTaskDrawerHeight = 320f;
 
         private void ConfigureResponsiveBottomDrawer(RectTransform drawer)
         {
@@ -39,8 +40,8 @@ namespace UnderwaterGliderTwin.UI
             bottomDrawerViewport.GetComponent<Image>().raycastTarget = false;
             bottomDrawerContent = UiFactory.Panel("MissionConfigurationContent", bottomDrawerViewport, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 0f), Color.clear);
             var contentLayout = bottomDrawerContent.gameObject.AddComponent<VerticalLayoutGroup>();
-            contentLayout.padding = new RectOffset(12, 12, 10, 12);
-            contentLayout.spacing = 10f;
+            contentLayout.padding = new RectOffset(8, 8, 6, 8);
+            contentLayout.spacing = 6f;
             contentLayout.childAlignment = TextAnchor.UpperLeft;
             contentLayout.childControlWidth = true;
             contentLayout.childControlHeight = true;
@@ -107,8 +108,8 @@ namespace UnderwaterGliderTwin.UI
         {
             var section = UiFactory.Panel(name, parent, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(0f, 0f), new Color(0.02f, 0.12f, 0.18f, 0.88f));
             var sectionLayout = section.gameObject.AddComponent<VerticalLayoutGroup>();
-            sectionLayout.padding = new RectOffset(12, 12, 8, 10);
-            sectionLayout.spacing = 6f;
+            sectionLayout.padding = new RectOffset(10, 10, 6, 7);
+            sectionLayout.spacing = 4f;
             sectionLayout.childControlWidth = true;
             sectionLayout.childControlHeight = true;
             sectionLayout.childForceExpandWidth = true;
@@ -116,12 +117,12 @@ namespace UnderwaterGliderTwin.UI
             var sectionFitter = section.gameObject.AddComponent<ContentSizeFitter>();
             sectionFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             sectionFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            var titleText = UiFactory.Text(name + "Title", section, title, 15, TextAnchor.MiddleLeft, UiFactory.CommandText, Vector2.zero, new Vector2(0f, 28f));
-            titleText.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
+            var titleText = UiFactory.Text(name + "Title", section, title, 15, TextAnchor.MiddleLeft, UiFactory.CommandText, Vector2.zero, new Vector2(0f, 24f));
+            titleText.gameObject.AddComponent<LayoutElement>().preferredHeight = 24f;
             var fields = UiFactory.Panel(name.Replace("Card", "Fields"), section, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0f));
             var grid = fields.gameObject.AddComponent<GridLayoutGroup>();
             grid.padding = new RectOffset(0, 0, 0, 0);
-            grid.spacing = new Vector2(10f, 8f);
+            grid.spacing = new Vector2(8f, 4f);
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = 3;
             grid.childAlignment = TextAnchor.UpperLeft;
@@ -168,19 +169,19 @@ namespace UnderwaterGliderTwin.UI
             cardLayout.childForceExpandWidth = true;
             cardLayout.childForceExpandHeight = false;
             var element = card.gameObject.AddComponent<LayoutElement>();
-            element.preferredHeight = fullWidth ? 70f : 64f;
+            element.preferredHeight = fullWidth ? 62f : 56f;
             element.minWidth = fullWidth ? 560f : 240f;
             if (labelName != null)
             {
-                MoveLeaf(labelName, card, 22f);
+                MoveLeaf(labelName, card, 18f);
             }
             if (controlName != null)
             {
-                MoveLeaf(controlName, card, 34f);
+                MoveLeaf(controlName, card, 28f);
             }
             if (secondaryName != null)
             {
-                MoveLeaf(secondaryName, card, 34f);
+                MoveLeaf(secondaryName, card, 28f);
             }
         }
 
@@ -262,7 +263,7 @@ namespace UnderwaterGliderTwin.UI
                 : configurationPanel.Find(childName) as RectTransform;
         }
 
-        private static void NormalizeLayoutChild(RectTransform child, float preferredHeight = 58f)
+        private static void NormalizeLayoutChild(RectTransform child, float preferredHeight = 54f)
         {
             child.anchorMin = new Vector2(0f, 0.5f);
             child.anchorMax = new Vector2(1f, 0.5f);
@@ -304,7 +305,7 @@ namespace UnderwaterGliderTwin.UI
                 }
 
                 var input = child.GetComponent<InputField>();
-                var height = input != null ? 30f : 18f;
+                var height = input != null ? 26f : 16f;
                 NormalizeLayoutChild(childRect, height);
             }
         }
@@ -379,7 +380,7 @@ namespace UnderwaterGliderTwin.UI
             }
 
             // CanvasScaler makes this 35% at both 1280x720 and 1920x1080.
-            drawer.sizeDelta = new Vector2(0f, expanded ? 378f : 48f);
+            drawer.sizeDelta = new Vector2(0f, expanded ? ExpandedTaskDrawerHeight : 48f);
             if (bottomDrawerToggleButton != null)
             {
                 UiFactory.SetButtonText(bottomDrawerToggleButton, expanded ? "收起参数" : "展开参数");
@@ -461,7 +462,7 @@ namespace UnderwaterGliderTwin.UI
             var contentWidth = drawer.name == "FlightLegDrawerPanel"
                 ? drawer.rect.width + 16f
                 : Mathf.Min(760f, availableWidth);
-            content.sizeDelta = new Vector2(contentWidth, drawer.name == "FlightLegDrawerPanel" ? 350f : 620f);
+                content.sizeDelta = new Vector2(contentWidth, drawer.name == "FlightLegDrawerPanel" ? 350f : 620f);
             foreach (var child in existingChildren)
             {
                 child.SetParent(content, false);
@@ -534,8 +535,9 @@ namespace UnderwaterGliderTwin.UI
 
     public sealed class ResponsiveTaskParameterLayout : MonoBehaviour
     {
-        private const float MinimumCardWidth = 420f;
-        private const float HorizontalGap = 10f;
+        private const float MinimumCardWidth = 424f;
+        private const float HorizontalGap = 8f;
+        private const float VerticalGap = 4f;
         private GridLayoutGroup grid;
         private ContentSizeFitter fitter;
 
@@ -576,9 +578,9 @@ namespace UnderwaterGliderTwin.UI
                     : 1;
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = columns;
-            grid.spacing = new Vector2(HorizontalGap, 8f);
+            grid.spacing = new Vector2(HorizontalGap, VerticalGap);
             var cellWidth = Mathf.Max(MinimumCardWidth, (available - HorizontalGap * (columns - 1)) / columns);
-            grid.cellSize = new Vector2(cellWidth, 64f);
+            grid.cellSize = new Vector2(cellWidth, 54f);
             if (fitter != null)
             {
                 fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;

@@ -409,6 +409,26 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void ExpandedTaskParameterDrawerUsesCompactSpacing()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            GameObject.Find("MissionConfigurationDrawerToggleButton").GetComponent<Button>().onClick.Invoke();
+
+            var drawer = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
+            var content = GameObject.Find("MissionConfigurationContent").GetComponent<VerticalLayoutGroup>();
+            var missionSection = GameObject.Find("MissionSectionCard").GetComponent<VerticalLayoutGroup>();
+            var missionFields = GameObject.Find("MissionSectionFields").GetComponent<GridLayoutGroup>();
+            var field = GameObject.Find("SimulationCyclesInputField").GetComponent<RectTransform>();
+
+            Assert.That(drawer.sizeDelta.y, Is.LessThanOrEqualTo(320f));
+            Assert.That(content.spacing, Is.LessThanOrEqualTo(6f));
+            Assert.That(missionSection.spacing, Is.LessThanOrEqualTo(4f));
+            Assert.That(missionFields.spacing.y, Is.LessThanOrEqualTo(4f));
+            Assert.That(field.sizeDelta.y, Is.LessThanOrEqualTo(54f));
+        }
+
+        [Test]
         public void TaskParameterFieldsUseSectionCardsAndResponsiveColumns()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
