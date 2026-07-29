@@ -255,7 +255,13 @@ namespace UnderwaterGliderTwin.UI
         {
             if (font == null)
             {
-                font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                font = Font.CreateDynamicFontFromOSFont(
+                    new[] { "Noto Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", "SimHei" },
+                    32);
+                if (font == null)
+                {
+                    font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                }
             }
 
             return font;

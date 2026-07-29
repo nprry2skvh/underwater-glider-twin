@@ -657,6 +657,18 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void DataInputView_UsesChineseCapableRuntimeFont()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            var placeholder = FindText("CsvPathInputPlaceholder");
+            Assert.That(placeholder.font, Is.Not.Null);
+            Assert.That(placeholder.font.name, Is.Not.EqualTo("LegacyRuntime"));
+        }
+
+        [Test]
         public void DataInputView_BuildsSimulationProfileAndInvokesCallback()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
