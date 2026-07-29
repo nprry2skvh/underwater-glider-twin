@@ -322,7 +322,7 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void CommandCenterConfigurationStrip_UsesFramedBottomDrawer()
+        public void CommandCenterConfigurationStrip_UsesFramedTopDrawer()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
 
@@ -330,33 +330,51 @@ namespace UnderwaterGliderTwin.Tests
 
             var strip = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
             Assert.That(strip.GetComponent<Outline>(), Is.Not.Null);
-            Assert.That(strip.anchorMin, Is.EqualTo(new Vector2(0f, 0f)));
-            Assert.That(strip.anchorMax, Is.EqualTo(new Vector2(1f, 0f)));
+            Assert.That(strip.anchorMin, Is.EqualTo(new Vector2(0f, 1f)));
+            Assert.That(strip.anchorMax, Is.EqualTo(new Vector2(1f, 1f)));
+            Assert.That(strip.anchoredPosition.y, Is.LessThanOrEqualTo(-48f));
             Assert.That(strip.sizeDelta.y, Is.LessThanOrEqualTo(48f));
         }
 
         [Test]
-        public void MissionConfigurationDrawerReservesPlaybackSafeArea()
+        public void MissionConfigurationDrawerReservesHeaderSafeArea()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
 
-            var frames = Frames(2);
-            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
-            var playback = CreatePlayback(frames);
-            var prediction = CreatePrediction(playback, frames);
-            var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
-            var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
-            var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
-            trajectory.Initialize(frames, mapper, playback, prediction);
-            new GameObject("Controls").AddComponent<PlaybackControlsView>()
-                .Initialize(playback, cameraController, environment, trajectory);
-            dataInput.BringConfigurationToFront();
+            var drawer = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
+            var header = GameObject.Find("CommandCenterHeader").GetComponent<RectTransform>();
+            Assert.That(drawer.anchorMin, Is.EqualTo(new Vector2(0f, 1f)));
+            Assert.That(drawer.anchorMax, Is.EqualTo(new Vector2(1f, 1f)));
+            Assert.That(drawer.anchoredPosition.y, Is.LessThanOrEqualTo(-header.sizeDelta.y));
+        }
+
+        [Test]
+        public void ParameterEditorKeepsEachLabelWithItsInput()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+
+            var label = GameObject.Find("DynamicsMassInputLabel").transform;
+            var input = GameObject.Find("DynamicsMassInput").transform;
+            Assert.That(input.parent, Is.SameAs(label.parent));
+            Assert.That(input.parent.name, Is.EqualTo("DynamicsMassInputField"));
+        }
+
+        [Test]
+        public void ExpandedTopDrawerKeepsToggleButtonOutsideViewportHitArea()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
 
             var drawer = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
-            var playbackPanel = GameObject.Find("PlaybackControlsPanel").GetComponent<RectTransform>();
-            Assert.That(drawer.anchoredPosition.y, Is.GreaterThanOrEqualTo(playbackPanel.anchoredPosition.y + playbackPanel.sizeDelta.y));
-            Assert.That(drawer.GetSiblingIndex(), Is.GreaterThan(playbackPanel.GetSiblingIndex()));
+            var header = GameObject.Find("MissionConfigurationDrawerHeader").GetComponent<RectTransform>();
+            var viewport = GameObject.Find("MissionConfigurationViewport").GetComponent<RectTransform>();
+            GameObject.Find("MissionConfigurationDrawerToggleButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(drawer.sizeDelta.y, Is.GreaterThan(48f));
+            Assert.That(viewport.offsetMax.y, Is.LessThanOrEqualTo(-header.sizeDelta.y));
         }
 
         [Test]
@@ -384,7 +402,51 @@ namespace UnderwaterGliderTwin.Tests
             GameObject.Find("MissionConfigurationDrawerToggleButton").GetComponent<Button>().onClick.Invoke();
             Assert.That(drawer.sizeDelta.y, Is.LessThanOrEqualTo(1080f * 0.35f));
             Assert.That(GameObject.Find("MissionConfigurationViewport").GetComponent<Mask>(), Is.Not.Null);
-            Assert.That(GameObject.Find("MissionConfigurationContent").GetComponent<GridLayoutGroup>(), Is.Not.Null);
+            Assert.That(GameObject.Find("MissionConfigurationContent").GetComponent<VerticalLayoutGroup>(), Is.Not.Null);
+            Assert.That(GameObject.Find("MissionSectionCard"), Is.Not.Null);
+            Assert.That(GameObject.Find("SimulationSectionCard"), Is.Not.Null);
+            Assert.That(GameObject.Find("OceanSectionCard"), Is.Not.Null);
+        }
+
+        [Test]
+        public void TaskParameterFieldsUseSectionCardsAndResponsiveColumns()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            var field = GameObject.Find("SimulationCyclesInputField").transform;
+            var label = GameObject.Find("SimulationCyclesInputLabel").transform;
+            var input = GameObject.Find("SimulationCyclesInput").transform;
+            Assert.That(field.IsChildOf(GameObject.Find("SimulationSectionCard").transform), Is.True);
+            Assert.That(label.parent, Is.SameAs(field));
+            Assert.That(input.parent, Is.SameAs(field));
+
+            Assert.That(GameObject.Find("MissionSectionFields").GetComponent<GridLayoutGroup>(), Is.Not.Null);
+            Assert.That(GameObject.Find("SimulationSectionFields").GetComponent<GridLayoutGroup>(), Is.Not.Null);
+            Assert.That(GameObject.Find("OceanSectionFields").GetComponent<GridLayoutGroup>(), Is.Not.Null);
+            var layout = GameObject.Find("MissionSectionFields").GetComponent<ResponsiveTaskParameterLayout>();
+            layout.RefreshForWidth(1920f);
+            Assert.That(layout.ColumnCount, Is.EqualTo(3));
+            layout.RefreshForWidth(1280f);
+            Assert.That(layout.ColumnCount, Is.EqualTo(2));
+            layout.RefreshForWidth(600f);
+            Assert.That(layout.ColumnCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void OceanCurrentEditorUsesHigherSortingModalAndRaycastBlocker()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+
+            var modal = GameObject.Find("OceanCurrentModalCanvas").GetComponent<Canvas>();
+            var main = GameObject.Find("RuntimeCanvas").GetComponent<Canvas>();
+            var blocker = GameObject.Find("OceanCurrentModalRaycastBlocker").GetComponent<Image>();
+            Assert.That(modal.overrideSorting, Is.True);
+            Assert.That(modal.sortingOrder, Is.GreaterThan(main.sortingOrder));
+            Assert.That(blocker.raycastTarget, Is.True);
+            Assert.That(GameObject.Find("OceanCurrentDrawerPanel").transform.IsChildOf(modal.transform), Is.True);
         }
 
         [Test]
@@ -436,9 +498,8 @@ namespace UnderwaterGliderTwin.Tests
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
-            var canvas = Object.FindObjectOfType<Canvas>().transform;
-            var current = canvas.Find("OceanCurrentDrawerPanel").GetComponent<RectTransform>();
-            var flight = canvas.Find("FlightLegDrawerPanel").GetComponent<RectTransform>();
+            var current = FindChildNamed(dataInput.transform, "OceanCurrentDrawerPanel").GetComponent<RectTransform>();
+            var flight = FindChildNamed(dataInput.transform, "FlightLegDrawerPanel").GetComponent<RectTransform>();
             Assert.That(current.anchorMin, Is.EqualTo(new Vector2(0f, 0f)));
             Assert.That(flight.anchorMin, Is.EqualTo(new Vector2(0f, 0f)));
             Assert.That(current.sizeDelta.y, Is.LessThanOrEqualTo(1080f * .35f));
@@ -451,8 +512,7 @@ namespace UnderwaterGliderTwin.Tests
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
             GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
-            var canvas = Object.FindObjectOfType<Canvas>().transform;
-            var drawer = canvas.Find("OceanCurrentDrawerPanel").GetComponent<RectTransform>();
+            var drawer = GameObject.Find("OceanCurrentDrawerPanel").GetComponent<RectTransform>();
             var scroll = drawer.GetComponent<ScrollRect>();
             Assert.That(scroll, Is.Not.Null);
             Assert.That(scroll.viewport, Is.Not.Null);
@@ -485,7 +545,7 @@ namespace UnderwaterGliderTwin.Tests
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
 
             GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
-            var oceanScroll = canvas.transform.Find("OceanCurrentDrawerPanel").GetComponent<ScrollRect>();
+            var oceanScroll = GameObject.Find("OceanCurrentDrawerPanel").GetComponent<ScrollRect>();
             Assert.That(oceanScroll.GetComponent<RectTransform>().rect.height, Is.LessThanOrEqualTo(canvasRect.rect.height * .35f + .1f));
             oceanScroll.verticalNormalizedPosition = 1f;
             Canvas.ForceUpdateCanvases();
@@ -496,7 +556,7 @@ namespace UnderwaterGliderTwin.Tests
             AssertRectInsideViewport(GameObject.Find("DynamicsTurnaroundDurationInput").GetComponent<RectTransform>(), oceanScroll.viewport, width, height);
 
             GameObject.Find("FlightLegSettingsButton").GetComponent<Button>().onClick.Invoke();
-            var flightScroll = canvas.transform.Find("FlightLegDrawerPanel").GetComponent<ScrollRect>();
+            var flightScroll = GameObject.Find("FlightLegDrawerPanel").GetComponent<ScrollRect>();
             Assert.That(flightScroll.GetComponent<RectTransform>().rect.height, Is.LessThanOrEqualTo(canvasRect.rect.height * .35f + .1f));
             flightScroll.verticalNormalizedPosition = 1f;
             Canvas.ForceUpdateCanvases();
@@ -733,10 +793,12 @@ namespace UnderwaterGliderTwin.Tests
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
 
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            dataInput.BringConfigurationToFront();
             GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
 
             var drawer = GameObject.Find("OceanCurrentDrawerPanel");
             Assert.That(drawer.activeSelf, Is.True);
+            Assert.That(drawer.transform.parent.name, Is.EqualTo("OceanCurrentModalCanvas"));
             Assert.That(GameObject.Find("OceanCurrentDrawerSaveButton"), Is.Not.Null);
             Assert.That(GameObject.Find("DynamicsCalibrateFromCsvButton"), Is.Not.Null);
             Assert.That(GameObject.Find("OceanCurrentQualitySummary"), Is.Not.Null);

@@ -11,6 +11,8 @@ namespace UnderwaterGliderTwin.UI
         private ScrollRect bottomDrawerScrollRect;
         private Button bottomDrawerToggleButton;
         private bool bottomDrawerExpanded;
+        private Canvas oceanCurrentModalCanvas;
+        private bool bottomDrawerExpandedBeforeModal;
 
         private void ConfigureResponsiveBottomDrawer(RectTransform drawer)
         {
@@ -19,10 +21,10 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            drawer.anchorMin = new Vector2(0f, 0f);
-            drawer.anchorMax = new Vector2(1f, 0f);
-            drawer.pivot = new Vector2(0.5f, 0f);
-            drawer.anchoredPosition = new Vector2(0f, UiFactory.PlaybackControlsBottomOffset);
+            drawer.anchorMin = new Vector2(0f, 1f);
+            drawer.anchorMax = new Vector2(1f, 1f);
+            drawer.pivot = new Vector2(0.5f, 1f);
+            drawer.anchoredPosition = new Vector2(0f, -UiFactory.CommandCenterHeaderHeight);
             drawer.sizeDelta = new Vector2(0f, 48f);
 
             var header = UiFactory.Panel("MissionConfigurationDrawerHeader", drawer, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(-16f, 44f), new Color(0.02f, 0.12f, 0.18f, 0.98f));
@@ -30,16 +32,20 @@ namespace UnderwaterGliderTwin.UI
             bottomDrawerToggleButton = UiFactory.Button("MissionConfigurationDrawerToggleButton", header, "展开参数", new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(-12f, 0f), new Vector2(108f, 30f));
             bottomDrawerToggleButton.onClick.AddListener(ToggleBottomDrawer);
 
-            bottomDrawerViewport = UiFactory.Panel("MissionConfigurationViewport", drawer, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, 22f), new Vector2(-20f, -72f), new Color(0f, 0f, 0f, 0.08f));
+            bottomDrawerViewport = UiFactory.Panel("MissionConfigurationViewport", drawer, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.08f));
+            bottomDrawerViewport.offsetMin = new Vector2(10f, 10f);
+            bottomDrawerViewport.offsetMax = new Vector2(-10f, -54f);
             bottomDrawerViewport.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+            bottomDrawerViewport.GetComponent<Image>().raycastTarget = false;
             bottomDrawerContent = UiFactory.Panel("MissionConfigurationContent", bottomDrawerViewport, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 0f), Color.clear);
-            var grid = bottomDrawerContent.gameObject.AddComponent<GridLayoutGroup>();
-            grid.padding = new RectOffset(10, 10, 8, 8);
-            grid.spacing = new Vector2(8f, 8f);
-            grid.cellSize = new Vector2(352f, 42f);
-            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            grid.constraintCount = 5;
-            grid.childAlignment = TextAnchor.UpperLeft;
+            var contentLayout = bottomDrawerContent.gameObject.AddComponent<VerticalLayoutGroup>();
+            contentLayout.padding = new RectOffset(12, 12, 10, 12);
+            contentLayout.spacing = 10f;
+            contentLayout.childAlignment = TextAnchor.UpperLeft;
+            contentLayout.childControlWidth = true;
+            contentLayout.childControlHeight = true;
+            contentLayout.childForceExpandWidth = true;
+            contentLayout.childForceExpandHeight = false;
             var fitter = bottomDrawerContent.gameObject.AddComponent<ContentSizeFitter>();
             fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -50,30 +56,312 @@ namespace UnderwaterGliderTwin.UI
             bottomDrawerScrollRect.vertical = true;
             bottomDrawerScrollRect.movementType = ScrollRect.MovementType.Clamped;
 
-            // The legacy field builders keep their stable object names and handlers.  Reparenting
-            // them into a grid removes fixed x coordinates while retaining their public UI contract.
-            for (var index = drawer.childCount - 1; index >= 0; index--)
+            var missionSection = CreateSectionCard("MissionSectionCard", "任务与预测", bottomDrawerContent);
+            var simulationSection = CreateSectionCard("SimulationSectionCard", "仿真参数", bottomDrawerContent);
+            var oceanSection = CreateSectionCard("OceanSectionCard", "海流与航段", bottomDrawerContent);
+
+            CreateCompositeField(missionSection, "CsvSourceLabel", "CsvPathInput", "LoadCsvButton", "CsvPathField", true);
+            CreateCompositeField(missionSection, "PredictionModelLabel", FindExistingModelButtonName(), null, "PredictionModelField", false);
+            CreateCompositeField(missionSection, "PredictionHorizonLabel", "PredictionHorizonInput", "ApplyPredictionConfigButton", "PredictionHorizonField", false);
+            CreateCompositeField(missionSection, null, "PredictionToggleButton", "PredictionRuntimeLabel", "PredictionRuntimeField", false);
+
+            MoveToSection(simulationSection, "SimulationCyclesInputField");
+            MoveToSection(simulationSection, "SimulationDurationInputField");
+            MoveToSection(simulationSection, "SimulationDepthInputField");
+            MoveToSection(simulationSection, "SimulationWaterColumnInputField");
+            MoveToSection(simulationSection, "ReferenceCycleDurationLabel");
+            MoveToSection(simulationSection, "ReferenceCycleDurationReadout");
+            MoveToSection(simulationSection, "ApplyReferenceCycleButton");
+            MoveToSection(simulationSection, "SimulationHeadingInputField");
+            MoveToSection(simulationSection, "SimulationHeadingDeltaInputField");
+            MoveToSection(simulationSection, "SimulationPitchInputField");
+            MoveToSection(simulationSection, "SimulationRollInputField");
+            MoveToSection(simulationSection, "SimulationApplyButton");
+            MoveToSection(simulationSection, "FlightLegSettingsButton");
+
+            MoveToSection(oceanSection, "OceanCurrentMinDepthInputField");
+            MoveToSection(oceanSection, "OceanCurrentMaxDepthInputField");
+            MoveToSection(oceanSection, "OceanCurrentEastwardInputField");
+            MoveToSection(oceanSection, "OceanCurrentNorthwardInputField");
+            MoveToSection(oceanSection, "MissionLongitudeInputField");
+            MoveToSection(oceanSection, "MissionLatitudeInputField");
+            MoveToSection(oceanSection, "OceanCurrentPreviousLayerButton");
+            MoveToSection(oceanSection, "OceanCurrentNextLayerButton");
+            MoveToSection(oceanSection, "OceanCurrentAddLayerButton");
+            MoveToSection(oceanSection, "OceanCurrentSaveLayerButton");
+            MoveToSection(oceanSection, "OceanCurrentDeleteLayerButton");
+            MoveToSection(oceanSection, "OceanCurrentLookupButton");
+            MoveToSection(oceanSection, "OceanCurrentLayerSummary");
+            MoveToSection(oceanSection, "OceanCurrentDrawerButton");
+
+            HideLegacyTextChild("MissionConfigurationTitle");
+            HideLegacyTextChild("SimulationLabel");
+            HideLegacyTextChild("OceanCurrentLabel");
+            MoveToSectionFooter(missionSection, "MissionConfigurationStatus");
+            HideLegacyConfigurationGroups(drawer);
+
+            SetBottomDrawerExpanded(false);
+        }
+
+        private RectTransform CreateSectionCard(string name, string title, Transform parent)
+        {
+            var section = UiFactory.Panel(name, parent, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(0f, 0f), new Color(0.02f, 0.12f, 0.18f, 0.88f));
+            var sectionLayout = section.gameObject.AddComponent<VerticalLayoutGroup>();
+            sectionLayout.padding = new RectOffset(12, 12, 8, 10);
+            sectionLayout.spacing = 6f;
+            sectionLayout.childControlWidth = true;
+            sectionLayout.childControlHeight = true;
+            sectionLayout.childForceExpandWidth = true;
+            sectionLayout.childForceExpandHeight = false;
+            var sectionFitter = section.gameObject.AddComponent<ContentSizeFitter>();
+            sectionFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            sectionFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var titleText = UiFactory.Text(name + "Title", section, title, 15, TextAnchor.MiddleLeft, UiFactory.CommandText, Vector2.zero, new Vector2(0f, 28f));
+            titleText.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
+            var fields = UiFactory.Panel(name.Replace("Card", "Fields"), section, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0f));
+            var grid = fields.gameObject.AddComponent<GridLayoutGroup>();
+            grid.padding = new RectOffset(0, 0, 0, 0);
+            grid.spacing = new Vector2(10f, 8f);
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 3;
+            grid.childAlignment = TextAnchor.UpperLeft;
+            var fieldsFitter = fields.gameObject.AddComponent<ContentSizeFitter>();
+            fieldsFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fieldsFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var responsive = fields.gameObject.AddComponent<ResponsiveTaskParameterLayout>();
+            responsive.Configure(grid, fieldsFitter);
+            return section;
+        }
+
+        private string FindExistingModelButtonName()
+        {
+            foreach (var entry in modelButtons)
             {
-                var child = drawer.GetChild(index) as RectTransform;
-                if (child == null || child == header || child == bottomDrawerViewport)
+                if (entry.Value != null)
+                {
+                    return entry.Value.name;
+                }
+            }
+
+            return null;
+        }
+
+        private void CreateCompositeField(Transform section, string labelName, string controlName, string secondaryName, string wrapperName, bool fullWidth)
+        {
+            if (string.IsNullOrWhiteSpace(controlName) && string.IsNullOrWhiteSpace(labelName))
+            {
+                return;
+            }
+
+            var fields = section.Find(section.name.Replace("Card", "Fields"));
+            if (fields == null)
+            {
+                return;
+            }
+
+            var card = UiFactory.Panel(wrapperName, fields, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.04f, 0.18f, 0.24f, 0.8f));
+            var cardLayout = card.gameObject.AddComponent<VerticalLayoutGroup>();
+            cardLayout.padding = new RectOffset(8, 8, 5, 5);
+            cardLayout.spacing = 4f;
+            cardLayout.childControlWidth = true;
+            cardLayout.childControlHeight = true;
+            cardLayout.childForceExpandWidth = true;
+            cardLayout.childForceExpandHeight = false;
+            var element = card.gameObject.AddComponent<LayoutElement>();
+            element.preferredHeight = fullWidth ? 70f : 64f;
+            element.minWidth = fullWidth ? 560f : 240f;
+            if (labelName != null)
+            {
+                MoveLeaf(labelName, card, 22f);
+            }
+            if (controlName != null)
+            {
+                MoveLeaf(controlName, card, 34f);
+            }
+            if (secondaryName != null)
+            {
+                MoveLeaf(secondaryName, card, 34f);
+            }
+        }
+
+        private void MoveToSection(Transform section, string childName)
+        {
+            var child = FindDirectChild(childName);
+            if (child == null)
+            {
+                return;
+            }
+
+            var fields = section.Find(section.name.Replace("Card", "Fields"));
+            if (fields == null)
+            {
+                return;
+            }
+
+            child.SetParent(fields, false);
+            NormalizeLayoutChild(child);
+            NormalizeFieldCard(child);
+        }
+
+        private void MoveToSectionFooter(Transform section, string childName)
+        {
+            var child = FindDirectChild(childName);
+            if (child == null)
+            {
+                return;
+            }
+
+            child.SetParent(section, false);
+            child.SetAsLastSibling();
+            NormalizeLayoutChild(child, 24f);
+            var text = child.GetComponent<Text>();
+            if (text != null)
+            {
+                text.alignment = TextAnchor.MiddleLeft;
+            }
+        }
+
+        private void HideLegacyTextChild(string childName)
+        {
+            var child = FindDirectChild(childName);
+            if (child == null)
+            {
+                return;
+            }
+
+            var text = child.GetComponent<Text>();
+            if (text != null)
+            {
+                var color = text.color;
+                color.a = 0f;
+                text.color = color;
+            }
+
+            child.SetParent(bottomDrawerContent, false);
+            var element = child.gameObject.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
+            element.ignoreLayout = true;
+            child.sizeDelta = Vector2.zero;
+        }
+
+        private void MoveLeaf(string childName, Transform parent, float preferredHeight)
+        {
+            var child = FindDirectChild(childName);
+            if (child == null)
+            {
+                return;
+            }
+
+            child.SetParent(parent, false);
+            NormalizeLayoutChild(child, preferredHeight);
+        }
+
+        private RectTransform FindDirectChild(string childName)
+        {
+            return string.IsNullOrWhiteSpace(childName) || configurationPanel == null
+                ? null
+                : configurationPanel.Find(childName) as RectTransform;
+        }
+
+        private static void NormalizeLayoutChild(RectTransform child, float preferredHeight = 58f)
+        {
+            child.anchorMin = new Vector2(0f, 0.5f);
+            child.anchorMax = new Vector2(1f, 0.5f);
+            child.pivot = new Vector2(0.5f, 0.5f);
+            child.anchoredPosition = Vector2.zero;
+            child.sizeDelta = new Vector2(0f, preferredHeight);
+            var element = child.gameObject.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
+            element.minHeight = preferredHeight;
+            element.preferredHeight = preferredHeight;
+            element.flexibleWidth = 1f;
+        }
+
+        private static void NormalizeFieldCard(RectTransform field)
+        {
+            if (field == null || !field.name.EndsWith("Field"))
+            {
+                return;
+            }
+
+            var image = field.GetComponent<Image>();
+            if (image != null)
+            {
+                image.color = new Color(0.035f, 0.16f, 0.22f, 0.9f);
+            }
+
+            var layout = field.gameObject.GetComponent<VerticalLayoutGroup>() ?? field.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(8, 8, 5, 5);
+            layout.spacing = 3f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            foreach (Transform child in field)
+            {
+                var childRect = child as RectTransform;
+                if (childRect == null)
                 {
                     continue;
                 }
 
-                child.SetParent(bottomDrawerContent, false);
-                child.anchorMin = new Vector2(0.5f, 0.5f);
-                child.anchorMax = new Vector2(0.5f, 0.5f);
-                child.pivot = new Vector2(0.5f, 0.5f);
-                child.anchoredPosition = Vector2.zero;
-                child.sizeDelta = grid.cellSize;
-                var element = child.gameObject.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
-                element.minWidth = grid.cellSize.x;
-                element.preferredWidth = grid.cellSize.x;
-                element.minHeight = grid.cellSize.y;
-                element.preferredHeight = grid.cellSize.y;
+                var input = child.GetComponent<InputField>();
+                var height = input != null ? 30f : 18f;
+                NormalizeLayoutChild(childRect, height);
+            }
+        }
+
+        private static void HideLegacyConfigurationGroups(RectTransform drawer)
+        {
+            var names = new[] { "DataSourceConfigurationGroup", "PredictionConfigurationGroup", "SimulationConfigurationGroup", "OceanConfigurationGroup" };
+            foreach (var name in names)
+            {
+                var group = drawer.Find(name) as RectTransform;
+                if (group == null)
+                {
+                    continue;
+                }
+
+                group.sizeDelta = Vector2.zero;
+                var image = group.GetComponent<Image>();
+                if (image != null)
+                {
+                    image.enabled = false;
+                }
+                var element = group.gameObject.GetComponent<LayoutElement>() ?? group.gameObject.AddComponent<LayoutElement>();
+                element.ignoreLayout = true;
+            }
+        }
+
+        private Canvas EnsureOceanCurrentModalCanvas(Transform mainCanvas)
+        {
+            if (oceanCurrentModalCanvas != null)
+            {
+                return oceanCurrentModalCanvas;
             }
 
-            SetBottomDrawerExpanded(false);
+            var main = mainCanvas != null ? mainCanvas.GetComponent<Canvas>() : null;
+            var modalObject = new GameObject("OceanCurrentModalCanvas");
+            modalObject.transform.SetParent(mainCanvas, false);
+            var modalRect = modalObject.AddComponent<RectTransform>();
+            var mainRect = mainCanvas as RectTransform;
+            var modalSize = mainRect != null && mainRect.rect.width > 0f && mainRect.rect.height > 0f
+                ? mainRect.rect.size
+                : new Vector2(1920f, 1080f);
+            modalRect.anchorMin = new Vector2(0.5f, 0.5f);
+            modalRect.anchorMax = new Vector2(0.5f, 0.5f);
+            modalRect.pivot = new Vector2(0.5f, 0.5f);
+            modalRect.anchoredPosition = Vector2.zero;
+            modalRect.sizeDelta = modalSize;
+            oceanCurrentModalCanvas = modalObject.AddComponent<Canvas>();
+            oceanCurrentModalCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            oceanCurrentModalCanvas.overrideSorting = true;
+            oceanCurrentModalCanvas.sortingOrder = (main != null ? main.sortingOrder : 10) + 20;
+            modalObject.AddComponent<GraphicRaycaster>();
+
+            var blocker = UiFactory.Panel("OceanCurrentModalRaycastBlocker", modalObject.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.18f));
+            blocker.GetComponent<Image>().raycastTarget = true;
+            blocker.SetAsFirstSibling();
+            modalObject.SetActive(false);
+            return oceanCurrentModalCanvas;
         }
 
         private void ToggleBottomDrawer()
@@ -169,7 +457,11 @@ namespace UnderwaterGliderTwin.UI
             content.anchorMax = new Vector2(0.5f, 1f);
             content.pivot = new Vector2(0.5f, 1f);
             content.anchoredPosition = Vector2.zero;
-            content.sizeDelta = new Vector2(760f, drawer.name == "FlightLegDrawerPanel" ? 350f : 620f);
+            var availableWidth = Mathf.Max(1f, drawer.rect.width - 24f);
+            var contentWidth = drawer.name == "FlightLegDrawerPanel"
+                ? drawer.rect.width + 16f
+                : Mathf.Min(760f, availableWidth);
+            content.sizeDelta = new Vector2(contentWidth, drawer.name == "FlightLegDrawerPanel" ? 350f : 620f);
             foreach (var child in existingChildren)
             {
                 child.SetParent(content, false);
@@ -237,6 +529,60 @@ namespace UnderwaterGliderTwin.UI
             }
 
             SetStatus("参数仿真已更新", new Color(0.74f, 0.95f, 1f));
+        }
+    }
+
+    public sealed class ResponsiveTaskParameterLayout : MonoBehaviour
+    {
+        private const float MinimumCardWidth = 420f;
+        private const float HorizontalGap = 10f;
+        private GridLayoutGroup grid;
+        private ContentSizeFitter fitter;
+
+        public int ColumnCount => grid != null ? grid.constraintCount : 0;
+
+        public void Configure(GridLayoutGroup targetGrid, ContentSizeFitter targetFitter)
+        {
+            grid = targetGrid;
+            fitter = targetFitter;
+            ApplyForWidth((transform as RectTransform)?.rect.width ?? 1920f);
+        }
+
+        public void RefreshForWidth(float width)
+        {
+            ApplyForWidth(width);
+        }
+
+        private void OnRectTransformDimensionsChange()
+        {
+            if (grid != null)
+            {
+                ApplyForWidth((transform as RectTransform)?.rect.width ?? 1920f);
+            }
+        }
+
+        private void ApplyForWidth(float width)
+        {
+            if (grid == null)
+            {
+                return;
+            }
+
+            var available = Mathf.Max(0f, width - grid.padding.horizontal);
+            var columns = available > MinimumCardWidth * 3f + HorizontalGap * 2f
+                ? 3
+                : available >= MinimumCardWidth * 2f + HorizontalGap
+                    ? 2
+                    : 1;
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = columns;
+            grid.spacing = new Vector2(HorizontalGap, 8f);
+            var cellWidth = Mathf.Max(MinimumCardWidth, (available - HorizontalGap * (columns - 1)) / columns);
+            grid.cellSize = new Vector2(cellWidth, 64f);
+            if (fitter != null)
+            {
+                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
         }
     }
 }

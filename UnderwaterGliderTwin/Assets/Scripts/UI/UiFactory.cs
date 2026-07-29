@@ -10,7 +10,7 @@ namespace UnderwaterGliderTwin.UI
         public static readonly Color CommandPanelEdge = new Color(0.08f, 0.68f, 0.92f, 0.62f);
         public static readonly Color CommandAccent = new Color(0.08f, 0.84f, 1f, 1f);
         public static readonly Color CommandText = new Color(0.87f, 0.97f, 1f, 1f);
-        public const float PlaybackControlsBottomOffset = 142f;
+        public const float CommandCenterHeaderHeight = 48f;
         private static Font font;
 
         public static Canvas EnsureCanvas(Transform parent)
@@ -72,7 +72,7 @@ namespace UnderwaterGliderTwin.UI
                 new Vector2(1f, 1f),
                 new Vector2(0.5f, 1f),
                 Vector2.zero,
-                new Vector2(0f, 48f),
+                new Vector2(0f, CommandCenterHeaderHeight),
                 new Color(0.005f, 0.03f, 0.07f, 0.98f));
             var outline = header.gameObject.AddComponent<Outline>();
             outline.effectColor = new Color(0.06f, 0.62f, 0.95f, 0.72f);

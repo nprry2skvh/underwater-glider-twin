@@ -193,7 +193,8 @@ namespace UnderwaterGliderTwin.UI
 
         private void BuildOceanCurrentDrawer(Transform canvas)
         {
-            oceanCurrentDrawer = UiFactory.Panel("OceanCurrentDrawerPanel", canvas, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760f, 600f), new Color(0.015f, 0.075f, 0.1f, 0.98f));
+            var modalCanvas = EnsureOceanCurrentModalCanvas(canvas);
+            oceanCurrentDrawer = UiFactory.Panel("OceanCurrentDrawerPanel", modalCanvas.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760f, 600f), new Color(0.015f, 0.075f, 0.1f, 0.98f));
             UiFactory.Text("OceanCurrentDrawerTitle", oceanCurrentDrawer, "海流配置", 20, TextAnchor.MiddleLeft, new Color(0.92f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(22f, -26f), new Vector2(260f, 30f));
             UiFactory.Button("OceanCurrentDrawerCloseButton", oceanCurrentDrawer, "关闭", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-20f, -24f), new Vector2(72f, 28f)).onClick.AddListener(ToggleOceanCurrentDrawer);
             oceanCurrentDrawerSummary = UiFactory.Text("OceanCurrentDrawerSummary", oceanCurrentDrawer, "海流层：0", 13, TextAnchor.MiddleLeft, new Color(0.74f, 0.95f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(22f, -66f), new Vector2(300f, 24f));
@@ -257,9 +258,20 @@ namespace UnderwaterGliderTwin.UI
 
             var visible = !oceanCurrentDrawer.gameObject.activeSelf;
             oceanCurrentDrawer.gameObject.SetActive(visible);
+            if (oceanCurrentModalCanvas != null)
+            {
+                oceanCurrentModalCanvas.gameObject.SetActive(visible);
+            }
             if (visible)
             {
+                bottomDrawerExpandedBeforeModal = bottomDrawerExpanded;
+                SetBottomDrawerExpanded(false);
+                oceanCurrentDrawer.SetAsLastSibling();
                 RefreshOceanCurrentDrawer();
+            }
+            else if (bottomDrawerExpandedBeforeModal)
+            {
+                SetBottomDrawerExpanded(true);
             }
         }
 

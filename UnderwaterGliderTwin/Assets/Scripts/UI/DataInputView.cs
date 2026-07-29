@@ -126,7 +126,7 @@ namespace UnderwaterGliderTwin.UI
                     new Vector2(-332f, 0f), new Vector2(112f, 28f));
             }
             headerButton.onClick.RemoveAllListeners();
-            headerButton.onClick.AddListener(() => panel.gameObject.SetActive(!panel.gameObject.activeSelf));
+            headerButton.onClick.AddListener(ToggleConfigurationPanel);
             CreateConfigurationGroups(panel);
 
             UiFactory.Text("MissionConfigurationTitle", panel, "任务配置", 18, TextAnchor.MiddleLeft, new Color(0.92f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -22f), new Vector2(300f, 28f));
@@ -196,6 +196,22 @@ namespace UnderwaterGliderTwin.UI
         public void BringConfigurationToFront()
         {
             configurationPanel?.SetAsLastSibling();
+        }
+
+        private void ToggleConfigurationPanel()
+        {
+            if (configurationPanel == null)
+            {
+                return;
+            }
+
+            var visible = !configurationPanel.gameObject.activeSelf;
+            configurationPanel.gameObject.SetActive(visible);
+            if (visible)
+            {
+                SetBottomDrawerExpanded(false);
+                BringConfigurationToFront();
+            }
         }
 
         private void OnEnable()
@@ -396,6 +412,7 @@ namespace UnderwaterGliderTwin.UI
             bottomDrawerViewport = null;
             bottomDrawerScrollRect = null;
             bottomDrawerToggleButton = null;
+            oceanCurrentModalCanvas = null;
             for (var index = transform.childCount - 1; index >= 0; index--)
             {
                 var child = transform.GetChild(index).gameObject;
@@ -412,8 +429,9 @@ namespace UnderwaterGliderTwin.UI
 
         private static InputField AddLabeledInput(Transform panel, string label, string inputName, string value, float x, float y, float width)
         {
-            UiFactory.Text(inputName + "Label", panel, label, 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.96f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(x, y), new Vector2(width, 18f));
-            return UiFactory.InputField(inputName, panel, value, label, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(x, y - 19f), new Vector2(width, 28f));
+            var field = UiFactory.Panel(inputName + "Field", panel, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(x, y), new Vector2(width, 48f), Color.clear);
+            UiFactory.Text(inputName + "Label", field, label, 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.96f, 1f), new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), Vector2.zero, new Vector2(-8f, 18f));
+            return UiFactory.InputField(inputName, field, value, label, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(0f, -20f), new Vector2(-8f, 28f));
         }
     }
 }
