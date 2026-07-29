@@ -40,7 +40,7 @@ namespace UnderwaterGliderTwin.UI
             var path = csvPathInput != null ? csvPathInput.text.Trim() : string.Empty;
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             {
-                SetOceanCurrentDrawerStatus("请先输入有效的海试 CSV 路径。", new Color(1f, 0.58f, 0.58f));
+                SetOceanCurrentDrawerStatus("请先输入有效的海试 CSV 文件路径。", new Color(1f, 0.58f, 0.58f));
                 return;
             }
 

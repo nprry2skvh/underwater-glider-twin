@@ -132,7 +132,7 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.Text("MissionConfigurationTitle", panel, "任务配置", 18, TextAnchor.MiddleLeft, new Color(0.92f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -22f), new Vector2(300f, 28f));
 
             UiFactory.Text("CsvSourceLabel", panel, "CSV 数据源", 13, TextAnchor.MiddleLeft, new Color(0.82f, 0.96f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -58f), new Vector2(90f, 22f));
-            csvPathInput = UiFactory.InputField("CsvPathInput", panel, currentCsvPath ?? RuntimeDataSourceState.LastCsvPath, "遥测 CSV 路径", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(114f, -52f), new Vector2(1118f, 34f));
+            csvPathInput = UiFactory.InputField("CsvPathInput", panel, currentCsvPath ?? RuntimeDataSourceState.LastCsvPath, "遥测 CSV 文件路径", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(114f, -52f), new Vector2(1118f, 34f));
             UiFactory.PrimaryButton("LoadCsvButton", panel, "加载 CSV", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1246f, -52f), new Vector2(116f, 34f)).onClick.AddListener(OnLoadClicked);
 
             UiFactory.Text("PredictionModelLabel", panel, "预测模型", 13, TextAnchor.MiddleLeft, new Color(0.82f, 0.96f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -102f), new Vector2(120f, 22f));
@@ -232,7 +232,7 @@ namespace UnderwaterGliderTwin.UI
             var path = csvPathInput != null ? csvPathInput.text.Trim() : string.Empty;
             if (string.IsNullOrWhiteSpace(path))
             {
-                SetStatus("请输入 CSV 路径", new Color(1f, 0.5f, 0.5f));
+                SetStatus("请输入 CSV 文件路径", new Color(1f, 0.5f, 0.5f));
                 return;
             }
 

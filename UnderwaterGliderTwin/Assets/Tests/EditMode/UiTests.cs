@@ -641,6 +641,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(FindText("MissionConfigurationTitle").text, Is.EqualTo("任务配置"));
             Assert.That(FindText("LoadCsvButtonLabel").text, Is.EqualTo("加载 CSV"));
             Assert.That(FindText("SimulationApplyButtonLabel").text, Is.EqualTo("运行仿真"));
+            Assert.That(FindText("CsvPathInputPlaceholder").text, Is.EqualTo("遥测 CSV 文件路径"));
             Assert.That(FindText("MissionConfigurationStatus").text, Is.EqualTo("CSV 回放和参数仿真均可用"));
             var missionBar = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
             Assert.That(missionBar.anchorMin.x, Is.EqualTo(0f));
@@ -649,7 +650,10 @@ namespace UnderwaterGliderTwin.Tests
             GameObject.Find("CsvPathInput").GetComponent<InputField>().text = string.Empty;
             GameObject.Find("LoadCsvButton").GetComponent<Button>().onClick.Invoke();
 
-            Assert.That(FindText("MissionConfigurationStatus").text, Is.EqualTo("请输入 CSV 路径"));
+            Assert.That(FindText("MissionConfigurationStatus").text, Is.EqualTo("请输入 CSV 文件路径"));
+
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(FindText("OceanCurrentLocalFileInputPlaceholder").text, Is.EqualTo("本地 JSON/NetCDF 文件路径"));
         }
 
         [Test]

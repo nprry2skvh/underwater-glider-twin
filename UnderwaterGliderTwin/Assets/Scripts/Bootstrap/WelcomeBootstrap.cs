@@ -38,7 +38,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             CreateText(panel.transform, "Title", "水下滑翔机数字孪生", 34, new Vector2(.08f, .83f), new Vector2(.92f, .96f));
             CreateText(panel.transform, "Description", "CSV 遥测回放、参数化任务仿真与实验性短时预测", 18, new Vector2(.08f, .73f), new Vector2(.92f, .83f));
             csvInput = CreateInput(panel.transform, initialCsv, new Vector2(.08f, .58f), new Vector2(.72f, .67f));
-            CreateButton(panel.transform, "ConfirmCsvButton", "确认 CSV 路径", new Vector2(.74f, .58f), new Vector2(.92f, .67f), ConfirmCsv);
+            CreateButton(panel.transform, "ConfirmCsvButton", "确认 CSV 文件路径", new Vector2(.74f, .58f), new Vector2(.92f, .67f), ConfirmCsv);
             CreateButton(panel.transform, "StartCsvButton", "开始上次 / 默认 CSV", new Vector2(.08f, .43f), new Vector2(.48f, .53f), StartPreferredCsv);
             CreateButton(panel.transform, "SimulationButton", "进入仿真模式", new Vector2(.52f, .43f), new Vector2(.92f, .53f), () => coordinator.ApplyAndLaunch(coordinator.CreateSimulationRequest()));
             CreateButton(panel.transform, "NotesButton", "查看说明", new Vector2(.08f, .31f), new Vector2(.30f, .39f), () => notes.gameObject.SetActive(!notes.gameObject.activeSelf));
