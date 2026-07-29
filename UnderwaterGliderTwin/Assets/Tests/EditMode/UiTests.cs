@@ -446,8 +446,10 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(GameObject.Find("OceanSectionFields").GetComponent<GridLayoutGroup>(), Is.Not.Null);
             var layout = GameObject.Find("MissionSectionFields").GetComponent<ResponsiveTaskParameterLayout>();
             layout.RefreshForWidth(1920f);
-            Assert.That(layout.ColumnCount, Is.EqualTo(3));
+            Assert.That(layout.ColumnCount, Is.EqualTo(4));
             layout.RefreshForWidth(1280f);
+            Assert.That(layout.ColumnCount, Is.EqualTo(3));
+            layout.RefreshForWidth(900f);
             Assert.That(layout.ColumnCount, Is.EqualTo(2));
             layout.RefreshForWidth(600f);
             Assert.That(layout.ColumnCount, Is.EqualTo(1));

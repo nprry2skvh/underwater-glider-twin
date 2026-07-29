@@ -535,7 +535,7 @@ namespace UnderwaterGliderTwin.UI
 
     public sealed class ResponsiveTaskParameterLayout : MonoBehaviour
     {
-        private const float MinimumCardWidth = 424f;
+        private const float MinimumCardWidth = 320f;
         private const float HorizontalGap = 8f;
         private const float VerticalGap = 4f;
         private GridLayoutGroup grid;
@@ -571,11 +571,13 @@ namespace UnderwaterGliderTwin.UI
             }
 
             var available = Mathf.Max(0f, width - grid.padding.horizontal);
-            var columns = available > MinimumCardWidth * 3f + HorizontalGap * 2f
-                ? 3
-                : available >= MinimumCardWidth * 2f + HorizontalGap
-                    ? 2
-                    : 1;
+            var columns = available > MinimumCardWidth * 4f + HorizontalGap * 3f
+                ? 4
+                : available > MinimumCardWidth * 3f + HorizontalGap * 2f
+                    ? 3
+                    : available >= MinimumCardWidth * 2f + HorizontalGap
+                        ? 2
+                        : 1;
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = columns;
             grid.spacing = new Vector2(HorizontalGap, VerticalGap);
