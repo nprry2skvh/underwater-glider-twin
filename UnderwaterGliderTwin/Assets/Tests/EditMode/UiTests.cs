@@ -1173,6 +1173,34 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void FlightLegDrawerCollapsesTaskParameterDrawerBeforeOpening()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            GameObject.Find("MissionConfigurationDrawerToggleButton").GetComponent<Button>().onClick.Invoke();
+            var configuration = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
+            Assert.That(configuration.sizeDelta.y, Is.GreaterThan(48f));
+
+            GameObject.Find("FlightLegSettingsButton").GetComponent<Button>().onClick.Invoke();
+            var flight = GameObject.Find("FlightLegDrawerPanel").GetComponent<RectTransform>();
+            Assert.That(flight.gameObject.activeSelf, Is.True);
+            Assert.That(configuration.sizeDelta.y, Is.EqualTo(48f).Within(.1f));
+            AssertRectanglesDoNotOverlap(configuration, flight);
+
+            var playback = CreatePlayback(Frames(2));
+            var mapper = new GeoCoordinateMapper(playback.Model.Frames[0], horizontalScale: 1f, depthScale: 1f);
+            var prediction = CreatePrediction(playback, playback.Model.Frames);
+            var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
+            var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
+            var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(playback.Model.Frames, mapper, playback, prediction);
+            var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
+            controls.Initialize(playback, cameraController, environment, trajectory);
+            AssertRectanglesDoNotOverlap(flight, GameObject.Find("PlaybackControlsPanel").GetComponent<RectTransform>());
+        }
+
+        [Test]
         public void UiFactory_CreatesEventSystemForRuntimeUi()
         {
             var frames = Frames(2);

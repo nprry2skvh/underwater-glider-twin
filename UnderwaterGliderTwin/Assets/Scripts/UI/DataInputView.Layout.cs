@@ -13,6 +13,7 @@ namespace UnderwaterGliderTwin.UI
         private bool bottomDrawerExpanded;
         private Canvas oceanCurrentModalCanvas;
         private bool bottomDrawerExpandedBeforeModal;
+        private bool bottomDrawerExpandedBeforeFlightLeg;
         private const float ExpandedTaskDrawerHeight = 320f;
 
         private void ConfigureResponsiveBottomDrawer(RectTransform drawer)
@@ -560,12 +561,13 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            // Modal editors are constrained to the same bottom safe area as the main drawer.
-            // They never cover more than 35% of the screen, preserving the 3D interaction area.
+            // Flight-leg editing lives above the fixed playback bar.  Keeping this
+            // offset here makes it impossible for the editor and operations bar to
+            // claim the same pixels at any resolution.
             drawer.anchorMin = new Vector2(0f, 0f);
             drawer.anchorMax = new Vector2(1f, 0f);
             drawer.pivot = new Vector2(0.5f, 0f);
-            drawer.anchoredPosition = Vector2.zero;
+            drawer.anchoredPosition = new Vector2(0f, UiFactory.CommandCenterOperationsTopOffset);
             drawer.sizeDelta = new Vector2(-24f, 48f);
             var heightLimiter = drawer.gameObject.GetComponent<DrawerHeightLimiter>() ?? drawer.gameObject.AddComponent<DrawerHeightLimiter>();
             heightLimiter.Apply();

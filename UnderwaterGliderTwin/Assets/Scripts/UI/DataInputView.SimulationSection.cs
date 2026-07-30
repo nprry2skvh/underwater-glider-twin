@@ -49,13 +49,22 @@ namespace UnderwaterGliderTwin.UI
             flightLegDrawer.gameObject.SetActive(visible);
             if (!visible)
             {
+                if (bottomDrawerExpandedBeforeFlightLeg)
+                {
+                    SetBottomDrawerExpanded(true);
+                }
                 return;
             }
+
+            bottomDrawerExpandedBeforeFlightLeg = bottomDrawerExpanded;
+            SetBottomDrawerExpanded(false);
 
             if (oceanCurrentDrawer != null)
             {
                 oceanCurrentDrawer.gameObject.SetActive(false);
             }
+
+            flightLegDrawer.SetAsLastSibling();
 
             RefreshFlightLegDrawer();
         }
