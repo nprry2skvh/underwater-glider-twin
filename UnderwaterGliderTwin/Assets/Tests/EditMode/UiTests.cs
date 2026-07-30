@@ -354,7 +354,7 @@ namespace UnderwaterGliderTwin.Tests
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
-            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+            FindChildNamed(dataInput.transform, "OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
 
             var label = GameObject.Find("DynamicsMassInputLabel").transform;
             var input = GameObject.Find("DynamicsMassInput").transform;
@@ -475,7 +475,7 @@ namespace UnderwaterGliderTwin.Tests
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
-            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+            FindChildNamed(dataInput.transform, "OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
 
             var modal = GameObject.Find("OceanCurrentModalCanvas").GetComponent<Canvas>();
             var main = GameObject.Find("RuntimeCanvas").GetComponent<Canvas>();
@@ -1198,6 +1198,61 @@ namespace UnderwaterGliderTwin.Tests
             var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
             controls.Initialize(playback, cameraController, environment, trajectory);
             AssertRectanglesDoNotOverlap(flight, GameObject.Find("PlaybackControlsPanel").GetComponent<RectTransform>());
+        }
+
+        [Test]
+        public void CommandCenterPanelsDoNotOverlapAt1080p()
+        {
+            var canvasObject = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(1920f, 1080f);
+            var scaler = canvasObject.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            Canvas.ForceUpdateCanvases();
+
+            var frames = Frames(2);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+            dashboard.Initialize(playback, prediction);
+            var status = new GameObject("Status").AddComponent<StatusPanelView>();
+            status.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), null, prediction);
+
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
+            var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
+            var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
+            controls.Initialize(playback, cameraController, environment, trajectory);
+            var toolbar = new GameObject("Toolbar").AddComponent<OceanCommandToolbarView>();
+            toolbar.Initialize(cameraController, trajectory);
+
+            Canvas.ForceUpdateCanvases();
+            AssertRectanglesDoNotOverlap(GameObject.Find("TelemetryPanel").GetComponent<RectTransform>(), GameObject.Find("NavigationReferenceCard").GetComponent<RectTransform>());
+            AssertRectanglesDoNotOverlap(GameObject.Find("TelemetryPanel").GetComponent<RectTransform>(), GameObject.Find("OceanCommandToolbar").GetComponent<RectTransform>());
+            AssertRectanglesDoNotOverlap(GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>(), GameObject.Find("OceanCommandToolbar").GetComponent<RectTransform>());
+            AssertRectanglesDoNotOverlap(GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>(), GameObject.Find("PlaybackControlsPanel").GetComponent<RectTransform>());
+            AssertRectanglesDoNotOverlap(GameObject.Find("TelemetryPanel").GetComponent<RectTransform>(), GameObject.Find("PlaybackControlsPanel").GetComponent<RectTransform>());
+        }
+
+        [Test]
+        public void OceanCurrentModalClosesFlightDrawerBeforeOpening()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            GameObject.Find("FlightLegSettingsButton").GetComponent<Button>().onClick.Invoke();
+            var flightDrawer = GameObject.Find("FlightLegDrawerPanel");
+            Assert.That(flightDrawer.activeSelf, Is.True);
+
+            FindChildNamed(dataInput.transform, "OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(flightDrawer.activeSelf, Is.False);
+            var oceanModalCanvas = GameObject.Find("OceanCurrentModalCanvas");
+            Assert.That(oceanModalCanvas, Is.Not.Null);
+            Assert.That(oceanModalCanvas.transform.Find("OceanCurrentDrawerPanel").gameObject.activeSelf, Is.True);
         }
 
         [Test]
