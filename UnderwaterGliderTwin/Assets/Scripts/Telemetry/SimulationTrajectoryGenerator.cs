@@ -725,9 +725,13 @@ namespace UnderwaterGliderTwin.Telemetry
 
         private static void HoldAtSurface(ref GliderDynamicsState state, Vector3 currentEndMps)
         {
+            var horizontalWaterVelocity = new Vector3(
+                state.WaterVelocityEndMps.x,
+                0f,
+                state.WaterVelocityEndMps.z);
             state.PositionEndM.y = 0f;
-            state.WaterVelocityEndMps = Vector3.zero;
-            state.EarthVelocityEndMps = currentEndMps;
+            state.WaterVelocityEndMps = horizontalWaterVelocity;
+            state.EarthVelocityEndMps = horizontalWaterVelocity + currentEndMps;
         }
 
         private static float NormalizeHeading(float headingDeg)

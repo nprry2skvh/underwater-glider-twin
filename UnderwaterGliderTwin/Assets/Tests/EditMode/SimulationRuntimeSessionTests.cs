@@ -526,7 +526,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(afterReplacement, Is.EqualTo(before));
             Assert.That(
                 view.transform.Find("RemainingTrajectoryLine").GetComponent<LineRenderer>().positionCount,
-                Is.EqualTo(3));
+                Is.GreaterThan(3));
             controller.SetPlaying(true);
             controller.Step(1f);
             controller.Step(1f);

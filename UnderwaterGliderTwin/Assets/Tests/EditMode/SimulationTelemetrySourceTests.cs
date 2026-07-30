@@ -44,6 +44,59 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void Load_LeavesOnlyOneSurfaceFrameBetweenCycles()
+        {
+            var profile = SimulationProfile.Default;
+            profile.CycleCount = 1;
+            profile.CycleDurationSeconds = 900f;
+            profile.SampleIntervalSeconds = 5f;
+            profile.TargetDepthM = 160f;
+
+            var frames = new SimulationTelemetrySource(profile).Load().Frames;
+            var maxSurfaceRun = 0;
+            var currentSurfaceRun = 0;
+            var maxDepth = 0f;
+            for (var i = 0; i < frames.Count; i++)
+            {
+                maxDepth = Mathf.Max(maxDepth, frames[i].DepthM);
+                if (frames[i].DepthM <= 0.01f)
+                {
+                    currentSurfaceRun++;
+                    maxSurfaceRun = Mathf.Max(maxSurfaceRun, currentSurfaceRun);
+                }
+                else
+                {
+                    currentSurfaceRun = 0;
+                }
+            }
+
+            Assert.That(maxSurfaceRun, Is.LessThanOrEqualTo(1));
+            Assert.That(maxDepth, Is.GreaterThan(profile.TargetDepthM * 0.75f));
+        }
+
+        [Test]
+        public void Load_UsesClosedLoopBuoyancyWhenDirectionalCommandsCannotDriveBothLegs()
+        {
+            var profile = SimulationProfile.Default;
+            profile.CycleCount = 1;
+            profile.CycleDurationSeconds = 1200f;
+            profile.SampleIntervalSeconds = 10f;
+            profile.TargetDepthM = 120f;
+            profile.DescentNetBuoyancyForceN = 0f;
+            profile.AscentNetBuoyancyForceN = 0f;
+
+            var frames = new SimulationTelemetrySource(profile).Load().Frames;
+            var maximumDepth = 0f;
+            foreach (var frame in frames)
+            {
+                maximumDepth = Mathf.Max(maximumDepth, frame.DepthM);
+            }
+
+            Assert.That(maximumDepth, Is.GreaterThan(profile.TargetDepthM * 0.5f));
+            Assert.That(frames[^1].DepthM, Is.EqualTo(0f).Within(0.01f));
+        }
+
+        [Test]
         public void Load_AllowsTargetDepthBeyondLegacyWaterColumnDefault()
         {
             var profile = SimulationProfile.Default;
@@ -367,7 +420,7 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void Load_StopsWaterRelativeGlideAfterReachingTheSurface()
+        public void Load_PreservesHorizontalWaterMotionWhenReachingTheSurface()
         {
             var profile = SimulationProfile.Default;
             profile.CycleCount = 1;
@@ -379,7 +432,8 @@ namespace UnderwaterGliderTwin.Tests
 
             var frames = new SimulationTelemetrySource(profile).Load().Frames;
             Assert.That(frames[^1].DepthM, Is.EqualTo(0f).Within(0.001f));
-            Assert.That(frames[^1].Diagnostics.Value.WaterVelocityEndMps.magnitude, Is.LessThan(0.01f));
+            var horizontalWaterVelocity = frames[^1].Diagnostics.Value.WaterVelocityEndMps;
+            Assert.That(new Vector2(horizontalWaterVelocity.x, horizontalWaterVelocity.z).magnitude, Is.GreaterThan(0.01f));
         }
 
         [Test]

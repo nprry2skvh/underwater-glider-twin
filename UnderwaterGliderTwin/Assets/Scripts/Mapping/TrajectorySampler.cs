@@ -75,6 +75,55 @@ namespace UnderwaterGliderTwin.Mapping
             return points;
         }
 
+        public static Vector3[] SampleSmooth(IReadOnlyList<TelemetryFrame> frames, GeoCoordinateMapper mapper, int maxPoints)
+        {
+            var sampled = Sample(frames, mapper, maxPoints);
+            if (sampled.Length < 3 || maxPoints <= sampled.Length)
+            {
+                return sampled;
+            }
+
+            var targetCount = Mathf.Min(maxPoints, (sampled.Length - 1) * 4 + 1);
+            if (targetCount <= sampled.Length)
+            {
+                return sampled;
+            }
+
+            var smoothed = new Vector3[targetCount];
+            for (var outputIndex = 0; outputIndex < targetCount; outputIndex++)
+            {
+                var scaledIndex = outputIndex * (sampled.Length - 1f) / (targetCount - 1f);
+                var segment = Mathf.Min(sampled.Length - 2, Mathf.FloorToInt(scaledIndex));
+                var t = scaledIndex - segment;
+                var p0 = sampled[Mathf.Max(0, segment - 1)];
+                var p1 = sampled[segment];
+                var p2 = sampled[segment + 1];
+                var p3 = sampled[Mathf.Min(sampled.Length - 1, segment + 2)];
+                var point = CatmullRom(p0, p1, p2, p3, t);
+
+                // Depth is represented by a negative world Y. Keep interpolation
+                // inside the neighboring depth interval so the curve cannot poke
+                // above the water surface or below the sampled envelope.
+                point.y = Mathf.Clamp(point.y, Mathf.Min(p1.y, p2.y), Mathf.Max(p1.y, p2.y));
+                smoothed[outputIndex] = point;
+            }
+
+            smoothed[0] = sampled[0];
+            smoothed[smoothed.Length - 1] = sampled[sampled.Length - 1];
+            return smoothed;
+        }
+
+        private static Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+        {
+            var t2 = t * t;
+            var t3 = t2 * t;
+            return 0.5f * (
+                2f * p1
+                + (-p0 + p2) * t
+                + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2
+                + (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
+        }
+
         private static HashSet<int> BuildPreservedIndexes(IReadOnlyList<TelemetryFrame> frames)
         {
             var indexes = new HashSet<int>();

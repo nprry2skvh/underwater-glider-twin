@@ -53,7 +53,7 @@ namespace UnderwaterGliderTwin.Visualization
             replacementPreservedIndex = -1;
             replacementHistoryPointCount = 0;
             replacementMappedThroughIndex = -1;
-            FullTrajectoryPoints = TrajectorySampler.Sample(frames, mapper, 1200);
+            FullTrajectoryPoints = TrajectorySampler.SampleSmooth(frames, mapper, 1200);
             intendedBuffer = BuildIntendedPoints(frames, mapper);
             actualBuffer = new Vector3[FullTrajectoryPoints.Length];
             futureBuffer = new Vector3[FullTrajectoryPoints.Length];
@@ -140,7 +140,7 @@ namespace UnderwaterGliderTwin.Visualization
             replacementMappedThroughIndex = preservedIndex;
             FullTrajectoryPoints = BuildCombinedTrajectory(frames, preservedIndex);
             intendedBuffer = BuildIntendedPoints(frames, mapper);
-            futureBuffer = TrajectorySampler.Sample(frames.Skip(preservedIndex).ToArray(), mapper, 1200);
+            futureBuffer = TrajectorySampler.SampleSmooth(frames.Skip(preservedIndex).ToArray(), mapper, 1200);
             UpdateBackdropAndTarget();
             if (intendedLine != null)
             {
@@ -397,7 +397,7 @@ namespace UnderwaterGliderTwin.Visualization
                 var remainingFrames = playback != null
                     ? playback.Model.Frames.Skip(Mathf.Clamp(currentPlaybackIndex, 0, playback.Model.FrameCount - 1)).ToArray()
                     : Array.Empty<TelemetryFrame>();
-                futureBuffer = TrajectorySampler.Sample(remainingFrames, mapper, 1200);
+                futureBuffer = TrajectorySampler.SampleSmooth(remainingFrames, mapper, 1200);
                 futureActualLine.positionCount = futureBuffer.Length;
                 if (futureBuffer.Length > 0)
                 {
@@ -435,7 +435,7 @@ namespace UnderwaterGliderTwin.Visualization
             }
             else
             {
-                actualBuffer = TrajectorySampler.Sample(frames.Take(preservedIndex + 1).ToArray(), mapper, 1200);
+                actualBuffer = TrajectorySampler.SampleSmooth(frames.Take(preservedIndex + 1).ToArray(), mapper, 1200);
             }
 
             replacementHistoryPointCount = actualBuffer.Length;
@@ -444,8 +444,8 @@ namespace UnderwaterGliderTwin.Visualization
 
         private Vector3[] BuildCombinedTrajectory(IReadOnlyList<TelemetryFrame> frames, int preservedIndex)
         {
-            var history = TrajectorySampler.Sample(frames.Take(preservedIndex + 1).ToArray(), mapper, 1200);
-            var future = TrajectorySampler.Sample(frames.Skip(preservedIndex).ToArray(), mapper, 1200);
+            var history = TrajectorySampler.SampleSmooth(frames.Take(preservedIndex + 1).ToArray(), mapper, 1200);
+            var future = TrajectorySampler.SampleSmooth(frames.Skip(preservedIndex).ToArray(), mapper, 1200);
             if (history.Length == 0)
             {
                 return future;

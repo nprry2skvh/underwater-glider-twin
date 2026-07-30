@@ -161,7 +161,7 @@ namespace UnderwaterGliderTwin.Tests
 
             view.Initialize(frames, mapper, playback, prediction);
 
-            Assert.That(view.FullTrajectoryPoints, Has.Length.EqualTo(12));
+            Assert.That(view.FullTrajectoryPoints, Has.Length.GreaterThan(12));
             Assert.That(view.transform.Find("ActualBackdropLine"), Is.Not.Null);
             Assert.That(view.transform.Find("ActualTrajectoryLine"), Is.Not.Null);
             Assert.That(view.transform.Find("RemainingTrajectoryLine"), Is.Not.Null);
@@ -241,6 +241,31 @@ namespace UnderwaterGliderTwin.Tests
             var points = TrajectorySampler.Sample(frames, mapper, 8);
 
             Assert.That(points, Has.Length.EqualTo(2));
+        }
+
+        [Test]
+        public void TrajectorySampler_SmoothSamplingAddsCubicIntermediatePointsWithoutMovingEndpoints()
+        {
+            var frames = new[]
+            {
+                new TelemetryFrame(0, "t0", 0f, 120d, 25d, 0f, 100f, 0f, 0f, 0f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(1, "t1", 1f, 120.00001d, 25d, 10f, 100f, 0f, 0f, 0f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(2, "t2", 2f, 120.00001d, 25.00001d, 20f, 100f, 0f, 0f, 0f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(3, "t3", 3f, 120.00002d, 25.00001d, 30f, 100f, 0f, 0f, 0f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f)
+            };
+            var mapper = new GeoCoordinateMapper(frames[0], 1f, 1f);
+
+            var points = TrajectorySampler.SampleSmooth(frames, mapper, 16);
+
+            Assert.That(points.Length, Is.GreaterThan(frames.Length));
+            Assert.That(points[0], Is.EqualTo(mapper.Map(frames[0])));
+            Assert.That(points[^1], Is.EqualTo(mapper.Map(frames[^1])));
+            for (var i = 0; i < points.Length; i++)
+            {
+                Assert.That(float.IsNaN(points[i].x) || float.IsInfinity(points[i].x), Is.False);
+                Assert.That(float.IsNaN(points[i].y) || float.IsInfinity(points[i].y), Is.False);
+                Assert.That(float.IsNaN(points[i].z) || float.IsInfinity(points[i].z), Is.False);
+            }
         }
 
         [Test]
