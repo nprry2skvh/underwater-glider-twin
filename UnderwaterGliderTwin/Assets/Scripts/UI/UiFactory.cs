@@ -11,6 +11,9 @@ namespace UnderwaterGliderTwin.UI
         public static readonly Color CommandAccent = new Color(0.08f, 0.84f, 1f, 1f);
         public static readonly Color CommandText = new Color(0.87f, 0.97f, 1f, 1f);
         public const float CommandCenterHeaderHeight = 48f;
+        public const float CommandCenterParameterBarHeight = 48f;
+        public const float CommandCenterContentTopOffset = CommandCenterHeaderHeight + CommandCenterParameterBarHeight + 16f;
+        public const float CommandCenterOperationsTopOffset = 142f;
         private static Font font;
 
         public static Canvas EnsureCanvas(Transform parent)

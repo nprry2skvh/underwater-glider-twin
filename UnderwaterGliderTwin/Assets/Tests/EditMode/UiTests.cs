@@ -1131,8 +1131,9 @@ namespace UnderwaterGliderTwin.Tests
 
             panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), new TwinLogger(logDirectory), null);
 
-            Assert.That(GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>().sizeDelta.y,
-                Is.LessThanOrEqualTo(640f));
+            var statusRect = GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>();
+            Assert.That(statusRect.sizeDelta.y,
+                Is.LessThanOrEqualTo(1080f - 112f - 142f));
         }
 
         [Test]
@@ -1153,8 +1154,22 @@ namespace UnderwaterGliderTwin.Tests
             var statusRect = GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>();
             Assert.That(statusRect.anchorMin, Is.EqualTo(new Vector2(1f, 1f)));
             Assert.That(statusRect.anchorMax, Is.EqualTo(new Vector2(1f, 1f)));
-            Assert.That(statusRect.anchoredPosition.y, Is.EqualTo(-56f).Within(.1f));
-            Assert.That(statusRect.sizeDelta.y, Is.LessThanOrEqualTo(512f));
+            Assert.That(statusRect.anchoredPosition.y, Is.EqualTo(-112f).Within(.1f));
+            Assert.That(statusRect.sizeDelta.y, Is.LessThanOrEqualTo(720f - 112f - 142f));
+        }
+
+        [Test]
+        public void StatusPanelView_StaysBelowHeaderAndParameterBar()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            var status = new GameObject("Status").AddComponent<StatusPanelView>();
+            status.Initialize(CreatePlayback(Frames(2)), new AlarmEvaluator(1000f, 1f, 90f), null, null);
+
+            var statusRect = GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>();
+            var parameterHeader = GameObject.Find("MissionConfigurationDrawerHeader").GetComponent<RectTransform>();
+            AssertRectanglesDoNotOverlap(statusRect, parameterHeader);
+            Assert.That(statusRect.anchoredPosition.y, Is.LessThanOrEqualTo(-112f));
         }
 
         [Test]
