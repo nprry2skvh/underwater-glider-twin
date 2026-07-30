@@ -893,6 +893,69 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void DataInputView_DrawerCacheLookupNotifiesRuntimeWithLoadedCurrentProfile()
+        {
+            const string cachedResponse = "{\"source\":\"drawer fixture\",\"datasetId\":\"test\",\"retrievedAtUtc\":\"2026-07-28T00:00:00Z\",\"layers\":[{\"minDepthM\":0,\"maxDepthM\":160,\"eastwardMps\":0.31,\"northwardMps\":-0.18}],\"fieldSamples\":[{\"longitudeDeg\":121.234567,\"latitudeDeg\":24.345678,\"depthM\":80,\"elapsedSeconds\":0,\"eastwardMps\":0.31,\"northwardMps\":-0.18,\"verticalMps\":0}]}";
+            var profile = SimulationProfile.Default;
+            profile.OriginLongitudeDeg = 121.234567d;
+            profile.OriginLatitudeDeg = 24.345678d;
+            profile.TargetDepthM = 160f;
+            profile.OceanCurrentPrefetchHalfWidthKm = 12.5f;
+            profile.OceanCurrentForecastWindowHours = 24f;
+            var request = new CopernicusCurrentRequest(
+                profile.OriginLongitudeDeg,
+                profile.OriginLatitudeDeg,
+                0f,
+                profile.TargetDepthM,
+                profile.OceanCurrentPrefetchHalfWidthKm,
+                profile.OceanCurrentForecastWindowHours);
+            var cachePath = Path.Combine(
+                Application.persistentDataPath,
+                "CopernicusCurrentCache",
+                CopernicusCurrentCache.BuildCacheKey(request) + ".json");
+            var existingCache = File.Exists(cachePath) ? File.ReadAllBytes(cachePath) : null;
+            CopernicusCurrentCache.Store(request, cachedResponse);
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            SimulationProfile notifiedProfile = null;
+            string drawerStatusAtNotification = null;
+            string eastwardAtNotification = null;
+
+            try
+            {
+                dataInput.Initialize(
+                    "D:\\telemetry.csv",
+                    profile,
+                    null,
+                    onOceanCurrentSettingsApplied: value =>
+                    {
+                        notifiedProfile = value;
+                        drawerStatusAtNotification = FindText("OceanCurrentDrawerStatus").text;
+                        eastwardAtNotification = GameObject.Find("OceanCurrentDrawerEastwardInput").GetComponent<InputField>().text;
+                    });
+                GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+                GameObject.Find("OceanCurrentCacheOnlyModeButton").GetComponent<Button>().onClick.Invoke();
+                GameObject.Find("OceanCurrentDrawerLookupButton").GetComponent<Button>().onClick.Invoke();
+
+                Assert.That(notifiedProfile, Is.Not.Null);
+                Assert.That(notifiedProfile.OceanCurrentField.Samples, Has.Count.EqualTo(1));
+                Assert.That(notifiedProfile.OceanCurrentProfile.GetVelocity(80f), Is.EqualTo(new Vector2(0.31f, -0.18f)));
+                Assert.That(drawerStatusAtNotification, Does.Contain("已加载 1 层"));
+                Assert.That(eastwardAtNotification, Is.EqualTo("0.31"));
+            }
+            finally
+            {
+                if (existingCache == null)
+                {
+                    if (File.Exists(cachePath)) File.Delete(cachePath);
+                }
+                else
+                {
+                    File.WriteAllBytes(cachePath, existingCache);
+                }
+            }
+        }
+
+        [Test]
         public void DataInputView_AppliesDynamicsPresetToSimulationProfile()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();

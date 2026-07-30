@@ -471,6 +471,7 @@ namespace UnderwaterGliderTwin.UI
                     SetActualCurrentSource(result);
                     SetCurrentLookupStatus(result.Profile, targetDepth, SetOceanCurrentDrawerStatus);
                     RefreshOceanCurrentLayerEditor();
+                    NotifyOceanCurrentSettingsApplied();
                 },
                 error => SetOceanCurrentDrawerStatus($"获取失败：{error}", new Color(1f, 0.58f, 0.58f)),
                 message => SetOceanCurrentDrawerStatus(message, new Color(0.62f, 0.85f, 0.92f))));
