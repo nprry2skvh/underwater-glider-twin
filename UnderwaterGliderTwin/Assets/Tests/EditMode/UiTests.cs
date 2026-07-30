@@ -537,14 +537,15 @@ namespace UnderwaterGliderTwin.Tests
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
             var current = FindChildNamed(dataInput.transform, "OceanCurrentDrawerPanel").GetComponent<RectTransform>();
             var flight = FindChildNamed(dataInput.transform, "FlightLegDrawerPanel").GetComponent<RectTransform>();
-            Assert.That(current.anchorMin, Is.EqualTo(new Vector2(0f, 0f)));
+            Assert.That(current.parent.name, Is.EqualTo("OceanCurrentModalCanvas"));
+            Assert.That(current.anchorMin, Is.EqualTo(new Vector2(.5f, .5f)));
+            Assert.That(current.anchorMax, Is.EqualTo(new Vector2(.5f, .5f)));
             Assert.That(flight.anchorMin, Is.EqualTo(new Vector2(0f, 0f)));
-            Assert.That(current.sizeDelta.y, Is.LessThanOrEqualTo(1080f * .35f));
             Assert.That(flight.sizeDelta.y, Is.LessThanOrEqualTo(1080f * .35f));
         }
 
         [Test]
-        public void OceanEditorScrollsToEveryDynamicsControlInsideBottomSafeArea()
+        public void OceanEditorScrollsToEveryDynamicsControlInsideModalViewport()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
@@ -558,7 +559,37 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(GameObject.Find("DynamicsTurnaroundDurationInput").transform.IsChildOf(scroll.content), Is.True);
             scroll.verticalNormalizedPosition = 0f;
             Canvas.ForceUpdateCanvases();
-            Assert.That(drawer.sizeDelta.y, Is.LessThanOrEqualTo(1080f * .35f));
+            Assert.That(drawer.parent.name, Is.EqualTo("OceanCurrentModalCanvas"));
+            Assert.That(drawer.sizeDelta.y, Is.LessThanOrEqualTo(760f));
+        }
+
+        [Test]
+        public void OceanCurrentModalKeepsStatusAndFixedControlsOutsideScrollableContent()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+
+            var drawer = GameObject.Find("OceanCurrentDrawerPanel").GetComponent<RectTransform>();
+            var scroll = drawer.GetComponent<ScrollRect>();
+            Assert.That(drawer.parent.name, Is.EqualTo("OceanCurrentModalCanvas"));
+            Assert.That(scroll, Is.Not.Null);
+            Assert.That(scroll.viewport, Is.Not.Null);
+            Assert.That(FindText("OceanCurrentDrawerStatus").rectTransform.IsChildOf(scroll.viewport), Is.False);
+            Assert.That(FindText("OceanCurrentDrawerTitle").rectTransform.IsChildOf(scroll.viewport), Is.False);
+            AssertRectanglesDoNotOverlap(FindText("OceanCurrentDrawerStatus").rectTransform, scroll.viewport);
+            AssertRectanglesDoNotOverlap(FindText("DynamicsParametersTitle").rectTransform, FindText("DynamicsMassInputLabel").rectTransform);
+        }
+
+        [Test]
+        public void MissionConfigurationStatusDoesNotOverlapOceanConfigurationButton()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            AssertRectanglesDoNotOverlap(
+                FindText("MissionConfigurationStatus").rectTransform,
+                GameObject.Find("OceanCurrentDrawerButton").GetComponent<RectTransform>());
         }
 
         [TestCase(1280, 720)]
@@ -583,7 +614,9 @@ namespace UnderwaterGliderTwin.Tests
 
             GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
             var oceanScroll = GameObject.Find("OceanCurrentDrawerPanel").GetComponent<ScrollRect>();
-            Assert.That(oceanScroll.GetComponent<RectTransform>().rect.height, Is.LessThanOrEqualTo(canvasRect.rect.height * .35f + .1f));
+            var oceanRect = oceanScroll.GetComponent<RectTransform>();
+            Assert.That(oceanRect.parent.name, Is.EqualTo("OceanCurrentModalCanvas"));
+            Assert.That(oceanRect.rect.height, Is.LessThanOrEqualTo(760f + .1f));
             oceanScroll.verticalNormalizedPosition = 1f;
             Canvas.ForceUpdateCanvases();
             AssertRectInsideViewport(GameObject.Find("OceanCurrentDrawerMinDepthInput").GetComponent<RectTransform>(), oceanScroll.viewport, width, height);
@@ -1103,6 +1136,28 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void StatusPanelView_StaysAboveOperationsBarAt720p()
+        {
+            var canvasObject = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(1280f, 720f);
+            var scaler = canvasObject.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            Canvas.ForceUpdateCanvases();
+
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+            panel.Initialize(CreatePlayback(Frames(2)), new AlarmEvaluator(1000f, 1f, 90f), null, null);
+
+            var statusRect = GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>();
+            Assert.That(statusRect.anchorMin, Is.EqualTo(new Vector2(1f, 1f)));
+            Assert.That(statusRect.anchorMax, Is.EqualTo(new Vector2(1f, 1f)));
+            Assert.That(statusRect.anchoredPosition.y, Is.EqualTo(-56f).Within(.1f));
+            Assert.That(statusRect.sizeDelta.y, Is.LessThanOrEqualTo(512f));
+        }
+
+        [Test]
         public void UiFactory_CreatesEventSystemForRuntimeUi()
         {
             var frames = Frames(2);
@@ -1204,6 +1259,9 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(operationsBar.sizeDelta.y, Is.LessThanOrEqualTo(128f));
             Assert.That(operationsBar.anchorMin.x, Is.EqualTo(0f));
             Assert.That(operationsBar.anchorMax.x, Is.EqualTo(1f));
+            var exitButton = GameObject.Find("ExitButton").GetComponent<RectTransform>();
+            Assert.That(exitButton.anchorMin, Is.EqualTo(Vector2.one));
+            Assert.That(exitButton.anchorMax, Is.EqualTo(Vector2.one));
         }
 
         [Test]
@@ -1254,6 +1312,24 @@ namespace UnderwaterGliderTwin.Tests
                 Assert.That(corner.x, Is.InRange(minimumX, maximumX), $"{control.name} x must fit {width}x{height} viewport");
                 Assert.That(corner.y, Is.InRange(minimumY, maximumY), $"{control.name} y must fit {width}x{height} viewport");
             }
+        }
+
+        private static void AssertRectanglesDoNotOverlap(RectTransform first, RectTransform second)
+        {
+            var firstCorners = new Vector3[4];
+            var secondCorners = new Vector3[4];
+            first.GetWorldCorners(firstCorners);
+            second.GetWorldCorners(secondCorners);
+            var firstMinX = firstCorners[0].x;
+            var firstMaxX = firstCorners[2].x;
+            var firstMinY = firstCorners[0].y;
+            var firstMaxY = firstCorners[2].y;
+            var secondMinX = secondCorners[0].x;
+            var secondMaxX = secondCorners[2].x;
+            var secondMinY = secondCorners[0].y;
+            var secondMaxY = secondCorners[2].y;
+            Assert.That(firstMaxX <= secondMinX || secondMaxX <= firstMinX || firstMaxY <= secondMinY || secondMaxY <= firstMinY,
+                $"{first.name} must not overlap {second.name}");
         }
 
         private static string CreateTempCsv()

@@ -213,9 +213,20 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            child.SetParent(section, false);
+            // Keep the asynchronous status line on its own row.  Placing it in the
+            // mission card lets the flexible grid reuse the same slot as the ocean
+            // configuration controls at narrow resolutions, which causes text and
+            // buttons to overlap.  It is still a child of the configuration panel
+            // so existing lookup names and event wiring remain unchanged.
+            child.SetParent(configurationPanel, false);
             child.SetAsLastSibling();
-            NormalizeLayoutChild(child, 24f);
+            child.anchorMin = new Vector2(0f, 1f);
+            child.anchorMax = new Vector2(0f, 1f);
+            child.pivot = new Vector2(0f, 0.5f);
+            child.anchoredPosition = new Vector2(18f, -250f);
+            child.sizeDelta = new Vector2(900f, 22f);
+            var layoutElement = child.gameObject.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
+            layoutElement.ignoreLayout = true;
             var text = child.GetComponent<Text>();
             if (text != null)
             {
@@ -465,6 +476,81 @@ namespace UnderwaterGliderTwin.UI
                 subscribedRuntimeSession.StatusChanged += RefreshRuntimeStatus;
                 RefreshRuntimeStatus();
             }
+        }
+
+        private static void ConfigureOceanCurrentModalDrawer(RectTransform drawer)
+        {
+            if (drawer == null)
+            {
+                return;
+            }
+
+            var canvas = drawer.GetComponentInParent<Canvas>();
+            var canvasRect = canvas != null ? canvas.transform as RectTransform : null;
+            var canvasSize = canvasRect != null && canvasRect.rect.width > 0f && canvasRect.rect.height > 0f
+                ? canvasRect.rect.size
+                : new Vector2(1920f, 1080f);
+            var modalWidth = Mathf.Min(760f, Mathf.Max(420f, canvasSize.x - 48f));
+            var modalHeight = Mathf.Min(760f, Mathf.Max(420f, canvasSize.y - 96f));
+            drawer.anchorMin = new Vector2(0.5f, 0.5f);
+            drawer.anchorMax = new Vector2(0.5f, 0.5f);
+            drawer.pivot = new Vector2(0.5f, 0.5f);
+            drawer.anchoredPosition = Vector2.zero;
+            drawer.sizeDelta = new Vector2(modalWidth, modalHeight);
+
+            if (drawer.Find("EditorViewport") != null)
+            {
+                return;
+            }
+
+            var fixedNames = new System.Collections.Generic.HashSet<string>
+            {
+                "OceanCurrentDrawerTitle",
+                "OceanCurrentDrawerCloseButton",
+                "OceanCurrentDrawerStatus"
+            };
+            var existingChildren = new System.Collections.Generic.List<Transform>();
+            for (var index = 0; index < drawer.childCount; index++)
+            {
+                var child = drawer.GetChild(index);
+                if (!fixedNames.Contains(child.name))
+                {
+                    existingChildren.Add(child);
+                }
+            }
+
+            var viewportObject = new GameObject("EditorViewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+            viewportObject.transform.SetParent(drawer, false);
+            var viewport = viewportObject.GetComponent<RectTransform>();
+            viewport.anchorMin = Vector2.zero;
+            viewport.anchorMax = Vector2.one;
+            viewport.offsetMin = new Vector2(12f, 84f);
+            viewport.offsetMax = new Vector2(-12f, -56f);
+            viewportObject.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
+            viewportObject.GetComponent<Mask>().showMaskGraphic = false;
+
+            var contentObject = new GameObject("EditorContent", typeof(RectTransform));
+            contentObject.transform.SetParent(viewport, false);
+            var content = contentObject.GetComponent<RectTransform>();
+            content.anchorMin = new Vector2(0.5f, 1f);
+            content.anchorMax = new Vector2(0.5f, 1f);
+            content.pivot = new Vector2(0.5f, 1f);
+            content.anchoredPosition = Vector2.zero;
+            // The modal editor's deepest controls end around 748 px from the top.
+            // Keep a little breathing room so the last row remains reachable via ScrollRect.
+            content.sizeDelta = new Vector2(modalWidth - 24f, 820f);
+            foreach (var child in existingChildren)
+            {
+                child.SetParent(content, false);
+            }
+
+            viewport.SetAsFirstSibling();
+            var scroll = drawer.gameObject.GetComponent<ScrollRect>() ?? drawer.gameObject.AddComponent<ScrollRect>();
+            scroll.viewport = viewport;
+            scroll.content = content;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
         }
 
         private static void ConfigureInlineDrawer(RectTransform drawer)

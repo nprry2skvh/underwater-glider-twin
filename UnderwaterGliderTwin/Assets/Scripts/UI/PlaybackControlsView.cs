@@ -40,7 +40,7 @@ namespace UnderwaterGliderTwin.UI
             progressSlider = UiFactory.Slider("ProgressSlider", panel, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(528f, -40f), new Vector2(746f, 32f));
             progressSlider.onValueChanged.AddListener(OnSliderChanged);
 
-            UiFactory.Button("ExitButton", panel, "退出", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1712f, -40f), new Vector2(88f, 32f)).onClick.AddListener(OnExitClicked);
+            UiFactory.Button("ExitButton", panel, "退出", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -40f), new Vector2(88f, 32f)).onClick.AddListener(OnExitClicked);
 
             UiFactory.Text("ViewGroupLabel", panel, "视图与图层", 11, TextAnchor.MiddleLeft, groupColor, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -70f), new Vector2(160f, 18f));
             UiFactory.Button("CameraFollowButton", panel, "跟随", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -94f), new Vector2(88f, 28f)).onClick.AddListener(() => SetCameraMode(cameraController, trajectoryView, CameraMode.Follow));

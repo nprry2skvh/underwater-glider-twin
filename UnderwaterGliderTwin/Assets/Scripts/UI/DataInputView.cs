@@ -188,7 +188,7 @@ namespace UnderwaterGliderTwin.UI
             RefreshPredictionSelection();
             RefreshOceanCurrentLayerEditor();
             ConfigureResponsiveBottomDrawer(panel);
-            ConfigureInlineDrawer(oceanCurrentDrawer);
+            ConfigureOceanCurrentModalDrawer(oceanCurrentDrawer);
             ConfigureInlineDrawer(flightLegDrawer);
             AttachRuntimeSession(SimulationRuntimeRegistry.Active);
         }

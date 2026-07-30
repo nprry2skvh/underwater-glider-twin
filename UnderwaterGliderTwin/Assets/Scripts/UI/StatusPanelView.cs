@@ -48,7 +48,10 @@ namespace UnderwaterGliderTwin.UI
             cumulativeDistanceMeters = BuildDistanceCache(playback.Model);
 
             var canvas = UiFactory.EnsureCanvas(transform);
-            var panel = UiFactory.CommandPanel("MissionStatusPanel", canvas.transform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -320f), new Vector2(352f, 640f));
+            var canvasRect = canvas.transform as RectTransform;
+            var canvasHeight = canvasRect != null && canvasRect.rect.height > 0f ? canvasRect.rect.height : 1080f;
+            var panelHeight = Mathf.Min(640f, Mathf.Max(420f, canvasHeight - 56f - 152f));
+            var panel = UiFactory.CommandPanel("MissionStatusPanel", canvas.transform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -56f), new Vector2(352f, panelHeight));
             UiFactory.Text("MissionStatusTitle", panel, "任务状态", 18, TextAnchor.MiddleLeft, new Color(0.92f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -20f), new Vector2(220f, 28f));
             var healthBadge = UiFactory.Panel("MissionHealthBadge", panel, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-16f, -20f), new Vector2(118f, 28f), new Color(0.02f, 0.28f, 0.22f, 0.96f));
             missionHealthValue = UiFactory.Text("MissionHealthBadgeValue", healthBadge, "正常", 12, TextAnchor.MiddleCenter, Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(106f, 22f));
