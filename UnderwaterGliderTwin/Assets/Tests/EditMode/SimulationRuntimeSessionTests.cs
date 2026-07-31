@@ -435,6 +435,32 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void LongProfile_AfterThirtySeconds_RemainsPendingUntilItsWorkloadDeadline()
+        {
+            var now = new DateTime(2026, 7, 31, 0, 0, 0, DateTimeKind.Utc);
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            var generator = new ManualFakeFutureGenerator();
+            session = new SimulationRuntimeSession(
+                model,
+                SimulationProfile.Default,
+                generator,
+                frameSliceBudget: 128,
+                utcNow: () => now);
+            var longProfile = ChangedProfile();
+            longProfile.CycleCount = 20;
+            longProfile.CycleDurationSeconds = 3600f;
+            longProfile.SampleIntervalSeconds = 1f;
+
+            Assert.That(session.RequestProfileUpdate(longProfile), Is.True);
+
+            now = now.AddSeconds(31);
+            session.Tick();
+
+            Assert.That(session.IsRebuildPending, Is.True);
+            Assert.That(session.LastError, Is.Null);
+        }
+
+        [Test]
         public void GeneratorReceivesConfiguredFrameSliceBudget()
         {
             var generator = new ManualFakeFutureGenerator();

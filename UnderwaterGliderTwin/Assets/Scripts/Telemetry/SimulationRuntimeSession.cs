@@ -6,6 +6,9 @@ namespace UnderwaterGliderTwin.Telemetry
 {
     public sealed class SimulationRuntimeSession
     {
+        private const double EstimatedSecondsPerFutureSlice = 0.1d;
+        private static readonly TimeSpan MaximumPendingTimeout = TimeSpan.FromMinutes(5);
+
         private readonly PlaybackModel playback;
         private readonly ISimulationFutureGenerator generator;
         private readonly int frameSliceBudget;
@@ -58,7 +61,7 @@ namespace UnderwaterGliderTwin.Telemetry
             var version = ++requestVersion;
             LastError = null;
             IsRebuildPending = true;
-            pendingDeadline = utcNow().Add(timeout);
+            pendingDeadline = utcNow().Add(CalculatePendingTimeout(candidateSnapshot));
             StatusChanged?.Invoke();
 
             try
@@ -172,6 +175,20 @@ namespace UnderwaterGliderTwin.Telemetry
             {
                 operation?.Cancel();
             }
+        }
+
+        private TimeSpan CalculatePendingTimeout(SimulationProfile candidate)
+        {
+            var estimatedFutureFrames = Math.Ceiling(
+                (double)candidate.CycleCount * candidate.CycleDurationSeconds / candidate.SampleIntervalSeconds);
+            var estimatedSlices = Math.Ceiling(estimatedFutureFrames / frameSliceBudget);
+            var workloadSeconds = Math.Min(
+                MaximumPendingTimeout.TotalSeconds,
+                Math.Max(0d, estimatedSlices * EstimatedSecondsPerFutureSlice));
+            var deadlineSeconds = Math.Min(
+                MaximumPendingTimeout.TotalSeconds,
+                Math.Max(timeout.TotalSeconds, workloadSeconds));
+            return TimeSpan.FromSeconds(deadlineSeconds);
         }
 
         internal SimulationProfile ActiveProfileReference => activeProfile;
