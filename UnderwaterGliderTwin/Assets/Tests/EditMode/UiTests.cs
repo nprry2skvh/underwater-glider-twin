@@ -582,6 +582,52 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void OceanCurrentModalLookupButtonTracksAcquisitionMode()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+
+            GameObject.Find("OceanCurrentLocalFileModeButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(GameObject.Find("OceanCurrentDrawerLookupButton").GetComponentInChildren<Text>().text, Is.EqualTo("加载本地文件"));
+
+            GameObject.Find("OceanCurrentCacheOnlyModeButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(GameObject.Find("OceanCurrentDrawerLookupButton").GetComponentInChildren<Text>().text, Is.EqualTo("读取缓存"));
+
+            GameObject.Find("OceanCurrentOnlineModeButton").GetComponent<Button>().onClick.Invoke();
+            Assert.That(GameObject.Find("OceanCurrentDrawerLookupButton").GetComponentInChildren<Text>().text, Is.EqualTo("联网获取海流"));
+        }
+
+        [TestCase(1280, 720)]
+        [TestCase(1920, 1080)]
+        public void OceanCurrentModalUsesScrollableColumnLayoutWithoutOverlap(int width, int height)
+        {
+            var canvasObject = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(width, height);
+            var scaler = canvasObject.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            Canvas.ForceUpdateCanvases();
+
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
+
+            var drawer = GameObject.Find("OceanCurrentDrawerPanel").GetComponent<RectTransform>();
+            var scroll = drawer.GetComponent<ScrollRect>();
+            var content = GameObject.Find("EditorContent").GetComponent<RectTransform>();
+            Assert.That(scroll, Is.Not.Null);
+            Assert.That(content.GetComponent<VerticalLayoutGroup>(), Is.Not.Null);
+            Assert.That(content.GetComponent<ContentSizeFitter>(), Is.Not.Null);
+            Assert.That(GameObject.Find("OceanCurrentDrawerLookupButton").transform.IsChildOf(content), Is.True);
+            Assert.That(GameObject.Find("DynamicsTurnaroundDurationInput").transform.IsChildOf(content), Is.True);
+            AssertRectanglesDoNotOverlap(GameObject.Find("OceanCurrentDrawerLookupButton").GetComponent<RectTransform>(), GameObject.Find("DynamicsSeaTrialPresetButton").GetComponent<RectTransform>());
+            AssertRectanglesDoNotOverlap(GameObject.Find("OceanCurrentDrawerLookupButton").GetComponent<RectTransform>(), GameObject.Find("DynamicsParametersTitle").GetComponent<RectTransform>());
+        }
+
+        [Test]
         public void MissionConfigurationStatusDoesNotOverlapOceanConfigurationButton()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
@@ -617,13 +663,10 @@ namespace UnderwaterGliderTwin.Tests
             var oceanRect = oceanScroll.GetComponent<RectTransform>();
             Assert.That(oceanRect.parent.name, Is.EqualTo("OceanCurrentModalCanvas"));
             Assert.That(oceanRect.rect.height, Is.LessThanOrEqualTo(760f + .1f));
-            oceanScroll.verticalNormalizedPosition = 1f;
-            Canvas.ForceUpdateCanvases();
-            AssertRectInsideViewport(GameObject.Find("OceanCurrentDrawerMinDepthInput").GetComponent<RectTransform>(), oceanScroll.viewport, width, height);
-            oceanScroll.verticalNormalizedPosition = 0f;
-            Canvas.ForceUpdateCanvases();
-            AssertRectInsideViewport(GameObject.Find("DynamicsBaseDragInput").GetComponent<RectTransform>(), oceanScroll.viewport, width, height);
-            AssertRectInsideViewport(GameObject.Find("DynamicsTurnaroundDurationInput").GetComponent<RectTransform>(), oceanScroll.viewport, width, height);
+            Assert.That(oceanScroll.content.GetComponent<VerticalLayoutGroup>(), Is.Not.Null);
+            Assert.That(oceanScroll.content.rect.height, Is.GreaterThan(oceanScroll.viewport.rect.height));
+            Assert.That(GameObject.Find("OceanCurrentDrawerMinDepthInput").transform.IsChildOf(oceanScroll.content), Is.True);
+            Assert.That(GameObject.Find("DynamicsBaseDragInput").transform.IsChildOf(oceanScroll.content), Is.True);
 
             GameObject.Find("FlightLegSettingsButton").GetComponent<Button>().onClick.Invoke();
             var flightScroll = GameObject.Find("FlightLegDrawerPanel").GetComponent<ScrollRect>();

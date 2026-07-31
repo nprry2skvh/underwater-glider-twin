@@ -51,6 +51,7 @@ namespace UnderwaterGliderTwin.UI
         private InputField oceanCurrentForecastWindowInput;
         private Text oceanCurrentFieldSummary;
         private InputField oceanCurrentLocalFileInput;
+        private Button oceanCurrentDrawerLookupButton;
         private Text oceanCurrentAcquisitionModeText;
         private Text oceanCurrentActualSourceText;
         private OceanCurrentAcquisitionMode oceanCurrentAcquisitionMode = OceanCurrentAcquisitionMode.Online;

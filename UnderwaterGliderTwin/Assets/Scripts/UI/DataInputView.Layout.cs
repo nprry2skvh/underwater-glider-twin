@@ -533,17 +533,32 @@ namespace UnderwaterGliderTwin.UI
             var contentObject = new GameObject("EditorContent", typeof(RectTransform));
             contentObject.transform.SetParent(viewport, false);
             var content = contentObject.GetComponent<RectTransform>();
-            content.anchorMin = new Vector2(0.5f, 1f);
-            content.anchorMax = new Vector2(0.5f, 1f);
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = new Vector2(1f, 1f);
             content.pivot = new Vector2(0.5f, 1f);
             content.anchoredPosition = Vector2.zero;
-            // The modal editor's deepest controls end around 748 px from the top.
-            // Keep a little breathing room so the last row remains reachable via ScrollRect.
-            content.sizeDelta = new Vector2(modalWidth - 24f, 820f);
+            content.sizeDelta = new Vector2(0f, 0f);
+            var contentLayout = contentObject.AddComponent<VerticalLayoutGroup>();
+            contentLayout.padding = new RectOffset(0, 0, 0, 0);
+            contentLayout.spacing = 6f;
+            contentLayout.childAlignment = TextAnchor.UpperLeft;
+            contentLayout.childControlWidth = true;
+            contentLayout.childControlHeight = true;
+            contentLayout.childForceExpandWidth = true;
+            contentLayout.childForceExpandHeight = false;
+            var contentFitter = contentObject.AddComponent<ContentSizeFitter>();
+            contentFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            contentFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            contentLayout.enabled = false;
+            contentFitter.enabled = false;
+            var cursorY = 0f;
             foreach (var child in existingChildren)
             {
                 child.SetParent(content, false);
+                cursorY += PlaceModalContentChild(child as RectTransform, modalWidth - 24f, cursorY);
             }
+
+            content.sizeDelta = new Vector2(0f, Mathf.Max(420f, cursorY + 8f));
 
             viewport.SetAsFirstSibling();
             var scroll = drawer.gameObject.GetComponent<ScrollRect>() ?? drawer.gameObject.AddComponent<ScrollRect>();
@@ -552,6 +567,35 @@ namespace UnderwaterGliderTwin.UI
             scroll.horizontal = false;
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
+            Canvas.ForceUpdateCanvases();
+        }
+
+        private static float PlaceModalContentChild(RectTransform child, float availableWidth, float topOffset)
+        {
+            if (child == null)
+            {
+                return 0f;
+            }
+
+            var element = child.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
+            element.minWidth = availableWidth;
+            element.preferredWidth = availableWidth;
+            element.flexibleWidth = 1f;
+
+            var preferredHeight = Mathf.Max(28f, child.rect.height);
+            if (preferredHeight <= 0f)
+            {
+                preferredHeight = 32f;
+            }
+            element.minHeight = preferredHeight;
+            element.preferredHeight = preferredHeight;
+            element.flexibleHeight = 0f;
+            child.anchorMin = new Vector2(0f, 1f);
+            child.anchorMax = new Vector2(1f, 1f);
+            child.pivot = new Vector2(0.5f, 1f);
+            child.anchoredPosition = new Vector2(0f, -topOffset);
+            child.sizeDelta = new Vector2(0f, preferredHeight);
+            return preferredHeight + 6f;
         }
 
         private static void ConfigureInlineDrawer(RectTransform drawer)
@@ -648,7 +692,7 @@ namespace UnderwaterGliderTwin.UI
                 {
                     return;
                 }
-                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, canvasRect.rect.height * 0.35f);
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, Mathf.Min(canvasRect.rect.height, 1080f) * 0.35f);
             }
         }
 

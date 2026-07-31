@@ -221,7 +221,8 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.Button("OceanCurrentDrawerAddButton", oceanCurrentDrawer, "新增层", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(216f, -300f), new Vector2(88f, 32f)).onClick.AddListener(AddOceanCurrentLayer);
             UiFactory.Button("OceanCurrentDrawerDeleteButton", oceanCurrentDrawer, "删除层", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(312f, -300f), new Vector2(88f, 32f)).onClick.AddListener(DeleteOceanCurrentLayer);
             UiFactory.Button("OceanCurrentDrawerSaveButton", oceanCurrentDrawer, "保存当前层", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(408f, -300f), new Vector2(110f, 32f)).onClick.AddListener(SaveOceanCurrentDrawerLayer);
-            UiFactory.Button("OceanCurrentDrawerLookupButton", oceanCurrentDrawer, "联网获取海流", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(530f, -300f), new Vector2(136f, 32f)).onClick.AddListener(LookupOceanCurrentFromDrawer);
+            oceanCurrentDrawerLookupButton = UiFactory.PrimaryButton("OceanCurrentDrawerLookupButton", oceanCurrentDrawer, "联网获取海流", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(530f, -300f), new Vector2(136f, 32f));
+            oceanCurrentDrawerLookupButton.onClick.AddListener(LookupOceanCurrentFromDrawer);
             UiFactory.Text("DynamicsPresetLabel", oceanCurrentDrawer, "动力学预设", 13, TextAnchor.MiddleLeft, new Color(0.82f, 0.96f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f, -350f), new Vector2(120f, 24f));
             UiFactory.Button("DynamicsSeaTrialPresetButton", oceanCurrentDrawer, "海试近似", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(154f, -350f), new Vector2(96f, 30f)).onClick.AddListener(ApplySeaTrialDynamicsPreset);
             UiFactory.Button("DynamicsCalmWaterPresetButton", oceanCurrentDrawer, "静水基准", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(260f, -350f), new Vector2(96f, 30f)).onClick.AddListener(ApplyCalmWaterDynamicsPreset);
@@ -246,6 +247,7 @@ namespace UnderwaterGliderTwin.UI
             dynamicsRollRestoringGainInput = AddLabeledInput(oceanCurrentDrawer, "横滚恢复增益", "DynamicsRollRestoringGainInput", "0", 564f, -630f, 168f);
             dynamicsMaxRollMomentInput = AddLabeledInput(oceanCurrentDrawer, "最大横滚力矩", "DynamicsMaxRollMomentInput", "1000", 24f, -700f, 168f);
             oceanCurrentDrawerStatus = UiFactory.Text("OceanCurrentDrawerStatus", oceanCurrentDrawer, "手动配置或按起点经纬度获取在线海流。", 13, TextAnchor.MiddleLeft, new Color(0.78f, 0.92f, 0.98f), new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 30f), new Vector2(-44f, 48f));
+            RefreshOceanCurrentLookupButtonText();
             oceanCurrentDrawer.gameObject.SetActive(false);
         }
 
@@ -273,6 +275,7 @@ namespace UnderwaterGliderTwin.UI
                 }
                 oceanCurrentDrawer.SetAsLastSibling();
                 RefreshOceanCurrentDrawer();
+                Canvas.ForceUpdateCanvases();
             }
             else if (bottomDrawerExpandedBeforeModal)
             {
@@ -498,6 +501,7 @@ namespace UnderwaterGliderTwin.UI
             {
                 oceanCurrentAcquisitionModeText.text = "策略：" + GetOceanCurrentAcquisitionModeLabel(mode);
             }
+            RefreshOceanCurrentLookupButtonText();
         }
 
         private string GetLocalCurrentPath()
@@ -508,6 +512,29 @@ namespace UnderwaterGliderTwin.UI
         private string GetCurrentAcquisitionPendingText()
         {
             return "正在获取海流：" + GetOceanCurrentAcquisitionModeLabel(oceanCurrentAcquisitionMode) + "…";
+        }
+
+        private void RefreshOceanCurrentLookupButtonText()
+        {
+            if (oceanCurrentDrawerLookupButton == null)
+            {
+                return;
+            }
+
+            UiFactory.SetButtonText(oceanCurrentDrawerLookupButton, GetOceanCurrentLookupButtonLabel(oceanCurrentAcquisitionMode));
+        }
+
+        private static string GetOceanCurrentLookupButtonLabel(OceanCurrentAcquisitionMode mode)
+        {
+            switch (mode)
+            {
+                case OceanCurrentAcquisitionMode.CacheOnly:
+                    return "读取缓存";
+                case OceanCurrentAcquisitionMode.LocalFile:
+                    return "加载本地文件";
+                default:
+                    return "联网获取海流";
+            }
         }
 
         private static string GetOceanCurrentAcquisitionModeLabel(OceanCurrentAcquisitionMode mode)
