@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.IO;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -49,6 +50,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             var loadTimer = System.Diagnostics.Stopwatch.StartNew();
             var commandLineArgs = Environment.GetCommandLineArgs();
             var screenshotOptions = RuntimeScreenshotOptions.Parse(commandLineArgs);
+            var smokeOptions = RuntimeSmokeOptions.Parse(commandLineArgs);
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
             {
                 CurrentCsvPath = RuntimeDataSourceState.LastCsvPath;
@@ -195,6 +197,11 @@ namespace UnderwaterGliderTwin.Bootstrap
                 cameraController.SetMissionVolumeView(RuntimeDataSourceState.SimulationProfile.TargetDepthM, missionHorizontalExtents, missionDepthScale);
                 trajectoryView.SetCameraMode(CameraMode.Global);
             }
+
+            if (smokeOptions.IsRequested)
+            {
+                StartCoroutine(RunRuntimeSmoke(smokeOptions));
+            }
         }
 
         private void Update()
@@ -217,6 +224,79 @@ namespace UnderwaterGliderTwin.Bootstrap
             if (PlaybackController != null && trajectoryView != null)
             {
                 PlaybackController.Model.FramesReplaced -= trajectoryView.ReplaceFutureTrajectory;
+            }
+        }
+
+        private IEnumerator RunRuntimeSmoke(RuntimeSmokeOptions options)
+        {
+            if (options == null || !options.IsRequested)
+            {
+                yield break;
+            }
+
+            if (RuntimeDataSourceState.CurrentMode != RuntimeDataSourceMode.Simulation || SimulationSession == null)
+            {
+                Logger.AppendLoad("Runtime smoke failed: local current smoke requires simulation mode.");
+                QuitAfterSmokeIfRequested(options, 1);
+                yield break;
+            }
+
+            Logger.AppendLoad($"Runtime smoke local current import requested: {options.LocalOceanCurrentPath}");
+            if (!RuntimeSmokeProfileUpdate.TryCreateLocalCurrentProfileUpdate(
+                    RuntimeDataSourceState.SimulationProfile,
+                    options.LocalOceanCurrentPath,
+                    DateTime.UtcNow,
+                    out var profile,
+                    out var actualSource,
+                    out var error))
+            {
+                Logger.AppendLoad($"Runtime smoke local current import failed: {error}");
+                QuitAfterSmokeIfRequested(options, 1);
+                yield break;
+            }
+
+            Logger.AppendLoad($"Runtime smoke local current loaded: {actualSource}");
+            var smokeProfile = RuntimeSmokeProfileUpdate.BuildSmokeRebuildProfile(profile);
+            ReloadFromSimulationProfile(smokeProfile);
+
+            var deadline = Time.realtimeSinceStartup + 300f;
+            while (SimulationSession != null
+                && SimulationSession.IsRebuildPending
+                && Time.realtimeSinceStartup < deadline)
+            {
+                yield return null;
+            }
+
+            if (SimulationSession == null)
+            {
+                Logger.AppendLoad("Runtime smoke failed: simulation session was not available after profile update.");
+                QuitAfterSmokeIfRequested(options, 1);
+                yield break;
+            }
+
+            if (SimulationSession.IsRebuildPending)
+            {
+                Logger.AppendLoad("Runtime smoke failed: timed out waiting for simulation profile update.");
+                QuitAfterSmokeIfRequested(options, 1);
+                yield break;
+            }
+
+            if (!string.IsNullOrWhiteSpace(SimulationSession.LastError))
+            {
+                Logger.AppendLoad($"Runtime smoke failed: {SimulationSession.LastError}");
+                QuitAfterSmokeIfRequested(options, 1);
+                yield break;
+            }
+
+            Logger.AppendLoad("Runtime smoke completed.");
+            QuitAfterSmokeIfRequested(options, 0);
+        }
+
+        private static void QuitAfterSmokeIfRequested(RuntimeSmokeOptions options, int exitCode)
+        {
+            if (options != null && options.QuitAfterCompletion)
+            {
+                Application.Quit(exitCode);
             }
         }
 
