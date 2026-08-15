@@ -25,11 +25,6 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            if (TryBindExistingResponsiveBottomDrawer(drawer))
-            {
-                return;
-            }
-
             drawer.anchorMin = new Vector2(0f, 1f);
             drawer.anchorMax = new Vector2(1f, 1f);
             drawer.pivot = new Vector2(0.5f, 1f);
@@ -58,7 +53,7 @@ namespace UnderwaterGliderTwin.UI
             var fitter = bottomDrawerContent.gameObject.AddComponent<ContentSizeFitter>();
             fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            bottomDrawerScrollRect = drawer.gameObject.GetComponent<ScrollRect>() ?? drawer.gameObject.AddComponent<ScrollRect>();
+            bottomDrawerScrollRect = drawer.gameObject.AddComponent<ScrollRect>();
             bottomDrawerScrollRect.viewport = bottomDrawerViewport;
             bottomDrawerScrollRect.content = bottomDrawerContent;
             bottomDrawerScrollRect.horizontal = false;
@@ -111,61 +106,6 @@ namespace UnderwaterGliderTwin.UI
             HideLegacyConfigurationGroups(drawer);
 
             SetBottomDrawerExpanded(false);
-        }
-
-        private bool TryBindExistingResponsiveBottomDrawer(RectTransform drawer)
-        {
-            var viewport = FindDescendant(drawer, "MissionConfigurationViewport");
-            var content = FindDescendant(drawer, "MissionConfigurationContent");
-            if (viewport == null || content == null)
-            {
-                return false;
-            }
-
-            bottomDrawerViewport = viewport;
-            bottomDrawerContent = content;
-            bottomDrawerScrollRect = drawer.GetComponent<ScrollRect>() ?? drawer.gameObject.AddComponent<ScrollRect>();
-            bottomDrawerScrollRect.viewport = bottomDrawerViewport;
-            bottomDrawerScrollRect.content = bottomDrawerContent;
-            bottomDrawerScrollRect.horizontal = false;
-            bottomDrawerScrollRect.vertical = true;
-            bottomDrawerScrollRect.movementType = ScrollRect.MovementType.Clamped;
-            ConfigureFastDrawerScroll(bottomDrawerScrollRect);
-
-            bottomDrawerToggleButton = FindDescendant(drawer, "MissionConfigurationDrawerToggleButton")?.GetComponent<Button>();
-            if (bottomDrawerToggleButton != null)
-            {
-                bottomDrawerToggleButton.onClick.RemoveAllListeners();
-                bottomDrawerToggleButton.onClick.AddListener(ToggleBottomDrawer);
-            }
-
-            SetBottomDrawerExpanded(false);
-            return true;
-        }
-
-        private static RectTransform FindDescendant(Transform root, string childName)
-        {
-            if (root == null || string.IsNullOrWhiteSpace(childName))
-            {
-                return null;
-            }
-
-            for (var index = 0; index < root.childCount; index++)
-            {
-                var child = root.GetChild(index);
-                if (child.name == childName)
-                {
-                    return child as RectTransform;
-                }
-
-                var nested = FindDescendant(child, childName);
-                if (nested != null)
-                {
-                    return nested;
-                }
-            }
-
-            return null;
         }
 
         private RectTransform CreateSectionCard(string name, string title, Transform parent)
