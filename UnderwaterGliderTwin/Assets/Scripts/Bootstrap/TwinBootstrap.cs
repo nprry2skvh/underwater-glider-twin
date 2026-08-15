@@ -18,6 +18,9 @@ namespace UnderwaterGliderTwin.Bootstrap
         [SerializeField] private float rowsPerSecond = 120f;
         [SerializeField] private float horizontalScale = 0.0025f;
         [SerializeField] private float depthScale = 0.05f;
+        [SerializeField] private RuntimeUiRoot runtimeUiRoot;
+        [SerializeField] private bool allowRuntimeFallback;
+        [SerializeField] private bool strictUiValidation;
 
         public PlaybackController PlaybackController { get; private set; }
         public GeoCoordinateMapper Mapper { get; private set; }
@@ -47,6 +50,13 @@ namespace UnderwaterGliderTwin.Bootstrap
 
         private void InitializeRuntime()
         {
+            RuntimeUiFallback.AllowRuntimeFallback = allowRuntimeFallback;
+            ValidateConfiguredRuntimeUi();
+            if (!enabled)
+            {
+                return;
+            }
+
             var loadTimer = System.Diagnostics.Stopwatch.StartNew();
             var commandLineArgs = Environment.GetCommandLineArgs();
             var screenshotOptions = RuntimeScreenshotOptions.Parse(commandLineArgs);
@@ -211,6 +221,8 @@ namespace UnderwaterGliderTwin.Bootstrap
 
         private void OnDestroy()
         {
+            RuntimeUiFallback.Reset();
+
             if (SimulationSession != null)
             {
                 SimulationSession.StatusChanged -= OnSimulationSessionStatusChanged;
@@ -224,6 +236,46 @@ namespace UnderwaterGliderTwin.Bootstrap
             if (PlaybackController != null && trajectoryView != null)
             {
                 PlaybackController.Model.FramesReplaced -= trajectoryView.ReplaceFutureTrajectory;
+            }
+        }
+
+        private void ValidateConfiguredRuntimeUi()
+        {
+            if (runtimeUiRoot == null)
+            {
+                if (allowRuntimeFallback)
+                {
+                    RuntimeUiFallback.LogFallback("RuntimeUiRoot");
+                }
+
+                // Main scene migration keeps the legacy path alive until Task 10 creates and binds the root.
+                return;
+            }
+
+            var profile = strictUiValidation
+                ? RuntimeUiValidationProfile.Strict
+                : RuntimeUiValidationProfile.EnabledPanels;
+            var issues = runtimeUiRoot.ValidateReferences(profile);
+            if (issues.Count > 0)
+            {
+                foreach (var issue in issues)
+                {
+                    Debug.LogError(issue.ToString(), runtimeUiRoot);
+                }
+
+                if (allowRuntimeFallback)
+                {
+                    RuntimeUiFallback.LogFallback("RuntimeUiRoot validation failed");
+                    return;
+                }
+
+                enabled = false;
+                return;
+            }
+
+            if (!runtimeUiRoot.TryEnsureSingleEventSystem())
+            {
+                enabled = false;
             }
         }
 
