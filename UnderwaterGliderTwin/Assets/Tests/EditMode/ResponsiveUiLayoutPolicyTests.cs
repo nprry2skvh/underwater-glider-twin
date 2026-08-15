@@ -32,6 +32,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(ResponsiveUiLayoutPolicy.Resolve(1264f, 720f, RuntimeUiLayoutMode.CompressedThreeColumn), Is.EqualTo(RuntimeUiLayoutMode.Drawer));
             Assert.That(ResponsiveUiLayoutPolicy.Resolve(1296f, 655f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.Drawer));
             Assert.That(ResponsiveUiLayoutPolicy.Resolve(1296f, 656f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
+            Assert.That(ResponsiveUiLayoutPolicy.Resolve(1279f, 720f, RuntimeUiLayoutMode.FullThreeColumn), Is.EqualTo(RuntimeUiLayoutMode.Drawer));
             Assert.That(ResponsiveUiLayoutPolicy.Resolve(1584f, 900f, RuntimeUiLayoutMode.FullThreeColumn), Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
             Assert.That(ResponsiveUiLayoutPolicy.Resolve(1616f, 900f, RuntimeUiLayoutMode.CompressedThreeColumn), Is.EqualTo(RuntimeUiLayoutMode.FullThreeColumn));
         }

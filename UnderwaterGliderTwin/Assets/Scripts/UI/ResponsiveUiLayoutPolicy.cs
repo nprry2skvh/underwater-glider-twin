@@ -25,6 +25,11 @@ namespace UnderwaterGliderTwin.UI
 
             if (previousMode == RuntimeUiLayoutMode.FullThreeColumn)
             {
+                if (width < 1280f || height < 624f)
+                {
+                    return RuntimeUiLayoutMode.Drawer;
+                }
+
                 if (width <= 1584f)
                 {
                     return RuntimeUiLayoutMode.CompressedThreeColumn;

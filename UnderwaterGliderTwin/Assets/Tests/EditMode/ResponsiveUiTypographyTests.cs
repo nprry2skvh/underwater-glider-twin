@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using UnityEngine;
 using UnderwaterGliderTwin.UI;
 
 namespace UnderwaterGliderTwin.Tests
@@ -26,6 +27,18 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(profile.valueSize, Is.GreaterThanOrEqualTo(16));
             Assert.That(profile.minimumReadablePixelSize, Is.EqualTo(10f));
             Assert.That(profile.showLowPriorityText, Is.True);
+        }
+
+        [Test]
+        public void Typography_CompressedModeKeepsReadableMinimumsAtLowerBound()
+        {
+            var effectiveScale = ResponsiveUiLayoutPolicy.GetEffectiveCanvasScale(1280f, 624f, new Vector2(1920f, 1080f), 0.5f);
+            var profile = ResponsiveUiTypography.ForMode(RuntimeUiLayoutMode.CompressedThreeColumn, 1280f, 624f);
+
+            Assert.That(ResponsiveUiTypography.GetActualPixelSize(profile.labelSize, effectiveScale), Is.GreaterThanOrEqualTo(10f));
+            Assert.That(ResponsiveUiTypography.GetActualPixelSize(profile.valueSize, effectiveScale), Is.GreaterThanOrEqualTo(10f));
+            Assert.That(ResponsiveUiTypography.GetActualPixelSize(profile.buttonSize, effectiveScale), Is.GreaterThanOrEqualTo(10f));
+            Assert.That(profile.minimumReadablePixelSize, Is.EqualTo(10f));
         }
     }
 }
