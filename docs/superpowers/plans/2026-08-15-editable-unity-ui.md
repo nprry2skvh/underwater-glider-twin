@@ -20,6 +20,13 @@
 - Dynamic repeated rows use a `RowTemplate` under a Prefab-owned content container.
 - Prefab edits are made in Prefab Mode; scenes keep only necessary instance overrides.
 - Key Prefab object paths are stable and covered by reference tests.
+- Scene UI panels must be actual Prefab instances. Builders must create temporary panel roots, save Prefab assets, delete temporary roots, instantiate Prefabs with `PrefabUtility.InstantiatePrefab`, and parent those instances under `RuntimeCanvas`.
+- `UiFactory.EnsureCanvas(...)` cannot call `Object.FindObjectOfType<Canvas>()`. Fallback may use only an explicitly supplied fallback Canvas or a Canvas found on the provided parent/ancestor chain.
+- Tests must not destroy every `GameObject` in the loaded scene. Each test creates a private root container and only destroys that root.
+- `RuntimeUiRoot.ValidateReferences()` must report duplicate Canvas, duplicate EventSystem, and duplicate long-lived UI objects.
+- `RuntimeUiFallback.AllowRuntimeFallback` must be explicitly set during each bootstrap and restored to false on scene destroy or bootstrap cleanup.
+- `EditableUiSceneBuilder` must be idempotent: repeated execution cannot create duplicate Canvas, EventSystem, Prefab instances, or root panels.
+- Acceptance includes runtime screenshots at 1920x1080 and 1366x768, plus proof that a manual Prefab visual edit appears at runtime without code changes.
 
 ---
 
@@ -31,6 +38,7 @@
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiRoot.cs`: serialized owner for `RuntimeCanvas`, long-lived panels, `ModalRoot`, drawer roots, and row templates.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiReferences.cs`: grouped references used by view `Bind(...)` methods.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiFallback.cs`: single explicit switch for migration-only runtime generation.
+- Create `UnderwaterGliderTwin/Assets/Scripts/UI/UiTestObjectScope.cs`: EditMode helper that tracks and destroys only objects created by a test.
 - Modify `UnderwaterGliderTwin/Assets/Scripts/UI/UiFactory.cs`: restrict Canvas discovery and add fallback logging.
 - Modify `UnderwaterGliderTwin/Assets/Scripts/Bootstrap/TwinBootstrap.cs`: bind `RuntimeUiRoot` and call view `Bind(...)` methods.
 - Modify `UnderwaterGliderTwin/Assets/Scripts/Bootstrap/WelcomeBootstrap.cs`: bind serialized welcome references and remove production UI creation.
@@ -71,6 +79,7 @@ Use this command for PlayMode verification:
 - Create: `UnderwaterGliderTwin/Assets/Scripts/UI/IUiReferenceProvider.cs`
 - Create: `UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceValidator.cs`
 - Create: `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiFallback.cs`
+- Create: `UnderwaterGliderTwin/Assets/Tests/EditMode/UiTestObjectScope.cs`
 - Test: `UnderwaterGliderTwin/Assets/Tests/EditMode/EditableUiReferenceTests.cs`
 
 **Interfaces:**
@@ -80,6 +89,8 @@ Use this command for PlayMode verification:
 - Produces: `UiReferenceValidator.GetPath(Transform transform)`
 - Produces: `RuntimeUiFallback.AllowRuntimeFallback`
 - Produces: `RuntimeUiFallback.LogFallback(string panelName)`
+- Produces: `RuntimeUiFallback.Reset()`
+- Produces: `UiTestObjectScope.CreateRoot(string name)`
 
 - [ ] **Step 1: Write failing tests for missing-reference reports**
 
@@ -89,6 +100,7 @@ Add this test class:
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using UnderwaterGliderTwin.UI;
 
@@ -96,20 +108,25 @@ namespace UnderwaterGliderTwin.Tests
 {
     public sealed class EditableUiReferenceTests
     {
+        private UiTestObjectScope scope;
+
+        [SetUp]
+        public void SetUp()
+        {
+            scope = new UiTestObjectScope();
+        }
+
         [TearDown]
         public void TearDown()
         {
-            RuntimeUiFallback.AllowRuntimeFallback = false;
-            foreach (var obj in Object.FindObjectsOfType<GameObject>())
-            {
-                Object.DestroyImmediate(obj);
-            }
+            RuntimeUiFallback.Reset();
+            scope.Dispose();
         }
 
         [Test]
         public void Validator_ReportsPrefabObjectPathAndFieldName()
         {
-            var root = new GameObject("DashboardPanel");
+            var root = scope.CreateRoot("DashboardPanel");
             var child = new GameObject("DepthValue");
             child.transform.SetParent(root.transform, false);
             var issues = new List<UiReferenceIssue>();
@@ -237,6 +254,47 @@ namespace UnderwaterGliderTwin.UI
         {
             Debug.LogWarning($"[UI Fallback] Runtime-generated UI is active: {panelName}");
         }
+
+        public static void Reset()
+        {
+            AllowRuntimeFallback = false;
+        }
+    }
+}
+```
+
+Create `UiTestObjectScope.cs`:
+
+```csharp
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace UnderwaterGliderTwin.Tests
+{
+    public sealed class UiTestObjectScope : IDisposable
+    {
+        private readonly List<GameObject> roots = new List<GameObject>();
+
+        public GameObject CreateRoot(string name)
+        {
+            var root = new GameObject(name);
+            roots.Add(root);
+            return root;
+        }
+
+        public void Dispose()
+        {
+            for (var index = roots.Count - 1; index >= 0; index--)
+            {
+                if (roots[index] != null)
+                {
+                    Object.DestroyImmediate(roots[index]);
+                }
+            }
+
+            roots.Clear();
+        }
     }
 }
 ```
@@ -248,7 +306,7 @@ Run the EditMode command above. Expected: new tests pass; existing UI tests stil
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceIssue.cs UnderwaterGliderTwin/Assets/Scripts/UI/IUiReferenceProvider.cs UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceValidator.cs UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiFallback.cs UnderwaterGliderTwin/Assets/Tests/EditMode/EditableUiReferenceTests.cs
+git add UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceIssue.cs UnderwaterGliderTwin/Assets/Scripts/UI/IUiReferenceProvider.cs UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceValidator.cs UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiFallback.cs UnderwaterGliderTwin/Assets/Tests/EditMode/UiTestObjectScope.cs UnderwaterGliderTwin/Assets/Tests/EditMode/EditableUiReferenceTests.cs
 git commit -m "feat: add UI reference validation infrastructure"
 ```
 
@@ -276,11 +334,26 @@ Add to `EditableUiReferenceTests.cs`:
 [Test]
 public void RuntimeUiRoot_RequiresCanvasAndModalRoot()
 {
-    var root = new GameObject("RuntimeUiRoot").AddComponent<RuntimeUiRoot>();
+    var root = scope.CreateRoot("RuntimeUiRoot").AddComponent<RuntimeUiRoot>();
     var issues = root.ValidateReferences();
 
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("runtimeCanvas"));
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("modalRoot"));
+}
+
+[Test]
+public void RuntimeUiRoot_ReportsDuplicateEventSystemsAndLongLivedUi()
+{
+    scope.CreateRoot("EventSystemA").AddComponent<EventSystem>();
+    scope.CreateRoot("EventSystemB").AddComponent<EventSystem>();
+    scope.CreateRoot("DashboardPanel");
+    scope.CreateRoot("DashboardPanel");
+    var root = scope.CreateRoot("RuntimeUiRoot").AddComponent<RuntimeUiRoot>();
+
+    var issues = root.ValidateReferences();
+
+    Assert.That(issues, Has.Some.Property("FieldName").EqualTo("EventSystem"));
+    Assert.That(issues, Has.Some.Property("FieldName").EqualTo("DashboardPanel"));
 }
 ```
 
@@ -309,10 +382,113 @@ namespace UnderwaterGliderTwin.UI
         public OceanToolbarRefs oceanToolbar = new OceanToolbarRefs();
     }
 
-    [Serializable] public sealed class DashboardPanelRefs { public RectTransform panel; public Text depthValue; public Text batteryValue; }
-    [Serializable] public sealed class StatusPanelRefs { public RectTransform panel; public Text alarmValue; public Text missionValue; }
-    [Serializable] public sealed class PlaybackControlsRefs { public RectTransform panel; public Button playPauseButton; public Slider progressSlider; public Button exitButton; }
-    [Serializable] public sealed class OceanToolbarRefs { public RectTransform panel; public Button topButton; public Button followButton; public Text visibleArrowCount; }
+    [Serializable]
+    public sealed class DashboardPanelRefs
+    {
+        public RectTransform panel;
+        public Button detailsButton;
+        public GameObject navigationReferenceCard;
+        public Text depthValue;
+        public Text headingValue;
+        public Text pitchValue;
+        public Text rollValue;
+        public Text yawValue;
+        public Text batteryValue;
+        public Text latitudeValue;
+        public Text longitudeValue;
+        public Text velocityXValue;
+        public Text velocityYValue;
+        public Text velocityZValue;
+        public Text speedValue;
+        public Text verticalSpeedValue;
+        public Text horizontalSpeedValue;
+        public Text missionTimeValue;
+        public Text distanceValue;
+        public Text predictionErrorValue;
+        public Text oceanCurrentValue;
+        public Text waterSpeedValue;
+        public Text groundSpeedValue;
+        public Text sideSlipValue;
+        public Text netBuoyancyValue;
+        public Text energyValue;
+        public Text angleOfAttackValue;
+        public Text liftForceValue;
+        public Text dragForceValue;
+        public Text angularRateValue;
+        public Text hydrodynamicMomentValue;
+        public Text inertiaValue;
+        public Text pistonPositionValue;
+        public Text controlSurfaceValue;
+        public Text actuatorPowerValue;
+        public Text dynamicsSummaryValue;
+        public RectTransform advancedRowsRoot;
+    }
+
+    [Serializable]
+    public sealed class StatusPanelRefs
+    {
+        public RectTransform panel;
+        public Image alarmBackground;
+        public Image progressFill;
+        public Text missionValue;
+        public Text modeValue;
+        public Text stateValue;
+        public Text segmentValue;
+        public Text remainingDistanceValue;
+        public Text etaValue;
+        public Text predictionStatusValue;
+        public Text batteryValue;
+        public Text driftValue;
+        public Text rmseValue;
+        public Text maeValue;
+        public Text confidenceValue;
+        public Text predictionTimeValue;
+        public Text engineeringValidationValue;
+        public Text alarmValue;
+        public Text missionHealthValue;
+        public RectTransform predictionMetricRowsRoot;
+        public RectTransform predictionMetricRowTemplate;
+    }
+
+    [Serializable]
+    public sealed class PlaybackControlsRefs
+    {
+        public RectTransform panel;
+        public Button playPauseButton;
+        public Button reverseButton;
+        public Button replayButton;
+        public Button resetButton;
+        public Button exportButton;
+        public Button exitButton;
+        public Button cameraFollowButton;
+        public Button cameraGlobalButton;
+        public Button cameraOrbitButton;
+        public Button missionVolumeButton;
+        public Toggle fogToggle;
+        public Toggle particlesToggle;
+        public Toggle trajectoryToggle;
+        public Button speed05Button;
+        public Button speed1Button;
+        public Button speed2Button;
+        public Button speed5Button;
+        public Button speed10Button;
+        public Slider progressSlider;
+        public Text statusText;
+    }
+
+    [Serializable]
+    public sealed class OceanToolbarRefs
+    {
+        public RectTransform viewportFrame;
+        public RectTransform panel;
+        public Text visibleArrowCount;
+        public Button cameraFollowCommand;
+        public Button cameraGlobalCommand;
+        public Button cameraTopCommand;
+        public Button cameraSideCommand;
+        public Button cameraOrbitCommand;
+        public Button cameraResetCommand;
+    }
     [Serializable] public sealed class DataInputPanelRefs { public RectTransform panel; public MissionSectionRefs mission = new MissionSectionRefs(); public SimulationSectionRefs simulation = new SimulationSectionRefs(); public OceanSectionRefs ocean = new OceanSectionRefs(); public DynamicsSectionRefs dynamics = new DynamicsSectionRefs(); public PredictionSectionRefs prediction = new PredictionSectionRefs(); }
     [Serializable] public sealed class MissionSectionRefs { public InputField csvPathInput; public Button reloadCsvButton; }
     [Serializable] public sealed class SimulationSectionRefs { public Button applyButton; public RectTransform flightLegDrawer; }
@@ -353,6 +529,13 @@ namespace UnderwaterGliderTwin.UI
         {
             UiReferenceValidator.Require(runtimeCanvas, this, "Main.unity", "runtimeCanvas", issues);
             UiReferenceValidator.Require(modalRoot, this, "Main.unity", "modalRoot", issues);
+            ReportDuplicateObjects<Canvas>("Canvas", issues);
+            ReportDuplicateObjects<EventSystem>("EventSystem", issues);
+            ReportDuplicateGameObjects("DashboardPanel", issues);
+            ReportDuplicateGameObjects("StatusPanel", issues);
+            ReportDuplicateGameObjects("DataInputPanel", issues);
+            ReportDuplicateGameObjects("PlaybackControlsPanel", issues);
+            ReportDuplicateGameObjects("OceanCommandToolbar", issues);
         }
 
         private void OnValidate()
@@ -366,7 +549,14 @@ namespace UnderwaterGliderTwin.UI
 
         public void EnsureSingleEventSystem()
         {
-            if (FindObjectOfType<EventSystem>() != null)
+            var eventSystems = FindObjectsOfType<EventSystem>();
+            if (eventSystems.Length > 1)
+            {
+                Debug.LogError("RuntimeUiRoot found duplicate EventSystem objects.", this);
+                return;
+            }
+
+            if (eventSystems.Length == 1)
             {
                 return;
             }
@@ -374,6 +564,35 @@ namespace UnderwaterGliderTwin.UI
             var eventSystem = new GameObject("EventSystem");
             eventSystem.AddComponent<EventSystem>();
             eventSystem.AddComponent<StandaloneInputModule>();
+        }
+
+        private void ReportDuplicateObjects<T>(string fieldName, List<UiReferenceIssue> issues) where T : Object
+        {
+            var matches = FindObjectsOfType<T>();
+            if (matches.Length <= 1)
+            {
+                return;
+            }
+
+            issues.Add(new UiReferenceIssue("Main.unity", UiReferenceValidator.GetPath(transform), fieldName, $"Expected exactly one {fieldName}, found {matches.Length}."));
+        }
+
+        private void ReportDuplicateGameObjects(string name, List<UiReferenceIssue> issues)
+        {
+            var matches = GameObject.FindObjectsOfType<GameObject>();
+            var count = 0;
+            foreach (var match in matches)
+            {
+                if (match.name == name)
+                {
+                    count++;
+                }
+            }
+
+            if (count > 1)
+            {
+                issues.Add(new UiReferenceIssue("Main.unity", UiReferenceValidator.GetPath(transform), name, $"Expected one long-lived UI object named {name}, found {count}."));
+            }
         }
     }
 }
@@ -397,6 +616,12 @@ if (runtimeUiRoot == null && !allowRuntimeFallback)
     throw new InvalidOperationException("RuntimeUiRoot is required. Assign Main/RuntimeUiRoot on TwinBootstrap.");
 }
 runtimeUiRoot?.EnsureSingleEventSystem();
+```
+
+In `TwinBootstrap.OnDestroy()`, add:
+
+```csharp
+RuntimeUiFallback.Reset();
 ```
 
 Keep existing runtime view creation in place until each view has a `Bind(...)` path. Gate the old path behind `allowRuntimeFallback`.
@@ -424,7 +649,7 @@ git commit -m "feat: add RuntimeUiRoot ownership model"
 
 **Interfaces:**
 - Consumes: `RuntimeUiFallback.AllowRuntimeFallback`
-- Produces: `UiFactory.EnsureCanvas(Transform parent, string fallbackPanelName)`
+- Produces: `UiFactory.EnsureCanvas(Transform parent, string fallbackPanelName, Canvas explicitFallbackCanvas = null)`
 - Produces: `DataInputView.ClearDynamicRuntimeUi()`
 
 - [ ] **Step 1: Write failing fallback tests**
@@ -436,11 +661,24 @@ Add:
 public void UiFactory_RejectsRuntimeCanvasCreationWhenFallbackDisabled()
 {
     RuntimeUiFallback.AllowRuntimeFallback = false;
-    var owner = new GameObject("Dashboard").transform;
+    var owner = scope.CreateRoot("Dashboard").transform;
 
-    var ex = Assert.Throws<System.InvalidOperationException>(() => UiFactory.EnsureCanvas(owner, "DashboardPanel"));
+    var ex = Assert.Throws<System.InvalidOperationException>(() => UiFactory.EnsureCanvas(owner, "DashboardPanel", null));
 
     Assert.That(ex.Message, Does.Contain("Runtime UI fallback is disabled"));
+}
+
+[Test]
+public void UiFactory_DoesNotUseUnrelatedGlobalCanvas()
+{
+    RuntimeUiFallback.AllowRuntimeFallback = true;
+    var unrelated = scope.CreateRoot("UnrelatedCanvas").AddComponent<Canvas>();
+    var owner = scope.CreateRoot("Dashboard").transform;
+
+    var canvas = UiFactory.EnsureCanvas(owner, "DashboardPanel", null);
+
+    Assert.That(canvas, Is.Not.SameAs(unrelated));
+    Assert.That(canvas.transform.parent, Is.EqualTo(owner));
 }
 ```
 
@@ -455,16 +693,21 @@ Add an overload and route the old overload through it:
 ```csharp
 public static Canvas EnsureCanvas(Transform parent)
 {
-    return EnsureCanvas(parent, parent != null ? parent.name : "UnknownPanel");
+    return EnsureCanvas(parent, parent != null ? parent.name : "UnknownPanel", null);
 }
 
-public static Canvas EnsureCanvas(Transform parent, string fallbackPanelName)
+public static Canvas EnsureCanvas(Transform parent, string fallbackPanelName, Canvas explicitFallbackCanvas = null)
 {
-    var canvas = Object.FindObjectOfType<Canvas>();
     EnsureEventSystem();
-    if (canvas != null)
+    if (explicitFallbackCanvas != null)
     {
-        return canvas;
+        return explicitFallbackCanvas;
+    }
+
+    var parentCanvas = parent != null ? parent.GetComponentInParent<Canvas>() : null;
+    if (parentCanvas != null)
+    {
+        return parentCanvas;
     }
 
     if (!RuntimeUiFallback.AllowRuntimeFallback)
@@ -475,7 +718,7 @@ public static Canvas EnsureCanvas(Transform parent, string fallbackPanelName)
     RuntimeUiFallback.LogFallback(fallbackPanelName);
     var canvasObject = new GameObject("RuntimeCanvas");
     canvasObject.transform.SetParent(parent, false);
-    canvas = canvasObject.AddComponent<Canvas>();
+    var canvas = canvasObject.AddComponent<Canvas>();
     canvas.renderMode = RenderMode.ScreenSpaceOverlay;
     canvas.sortingOrder = 10;
     var scaler = canvasObject.AddComponent<CanvasScaler>();
@@ -487,13 +730,15 @@ public static Canvas EnsureCanvas(Transform parent, string fallbackPanelName)
 }
 ```
 
-- [ ] **Step 4: Update old EditMode tests to opt into fallback**
+- [ ] **Step 4: Update old EditMode tests to opt into fallback and scoped cleanup**
 
 In `UiTests.TearDown()`, add:
 
 ```csharp
-RuntimeUiFallback.AllowRuntimeFallback = false;
+RuntimeUiFallback.Reset();
 ```
+
+Replace broad cleanup of every scene `GameObject` with a tracked root container for new tests. For existing tests that still create scene-wide objects, keep cleanup only inside tests that do not open saved scenes; any test that opens `Welcome.unity` or `Main.unity` must restore the previous scene and cannot call `Object.FindObjectsOfType<GameObject>()` teardown.
 
 At the start of tests that call old `Initialize(...)` runtime-creation paths, add:
 
@@ -649,6 +894,12 @@ else
 
 Add `BindUi(string initialCsv)` to assign text and button listeners.
 
+In `WelcomeBootstrap.OnDestroy()`, add:
+
+```csharp
+RuntimeUiFallback.Reset();
+```
+
 - [ ] **Step 4: Add editor builder for welcome hierarchy**
 
 Create `EditableUiSceneBuilder.cs` with a menu item and callable method:
@@ -740,6 +991,7 @@ git commit -m "feat: make welcome UI editable"
 - Modify: `UnderwaterGliderTwin/Assets/Scenes/Main.unity`
 - Create: `UnderwaterGliderTwin/Assets/UI/Prefabs/DashboardPanel.prefab`
 - Create: `UnderwaterGliderTwin/Assets/UI/Prefabs/StatusPanel.prefab`
+- Create: `UnderwaterGliderTwin/Assets/UI/Prefabs/DataInputPanel.prefab`
 - Create: `UnderwaterGliderTwin/Assets/UI/Prefabs/PlaybackControlsPanel.prefab`
 - Create: `UnderwaterGliderTwin/Assets/UI/Prefabs/OceanCommandToolbar.prefab`
 - Test: `UnderwaterGliderTwin/Assets/Tests/EditMode/EditableUiReferenceTests.cs`
@@ -756,6 +1008,7 @@ Add:
 [Test]
 public void MainScene_HasEditableRuntimeUiHierarchy()
 {
+    var previous = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path;
     UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
 
     Assert.That(GameObject.Find("RuntimeUiRoot"), Is.Not.Null);
@@ -766,6 +1019,29 @@ public void MainScene_HasEditableRuntimeUiHierarchy()
     Assert.That(GameObject.Find("PlaybackControlsPanel"), Is.Not.Null);
     Assert.That(GameObject.Find("OceanCommandToolbar"), Is.Not.Null);
     Assert.That(GameObject.Find("ModalRoot"), Is.Not.Null);
+
+    if (!string.IsNullOrEmpty(previous))
+    {
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+    }
+}
+
+[Test]
+public void MainScene_LongLivedPanelsArePrefabInstances()
+{
+    var previous = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path;
+    UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+
+    Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("DashboardPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+    Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("StatusPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+    Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("DataInputPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+    Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("PlaybackControlsPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+    Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("OceanCommandToolbar")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+
+    if (!string.IsNullOrEmpty(previous))
+    {
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+    }
 }
 ```
 
@@ -775,7 +1051,7 @@ Run the EditMode command. Expected: assertion failure because `Main.unity` has n
 
 - [ ] **Step 3: Extend editor builder**
 
-Add `BuildMainScene()` menu item and method. It opens `Assets/Scenes/Main.unity`, creates `RuntimeUiRoot`, creates `RuntimeCanvas` with `CanvasScaler` reference resolution `1920x1080`, creates the required child objects, adds `RuntimeUiRoot` component, assigns serialized fields through `SerializedObject`, and saves the scene.
+Add `BuildMainScene()` menu item and method. It opens `Assets/Scenes/Main.unity`, creates or reuses `RuntimeUiRoot`, creates or reuses `RuntimeCanvas` with `CanvasScaler` reference resolution `1920x1080`, ensures the required child objects exist once, adds `RuntimeUiRoot` component, assigns serialized fields through `SerializedObject`, and saves the scene.
 
 The hierarchy must be exactly:
 
@@ -793,14 +1069,29 @@ RuntimeUiRoot
 
 - [ ] **Step 4: Create base Prefabs**
 
-Use the builder to create Prefab assets from the corresponding panel roots under `Assets/UI/Prefabs`. Use `PrefabUtility.SaveAsPrefabAsset` for each panel root. Keep these stable names:
+Use the builder to create Prefab assets with this exact flow for each long-lived panel:
+
+```text
+Create temporary panel root outside RuntimeCanvas
+Save it with PrefabUtility.SaveAsPrefabAsset
+Destroy the temporary panel root
+Delete any existing non-Prefab scene object with the same panel name
+Instantiate the saved Prefab with PrefabUtility.InstantiatePrefab
+Parent the Prefab instance under RuntimeCanvas
+Reset RectTransform anchors, position, size, and sibling order
+```
+
+Keep these stable names:
 
 ```text
 DashboardPanel.prefab
 StatusPanel.prefab
+DataInputPanel.prefab
 PlaybackControlsPanel.prefab
 OceanCommandToolbar.prefab
 ```
+
+The builder must be idempotent. Running `BuildMainScene()` twice must still leave exactly one `RuntimeUiRoot`, one `RuntimeCanvas`, one `EventSystem`, one `ModalRoot`, and one connected Prefab instance for each panel.
 
 - [ ] **Step 5: Run builder**
 
@@ -870,6 +1161,21 @@ Run the EditMode command. Expected: compile errors for missing `Bind(...)` metho
 
 Each `Bind(...)` method assigns serialized UI fields from refs, subscribes to existing model events, and calls the same refresh methods that `Initialize(...)` uses. Keep old `Initialize(...)` as fallback-only path during migration.
 
+For `DashboardView`, first extract a real refresh entry point from the existing private `OnFrameChanged(...)` path:
+
+```csharp
+internal void RefreshFromCurrentFrame()
+{
+    if (playback == null || playback.Model == null)
+    {
+        return;
+    }
+
+    OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
+    RefreshDetails();
+}
+```
+
 Example shape:
 
 ```csharp
@@ -880,7 +1186,8 @@ public void Bind(DashboardPanelRefs refs, PlaybackController playbackController,
     panel = refs.panel;
     depthValue = refs.depthValue;
     batteryValue = refs.batteryValue;
-    UpdateTelemetry(FrameUpdateReason.Initial);
+    playback.FrameChangedWithReason += OnFrameChanged;
+    RefreshFromCurrentFrame();
 }
 ```
 
@@ -948,7 +1255,17 @@ git commit -m "feat: bind base UI panels from editable refs"
 - Produces: `DataInputView.Bind(DataInputPanelRefs refs, string csvPath, SimulationProfile profile, PredictionController prediction, Action<string> reloadCsv, Action<SimulationProfile> reloadSimulation, Action<OceanCurrentProfile> applyOceanCurrent)`
 - Produces: dynamic row creation under `refs.ocean.oceanLayerContent` using `refs.ocean.oceanLayerRowTemplate`
 
-- [ ] **Step 1: Add failing DataInput binding test**
+- [ ] **Step 1: Generate the required DataInput reference inventory**
+
+Before writing `Bind(...)`, inventory every current long-lived UI field or stable object created in these files:
+
+```powershell
+Select-String -Path 'UnderwaterGliderTwin\Assets\Scripts\UI\DataInputView*.cs' -Pattern 'private (Text|Button|InputField|Slider|Toggle|RectTransform|ScrollRect|Image)|UiFactory\.(Text|Button|PrimaryButton|InputField|Slider|Toggle|Panel|CommandPanel)\("' 
+```
+
+Update `RuntimeUiReferences.cs` so `MissionSectionRefs`, `SimulationSectionRefs`, `OceanSectionRefs`, `DynamicsSectionRefs`, and `PredictionSectionRefs` contain a field for every long-lived UI control from that inventory. The migration is not complete until all existing buttons, inputs, sliders, status texts, drawer roots, content roots, and row templates have refs or are explicitly classified as dynamic row internals.
+
+- [ ] **Step 2: Add failing DataInput binding test**
 
 Create a minimal refs object with CSV input, reload button, apply button, ocean drawer button, and row template. Call `Bind(...)` and assert that input text and button listeners work.
 
@@ -974,15 +1291,15 @@ public void DataInputView_BindsExistingCsvInputAndReloadButton()
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Run test to verify it fails**
 
 Run the EditMode command. Expected: compile error for missing `DataInputView.Bind(...)`.
 
-- [ ] **Step 3: Add DataInputView.Bind**
+- [ ] **Step 4: Add DataInputView.Bind**
 
 Implement `Bind(...)` to assign callbacks and refs, initialize text fields, build model buttons into the Prefab-owned prediction section, and connect existing callbacks. It must not call `ClearRuntimeUi()` and must not create `DataInputPanel`.
 
-- [ ] **Step 4: Replace full-root cleanup**
+- [ ] **Step 5: Replace full-root cleanup**
 
 Remove calls that delete `transform` children in Prefab-bound mode. Limit cleanup to dynamic containers:
 
@@ -991,7 +1308,7 @@ ClearChildren(refs.ocean.oceanLayerContent);
 HideRowTemplate(refs.ocean.oceanLayerRowTemplate);
 ```
 
-- [ ] **Step 5: Convert repeated rows to RowTemplate**
+- [ ] **Step 6: Convert repeated rows to RowTemplate**
 
 For ocean layers, instantiate:
 
@@ -1003,7 +1320,7 @@ row.name = $"OceanCurrentLayerRow{index + 1}";
 
 Write values into child `Text` and `InputField` references found by stable names inside the row template.
 
-- [ ] **Step 6: Update TwinBootstrap to bind data input**
+- [ ] **Step 7: Update TwinBootstrap to bind data input**
 
 Use:
 
@@ -1011,11 +1328,11 @@ Use:
 dataInput.Bind(runtimeUiRoot.References.dataInput, CurrentCsvPath, RuntimeDataSourceState.SimulationProfile, prediction, ReloadFromCsvPath, ReloadFromSimulationProfile, oceanVolume != null ? oceanVolume.UpdateCurrentProfile : null);
 ```
 
-- [ ] **Step 7: Run EditMode tests**
+- [ ] **Step 8: Run EditMode tests**
 
 Run the EditMode command. Expected: DataInput bind test passes; existing DataInput behavior tests pass through fallback or bound refs.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```powershell
 git add UnderwaterGliderTwin/Assets/Scripts/UI/DataInputView*.cs UnderwaterGliderTwin/Assets/Scripts/Bootstrap/TwinBootstrap.cs UnderwaterGliderTwin/Assets/Tests/EditMode/UiTests.cs
@@ -1141,9 +1458,11 @@ Create:
 
 ```csharp
 using System.Collections;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
@@ -1158,8 +1477,10 @@ namespace UnderwaterGliderTwin.Tests
             yield return null;
 
             Assert.That(Object.FindObjectsOfType<Canvas>().Length, Is.EqualTo(1));
+            Assert.That(Object.FindObjectsOfType<EventSystem>().Length, Is.EqualTo(1));
             Assert.That(GameObject.Find("RuntimeUiRoot"), Is.Not.Null);
             Assert.That(GameObject.Find("RuntimeCanvas"), Is.Not.Null);
+            Assert.That(GameObject.Find("RuntimeUI"), Is.Null);
             Assert.That(GameObject.FindObjectsOfType<Button>().Length, Is.GreaterThan(0));
         }
     }
@@ -1176,7 +1497,35 @@ Assert.That(GameObject.Find("RuntimeUiRoot"), Is.Not.Null);
 Assert.That(GameObject.Find("ModalRoot"), Is.Not.Null);
 ```
 
-Open scenes through `EditorSceneManager.OpenScene`.
+Open scenes through `EditorSceneManager.OpenScene`. Store `EditorSceneManager.GetActiveScene().path` before opening a test scene and reopen the previous scene in a `finally` block so scene tests do not leak state into later tests.
+
+Add an idempotency test:
+
+```csharp
+[Test]
+public void EditableUiSceneBuilder_BuildMainSceneIsIdempotent()
+{
+    var previous = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path;
+    try
+    {
+        UnderwaterGliderTwin.Editor.EditableUiSceneBuilder.BuildMainScene();
+        UnderwaterGliderTwin.Editor.EditableUiSceneBuilder.BuildMainScene();
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+
+        Assert.That(Object.FindObjectsOfType<Canvas>().Length, Is.EqualTo(1));
+        Assert.That(Object.FindObjectsOfType<EventSystem>().Length, Is.EqualTo(1));
+        Assert.That(GameObject.FindObjectsOfType<GameObject>().Count(go => go.name == "DashboardPanel"), Is.EqualTo(1));
+        Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("DashboardPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+    }
+    finally
+    {
+        if (!string.IsNullOrEmpty(previous))
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+        }
+    }
+}
+```
 
 - [ ] **Step 4: Run EditMode tests**
 
@@ -1190,7 +1539,23 @@ Run the PlayMode command. Expected: PlayMode uniqueness test passes. If the scen
 
 In Unity Editor, open `Assets/UI/Prefabs/DashboardPanel.prefab`, change `DashboardPanel` Image color, save, enter Play Mode, and verify the color appears without editing code.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Dual-resolution screenshot acceptance**
+
+Run the player or PlayMode screenshot harness at 1920x1080 and 1366x768. Save screenshots to:
+
+```text
+E:\upan\digital twin\Artifacts\EditableUi\main-1920x1080.png
+E:\upan\digital twin\Artifacts\EditableUi\main-1366x768.png
+```
+
+Expected visual checks:
+
+- `RuntimeCanvas` fills the screen.
+- `DashboardPanel`, `StatusPanel`, `DataInputPanel`, `PlaybackControlsPanel`, and `OceanCommandToolbar` are visible.
+- No long-lived panels overlap incoherently.
+- The manual `DashboardPanel` Prefab color edit is visible in both screenshots.
+
+- [ ] **Step 8: Commit**
 
 ```powershell
 git add UnderwaterGliderTwin/Assets/Tests/PlayMode UnderwaterGliderTwin/Assets/Tests/EditMode/EditableUiReferenceTests.cs
@@ -1275,6 +1640,14 @@ Spec coverage:
 - Drawers and modals under `ModalRoot` are covered by Task 8.
 - EditMode, PlayMode, dual runtime uniqueness, and Prefab edit acceptance are covered by Task 9.
 - Production removal of long-lived runtime creation is covered by Task 10.
+- Prefab instance replacement is covered by Task 5.
+- Complete base-panel refs are covered by Task 2, and complete DataInput refs are enforced by Task 7's inventory step.
+- Canvas fallback no longer uses global `FindObjectOfType<Canvas>()`; Task 3 uses explicit fallback Canvas or parent-chain Canvas only.
+- Scoped test cleanup is covered by Task 1 and Task 3.
+- Duplicate Canvas, duplicate EventSystem, and duplicate long-lived UI detection are covered by Task 2 and Task 9.
+- Static fallback state isolation is covered by Task 1, Task 2, Task 3, and Task 4.
+- `DashboardView` refresh uses the real existing `OnFrameChanged(...)` path through `RefreshFromCurrentFrame()`, covered by Task 6.
+- Builder idempotency and dual-resolution screenshots are covered by Task 9.
 
 Placeholder scan:
 
