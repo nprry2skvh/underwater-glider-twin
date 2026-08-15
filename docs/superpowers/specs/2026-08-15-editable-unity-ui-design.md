@@ -32,6 +32,20 @@
 
 `UiFactory.EnsureCanvas()` 不能再作为长期 UI 的入口。迁移期可保留一个 `allowRuntimeFallback` 开关，但默认关闭；生产路径缺少 Canvas 时必须报错，而不是静默创建另一套 UI。
 
+`Main` 场景采用唯一层级：
+
+- `RuntimeUiRoot`
+- `RuntimeUiRoot/RuntimeCanvas`
+- `RuntimeUiRoot/RuntimeCanvas/CommandCenterHeader`
+- `RuntimeUiRoot/RuntimeCanvas/DashboardPanel`
+- `RuntimeUiRoot/RuntimeCanvas/StatusPanel`
+- `RuntimeUiRoot/RuntimeCanvas/DataInputPanel`
+- `RuntimeUiRoot/RuntimeCanvas/PlaybackControlsPanel`
+- `RuntimeUiRoot/RuntimeCanvas/OceanCommandToolbar`
+- `RuntimeUiRoot/RuntimeCanvas/ModalRoot`
+
+`TwinBootstrap` 只引用 `RuntimeUiRoot`。它不能同时再实例化同一批长期 UI Prefab，避免重复 Canvas、重复按钮和重复面板。
+
 ### 不允许清空 Prefab 根节点
 
 绑定脚本不能销毁包含可编辑 UI 的 Prefab 子物体。现有 `DataInputView.ClearRuntimeUi()` 会遍历并删除自身所有子节点，迁移时必须移除，或改成只清理明确标记的动态内容容器，例如列表行、临时提示和运行时生成的数据项。
@@ -44,11 +58,23 @@
 
 生产模式禁止静默回退到 `UiFactory` 生成替代 UI。迁移期如果确实需要保留旧路径，必须挂在显式的 `allowRuntimeFallback` 开关下，并在日志中说明当前使用的是迁移回退路径。
 
+`allowRuntimeFallback` 只能用于迁移和开发验证，生产默认关闭。每次启用回退路径必须输出格式明确的日志，例如 `[UI Fallback] Runtime-generated UI is active: DataInputPanel`。
+
 ### 动态内容边界
 
 静态标题、标签、按钮文字、背景、面板、输入框外观和按钮外观由 Prefab 管理。实时数值、告警、进度、按钮可用状态和输入框当前值由脚本刷新。
 
 海流层、飞行腿、预测指标等重复内容使用 Prefab 提供的 `RowTemplate`。脚本只实例化数据行、写入数据和控制显示隐藏，不再临时拼整套 UI。弹窗和抽屉由 `ModalRoot` 或对应 Prefab 提供容器，脚本只控制 `SetActive`、内容刷新和事件绑定。
+
+### 统一绑定入口
+
+运行时视图脚本逐步从 `Initialize(...)` 迁移到 `Bind(...)`，或使用 `Initialize(RuntimeUiReferences references, ...)`。绑定入口接收场景或 Prefab 中已经存在的引用，脚本不得在 `Awake`、`Start` 或 `Initialize` 中自行创建长期 UI。
+
+### Prefab 版本管理
+
+Prefab 修改优先在 Prefab Mode 中完成。场景只保存必要的 Prefab 实例覆盖，例如位置、初始显隐和场景级引用。禁止同时大规模修改 Prefab 源和大量场景实例覆盖。
+
+关键 UI Prefab 必须保持稳定对象路径。字段绑定依赖的对象命名和层级不能随意重命名，避免序列化引用频繁断裂。确实需要重命名时，同一次变更必须更新绑定引用和引用完整性测试。
 
 ## 推荐架构
 
@@ -153,7 +179,7 @@
 2. `WelcomeBootstrap` 读取命令行和上次 CSV 路径。
 3. 用户点击按钮后，`LaunchCoordinator` 设置数据源并进入 `Main` 场景。
 4. `TwinBootstrap` 加载 CSV 或仿真数据，创建可视化对象。
-5. `TwinBootstrap` 使用序列化字段绑定 `RuntimeUiRoot`、`RuntimeCanvas` 和各 UI Prefab。
+5. `TwinBootstrap` 使用序列化字段绑定唯一的 `RuntimeUiRoot`，再由 `RuntimeUiRoot` 暴露 `RuntimeCanvas`、`ModalRoot` 和各 UI Prefab 引用。
 6. 各 UI 绑定脚本把运行时数据写入已有文字、按钮、输入框和滑条。
 
 这样 UI 外观和业务逻辑分离。用户改图片、位置和颜色时，不需要改数据加载和仿真逻辑。
