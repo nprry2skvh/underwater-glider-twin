@@ -30,11 +30,14 @@
 - Required and optional UI references must be explicit. Missing required controls block strict binding; missing optional/decorative controls are marked with `[OptionalUiReference]`, skipped by blocking validation, and cannot disable the whole UI.
 - `RuntimeUiFallback.AllowRuntimeFallback` must be explicitly set during each bootstrap and restored to false on scene destroy or bootstrap cleanup.
 - `EditableUiSceneBuilder` must be idempotent: repeated execution cannot create duplicate Canvas, EventSystem, Prefab instances, or root panels.
+- Builder `GetOrCreate...` helpers must preserve user-authored Inspector overrides on existing objects. Defaults are applied only when an object is newly created; resetting visuals requires an explicit `ResetToDefaults` operation.
 - Acceptance includes runtime screenshots at 1920x1080 and 1366x768, plus proof that a manual Prefab visual edit appears at runtime without code changes.
 - `EditableUiSceneBuilder` must check for unsaved scene changes before overwriting `Welcome.unity` or `Main.unity`; in batchmode it fails with a clear error instead of silently discarding user edits.
 - Dynamic row templates use binding components such as `OceanCurrentLayerRowView`; production code must not depend on long chains of string-based child `Find(...)` calls for row internals.
 - `Welcome` builder methods must be idempotent and must backfill `WelcomeBootstrap` serialized references before saving the scene.
 - RowTemplate components such as `OceanCurrentLayerRowView` must be included in root validation, not only validated when a row is instantiated at runtime.
+- Optional references must be audited before enabling `Strict`: mode-specific prediction, confidence, decorative navigation cards, and hidden drawer affordances may be optional; functional buttons, input fields, core labels, and dynamic content containers are required.
+- Dynamic row `Bind(...)` methods must guard missing serialized references and null callbacks; migration/fallback tests must not fail with `NullReferenceException`.
 
 ---
 
@@ -528,6 +531,50 @@ public void RuntimeUiRoot_EnabledPanelsUsesExplicitPanelMask()
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("references.dashboard.depthValue"));
     Assert.That(issues, Has.None.Property("FieldName").EqualTo("references.dataInput.mission.csvPathInput"));
 }
+
+[Test]
+public void RuntimeUiRoot_EnabledPanelsWithNoneSkipsPanelInternals()
+{
+    var rootObject = scope.CreateRoot("RuntimeUiRoot");
+    var canvas = new GameObject("RuntimeCanvas", typeof(Canvas)).GetComponent<Canvas>();
+    canvas.transform.SetParent(rootObject.transform, false);
+    var modalRoot = new GameObject("ModalRoot").AddComponent<RectTransform>();
+    modalRoot.transform.SetParent(canvas.transform, false);
+    var dashboard = new GameObject("DashboardPanel").AddComponent<RectTransform>();
+    dashboard.transform.SetParent(canvas.transform, false);
+    var root = rootObject.AddComponent<RuntimeUiRoot>();
+    var serialized = new UnityEditor.SerializedObject(root);
+    serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
+    serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
+    serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.None;
+    serialized.FindProperty("references.dashboard.panel").objectReferenceValue = dashboard;
+    serialized.ApplyModifiedPropertiesWithoutUndo();
+
+    var issues = root.ValidateReferences(RuntimeUiValidationProfile.EnabledPanels);
+
+    Assert.That(issues, Has.None.Property("FieldName").EqualTo("references.dashboard.depthValue"));
+}
+
+[Test]
+public void RuntimeUiRoot_StrictIgnoresPanelMaskAndValidatesAllRequiredGroups()
+{
+    var rootObject = scope.CreateRoot("RuntimeUiRoot");
+    var canvas = new GameObject("RuntimeCanvas", typeof(Canvas)).GetComponent<Canvas>();
+    canvas.transform.SetParent(rootObject.transform, false);
+    var modalRoot = new GameObject("ModalRoot").AddComponent<RectTransform>();
+    modalRoot.transform.SetParent(canvas.transform, false);
+    var root = rootObject.AddComponent<RuntimeUiRoot>();
+    var serialized = new UnityEditor.SerializedObject(root);
+    serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
+    serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
+    serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.None;
+    serialized.ApplyModifiedPropertiesWithoutUndo();
+
+    var issues = root.ValidateReferences(RuntimeUiValidationProfile.Strict);
+
+    Assert.That(issues, Has.Some.Property("FieldName").EqualTo("references.dashboard.depthValue"));
+    Assert.That(issues, Has.Some.Property("FieldName").EqualTo("references.dataInput.mission.csvPathInput"));
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -680,6 +727,22 @@ namespace UnderwaterGliderTwin.UI
     [Serializable] public sealed class PredictionSectionRefs : UiReferenceGroupBase { public Button physicsModelButton; public Button xgBoostModelButton; }
 }
 ```
+
+Before finalizing these fields, classify every reference as required or optional with this rule:
+
+```text
+Required:
+  controls needed to launch, load CSV, run simulation, play/pause/reset, open drawers, submit forms, and render core telemetry/status text
+  dynamic content containers and row templates used by runtime list creation
+
+Optional:
+  mode-specific prediction values not present in all modes
+  confidence/error text that is only meaningful when a predictor is active
+  decorative navigation cards, badges, separators, icons, and non-functional visual affordances
+  drawer sub-controls that are hidden because the corresponding feature is intentionally disabled
+```
+
+Apply `[OptionalUiReference]` only after documenting why the field is optional in a nearby comment. Do not mark buttons, input fields, dynamic content roots, or row templates optional unless the whole feature is intentionally disabled and covered by a test.
 
 Create `RuntimeUiRoot.cs`:
 
@@ -1201,6 +1264,48 @@ public void EditableUiSceneBuilder_BuildWelcomeSceneIsIdempotentAndBackfillsRefe
     }
 }
 
+[Test]
+public void EditableUiSceneBuilder_BuildWelcomeScenePreservesExistingVisualOverrides()
+{
+    var previous = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path;
+    try
+    {
+        EditableUiSceneBuilder.BuildWelcomeScene();
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Welcome.unity");
+        var title = GameObject.Find("TitleText").GetComponent<Text>();
+        var panel = GameObject.Find("LaunchPanel").GetComponent<Image>();
+        var panelRect = panel.GetComponent<RectTransform>();
+        title.text = "自定义欢迎标题";
+        title.fontSize = 41;
+        panel.color = new Color(0.40f, 0.10f, 0.70f, 0.90f);
+        panelRect.anchorMin = new Vector2(0.20f, 0.10f);
+        panelRect.anchorMax = new Vector2(0.80f, 0.90f);
+        UnityEditor.EditorUtility.SetDirty(title);
+        UnityEditor.EditorUtility.SetDirty(panel);
+        UnityEditor.EditorUtility.SetDirty(panelRect);
+        UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+
+        EditableUiSceneBuilder.BuildWelcomeScene();
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Welcome.unity");
+        title = GameObject.Find("TitleText").GetComponent<Text>();
+        panel = GameObject.Find("LaunchPanel").GetComponent<Image>();
+        panelRect = panel.GetComponent<RectTransform>();
+
+        Assert.That(title.text, Is.EqualTo("自定义欢迎标题"));
+        Assert.That(title.fontSize, Is.EqualTo(41));
+        Assert.That(panel.color, Is.EqualTo(new Color(0.40f, 0.10f, 0.70f, 0.90f)));
+        Assert.That(panelRect.anchorMin, Is.EqualTo(new Vector2(0.20f, 0.10f)));
+        Assert.That(panelRect.anchorMax, Is.EqualTo(new Vector2(0.80f, 0.90f)));
+    }
+    finally
+    {
+        if (!string.IsNullOrEmpty(previous))
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+        }
+    }
+}
+
 private static int FindObjectsNamed(string objectName)
 {
     var count = 0;
@@ -1398,7 +1503,23 @@ namespace UnderwaterGliderTwin.Editor
 }
 ```
 
-Use helper methods equivalent to the current welcome `CreateImage`, `CreateText`, `CreateButton`, and `CreateInput`, but name them `GetOrCreateImage`, `GetOrCreateText`, `GetOrCreateButton`, and `GetOrCreateInput`. Each helper first searches only direct children of the supplied parent for the stable object name, reuses the existing object if present, ensures required components exist, then reapplies anchors, color, text, and size.
+Use helper methods equivalent to the current welcome `CreateImage`, `CreateText`, `CreateButton`, and `CreateInput`, but name them `GetOrCreateImage`, `GetOrCreateText`, `GetOrCreateButton`, and `GetOrCreateInput`.
+
+Each helper must follow this exact preservation rule:
+
+```text
+If object does not exist:
+  create object
+  add required components
+  apply default anchors, color, text, font size, and size
+
+If object already exists:
+  reuse object
+  add only missing required components
+  do not overwrite existing RectTransform anchors, color, text, font size, sprite, image type, or button colors
+```
+
+Add a separate editor method and menu item `EditableUiSceneBuilder.ResetWelcomeDefaults()` / `UnderwaterGliderTwin/UI/Reset Welcome UI Defaults`. This operation may reapply default anchors, colors, labels, and font sizes, but `BuildWelcomeScene()` must never call it.
 
 - [ ] **Step 5: Run builder in Unity batchmode**
 
@@ -1503,6 +1624,8 @@ Run the EditMode command. Expected: assertion failure because `Main.unity` has n
 Add `BuildMainScene()` menu item and method. It calls `EnsureNoUnsavedSceneChanges("Main UI rebuild")`, opens `Assets/Scenes/Main.unity`, creates or reuses `RuntimeUiRoot`, creates or reuses `RuntimeCanvas` with `CanvasScaler` reference resolution `1920x1080`, ensures the required child objects exist once, adds `RuntimeUiRoot` component, assigns serialized fields through `SerializedObject`, and saves the scene.
 
 When `BuildMainScene()` first creates the root in Task 5, assign `enabledPanelValidationMask = RuntimeUiPanelFlags.None`. Task 6 updates the scene value to `Dashboard | Status | Playback | OceanToolbar`; Task 7 updates it to include `DataInput`.
+
+Like `BuildWelcomeScene()`, `BuildMainScene()` must preserve existing visual overrides. It may create missing roots, missing Prefab assets, missing Prefab instances, missing required components, and missing serialized references; it must not reset RectTransform positions, colors, fonts, labels, sprites, or Prefab instance overrides on objects that already exist. If a default reset is needed, add a separate `EditableUiSceneBuilder.ResetMainUiDefaults()` menu item and keep it out of normal rebuild flow.
 
 The hierarchy must be exactly:
 
@@ -1790,13 +1913,24 @@ namespace UnderwaterGliderTwin.UI
 
         public void Bind(int index, OceanCurrentLayer layer, Action<int> onEdit, Action<int> onRemove)
         {
+            var issues = new List<UiReferenceIssue>();
+            CollectReferenceIssues(issues);
+            if (issues.Count > 0)
+            {
+                foreach (var issue in issues)
+                {
+                    Debug.LogError(issue.ToString(), this);
+                }
+                return;
+            }
+
             titleText.text = $"Layer {index + 1}";
             depthRangeText.text = $"{layer.MinDepthM:0}-{layer.MaxDepthM:0} m";
             velocityText.text = $"E {layer.EastwardMps:0.00} / N {layer.NorthwardMps:0.00} m/s";
             editButton.onClick.RemoveAllListeners();
             removeButton.onClick.RemoveAllListeners();
-            editButton.onClick.AddListener(() => onEdit(index));
-            removeButton.onClick.AddListener(() => onRemove(index));
+            editButton.onClick.AddListener(() => onEdit?.Invoke(index));
+            removeButton.onClick.AddListener(() => onRemove?.Invoke(index));
         }
 
         public void CollectReferenceIssues(List<UiReferenceIssue> issues)
@@ -1840,6 +1974,45 @@ public void RuntimeUiRoot_ValidatesOceanRowTemplateProvider()
 ```
 
 This test proves `RuntimeUiRoot` calls `IUiReferenceProvider.CollectReferenceIssues(...)` on the row template itself; template internals cannot be left unchecked until row instantiation.
+
+Add runtime-protection tests for row binding:
+
+```csharp
+[Test]
+public void OceanCurrentLayerRowView_BindWithMissingRefsDoesNotThrow()
+{
+    var row = scope.CreateRoot("OceanCurrentLayerRow").AddComponent<OceanCurrentLayerRowView>();
+    var layer = new OceanCurrentLayer(0f, 25f, 0.10f, 0.20f);
+
+    Assert.DoesNotThrow(() => row.Bind(0, layer, null, null));
+}
+
+[Test]
+public void OceanCurrentLayerRowView_BindWithNullCallbacksDoesNotThrowOnClick()
+{
+    var rowObject = scope.CreateRoot("OceanCurrentLayerRow");
+    var row = rowObject.AddComponent<OceanCurrentLayerRowView>();
+    var title = CreateText(rowObject.transform, "TitleText");
+    var depth = CreateText(rowObject.transform, "DepthRangeText");
+    var velocity = CreateText(rowObject.transform, "VelocityText");
+    var edit = CreateButton(rowObject.transform, "EditButton");
+    var remove = CreateButton(rowObject.transform, "RemoveButton");
+    var serialized = new UnityEditor.SerializedObject(row);
+    serialized.FindProperty("titleText").objectReferenceValue = title;
+    serialized.FindProperty("depthRangeText").objectReferenceValue = depth;
+    serialized.FindProperty("velocityText").objectReferenceValue = velocity;
+    serialized.FindProperty("editButton").objectReferenceValue = edit;
+    serialized.FindProperty("removeButton").objectReferenceValue = remove;
+    serialized.ApplyModifiedPropertiesWithoutUndo();
+
+    row.Bind(0, new OceanCurrentLayer(0f, 25f, 0.10f, 0.20f), null, null);
+
+    Assert.DoesNotThrow(() => edit.onClick.Invoke());
+    Assert.DoesNotThrow(() => remove.onClick.Invoke());
+}
+```
+
+Use existing UI test helpers when available; otherwise add local `CreateText(Transform,string)` and `CreateButton(Transform,string)` helpers that create child GameObjects with `Text` or `Button` components.
 
 - [ ] **Step 7: Convert repeated rows to RowTemplate**
 
@@ -2097,6 +2270,8 @@ Run the PlayMode command. Expected: PlayMode uniqueness test passes. If the scen
 
 In Unity Editor, open `Assets/UI/Prefabs/DashboardPanel.prefab`, change `DashboardPanel` Image color, save, enter Play Mode, and verify the color appears without editing code.
 
+Then run `EditableUiSceneBuilder.BuildWelcomeScene()` and `EditableUiSceneBuilder.BuildMainScene()` again. Verify the manual Prefab color edit, any scene instance RectTransform overrides, and the custom Welcome title/font/color from `EditableUiSceneBuilder_BuildWelcomeScenePreservesExistingVisualOverrides` remain unchanged. Use `ResetWelcomeDefaults()` or `ResetMainUiDefaults()` only when intentionally resetting visuals.
+
 - [ ] **Step 7: Dual-resolution screenshot acceptance**
 
 Run the player or PlayMode screenshot harness at 1920x1080 and 1366x768. Save screenshots to:
@@ -2112,6 +2287,20 @@ Expected visual checks:
 - `DashboardPanel`, `StatusPanel`, `DataInputPanel`, `PlaybackControlsPanel`, and `OceanCommandToolbar` are visible.
 - No long-lived panels overlap incoherently.
 - The manual `DashboardPanel` Prefab color edit is visible in both screenshots.
+
+Also manually exercise these paths before final acceptance:
+
+```text
+Welcome CSV path confirmation
+Welcome simulation launch
+Main playback play/pause/reset and speed buttons
+Simulation parameter apply
+Ocean current drawer open/edit/remove row
+Flight leg drawer open/apply
+Prediction model panel or disabled-prediction state
+```
+
+Expected: no duplicate long-lived UI appears, no `NullReferenceException` is logged, and hidden/drawer UI can open without missing-reference errors.
 
 - [ ] **Step 8: Commit**
 
@@ -2158,6 +2347,15 @@ Add PlayMode assertion that no object named `RuntimeUI` exists after loading `Ma
 Set `TwinBootstrap.strictUiValidation` to true in `Assets/Scenes/Main.unity` after all long-lived panel, drawer, modal, and RowTemplate references have been assigned.
 
 Also set `RuntimeUiRoot.enabledPanelValidationMask` to `RuntimeUiPanelFlags.All`. `Strict` validation validates all required groups regardless of the mask, but setting the mask to `All` keeps editor `EnabledPanels` validation and scene intent aligned.
+
+Before enabling `strictUiValidation`, perform and commit an optional-reference audit:
+
+```text
+For each field in RuntimeUiReferences:
+  if the field is required for a shipped behavior, keep it required
+  if the field is mode-specific or decorative, mark it [OptionalUiReference] and add a comment naming the mode/feature that makes it optional
+  if a field is optional because a whole feature is disabled, add an EditMode or PlayMode test proving the disabled feature does not call that reference
+```
 
 Add an EditMode scene test:
 
@@ -2239,8 +2437,10 @@ Spec coverage:
 - Static fallback state isolation is covered by Task 1, Task 2, Task 3, and Task 4.
 - `DashboardView` refresh uses the real existing `OnFrameChanged(...)` path through `RefreshFromCurrentFrame()`, covered by Task 6.
 - Builder idempotency and dual-resolution screenshots are covered by Task 9.
+- Builder preservation of user-authored Inspector overrides is covered by Task 4 tests, Task 5 builder rules, and Task 9 manual rebuild acceptance.
 - Staged reference validation is covered by Tasks 1, 2, and 10 through `RuntimeUiValidationProfile.BootstrapOnly`, `EnabledPanels`, and `Strict`.
 - `EnabledPanels` validation uses explicit `RuntimeUiPanelFlags` instead of `activeInHierarchy`, covered by Tasks 1, 2, 5, 6, 7, and 10.
+- Mask behavior is explicitly tested for `None`, single-panel `EnabledPanels`, and `Strict` all-required validation in Task 2.
 - Full grouped reference validation is covered by Task 1 and Task 2 through `UiReferenceGroupBase`, `UiReferenceValidator.RequireFields(...)`, and `references.CollectReferenceIssues(...)`, but is only enforced as a production blocker in Task 10.
 - Duplicate detection scope is limited to the owner scene for Canvas/EventSystem and to the `RuntimeUiRoot` subtree for long-lived panels, covered by Task 2.
 - `DataInputPanel.prefab` is included in Task 5 file creation, Prefab instance tests, and stable Prefab name list.
@@ -2249,9 +2449,11 @@ Spec coverage:
 - `EditableUiSceneBuilder` protects unsaved scene changes before rebuilding scenes, including explicit batchmode dirty-scene failure, covered by Tasks 4 and 5.
 - PlayMode tests prepare `RuntimeDataSourceState.UseSimulation(SimulationProfile.Default)` before loading `Main`, covered by Task 9.
 - Dynamic ocean current rows use `OceanCurrentLayerRowView`, and RowTemplate internals are validated from `RuntimeUiRoot`, covered by Tasks 2 and 7.
+- Dynamic row `Bind(...)` null-reference protection and null callback protection are covered by Task 7 tests.
 - Modal/drawer tests use `UiTestObjectScope` and scene-scoped object counting instead of global `GameObject.Find(...)`, covered by Task 8.
 - `UiReferenceValidator.Require(...)` handles null owner, null prefab name, and null field name, covered by Task 1.
-- Optional UI references use `[OptionalUiReference]` and do not block strict validation, covered by Tasks 1 and 2.
+- Optional UI references use `[OptionalUiReference]`, require documented classification, and do not block strict validation, covered by Tasks 1, 2, and 10.
+- Final manual acceptance covers Welcome CSV, simulation launch, playback controls, simulation parameter apply, ocean current drawer rows, flight leg drawer, and prediction enabled/disabled states in Task 9.
 
 Placeholder scan:
 
