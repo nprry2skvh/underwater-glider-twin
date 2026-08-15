@@ -15,11 +15,16 @@
 - `1024×640` 不承诺完整三栏，只承诺抽屉模式与中央 3D 视图可用。
 - 响应式断点只读取 Canvas/屏幕可用宽高，不以布局后的 `ViewportColumn.rect.width` 作为唯一判断条件。
 - 断点使用进入/退出滞后阈值，避免布局切换震荡。
+- 字体验收使用“实际字号 = 逻辑字号 × CanvasScaler 有效缩放比例”；普通标签和按钮文字实际高度不得低于 10px。
 - `ModalRoot` 是唯一抽屉/弹窗容器；不创建第二个名为 `DrawerLayer` 的根对象。
+- `DrawerEntryLayer` 是常驻入口层，位于 `UiRoot` 下，不属于会在抽屉模式隐藏的左右栏。
+- 最终层级为：`RuntimeCanvas/UiRoot/{SystemBar,ConfigurationArea,MainBody,PlaybackBar,DrawerEntryLayer}`，以及同级的 `RuntimeCanvas/ModalRoot/{DrawerScrim,OceanCurrentDrawer,FlightLegDrawer}`。
 - 现有 `OceanCurrentDrawer`、`FlightLegDrawer` 保持在 `ModalRoot` 下并保持对象名称。
 - 不修改仿真、海流采样、预测模型、回放模型和相机业务逻辑。
 - 所有滚动限定在配置高级参数、遥测内容、状态内容或单个抽屉内部，根 UI 不使用 `ScrollRect`。
 - 标签和辅助文字必须通过字体配置与截图验证保持实际可读性；抽屉模式下只显示高频内容。
+- Prefab 已存在时只补齐缺失结构和样式，不自动覆盖用户颜色、位置、字体或实例覆盖；恢复默认样式必须通过显式 Reset 操作。
+- 发现非 Prefab 的同名对象时必须报告错误或跳过，不得静默删除。
 - 面板使用深海蓝，青色只用于强调，黄色只用于警告/预测历史，状态不能只依靠颜色区分。
 - 每个任务完成后运行该任务列出的测试并单独提交，避免与工作区已有改动混合。
 
@@ -35,11 +40,12 @@
 - `UnderwaterGliderTwin/Assets/Tests/EditMode/ResponsiveUiLayoutPolicyTests.cs`：覆盖断点、滞后和高度边界。
 - `UnderwaterGliderTwin/Assets/Tests/EditMode/ResponsiveUiTypographyTests.cs`：覆盖字体最小逻辑字号和抽屉模式高频内容规则。
 - `UnderwaterGliderTwin/Assets/Tests/PlayMode/ResponsiveUiLayoutPlayModeTests.cs`：加载 Main 场景，验证模式切换、唯一 ModalRoot、抽屉父级、焦点回退和无重复控制入口。
+- `UnderwaterGliderTwin/Assets/Tests/PlayMode/GeneratedRuntimeUiPlayModeTests.cs`：验证 `TwinBootstrap` 的生成式/fallback UI 也创建统一层级，并受 `allowRuntimeFallback` 控制。
 
 ### 修改文件
 
 - `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiRoot.cs`：保留 `ModalRoot` 序列化字段，增加 `DrawerLayer` 语义别名和布局引用验证。
-- `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiReferences.cs`：增加 `ResponsiveLayoutRefs`，描述系统栏、配置区、MainBody 三列、播放栏、抽屉遮罩和抽屉入口引用。
+- `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiReferences.cs`：增加 `ResponsiveLayoutRefs`，描述系统栏、配置区、MainBody 三列、播放栏、`DrawerEntryLayer`、抽屉遮罩和抽屉入口引用。
 - `UnderwaterGliderTwin/Assets/Scripts/UI/UiFactory.cs`：把运行时生成 UI 改为统一层级、布局组件、颜色和字体配置。
 - `UnderwaterGliderTwin/Assets/Scripts/UI/DataInputView.Layout.cs`：把高频参数与高级参数分离，限制滚动边界，复用现有配置抽屉，不创建第二套配置弹窗。
 - `UnderwaterGliderTwin/Assets/Scripts/UI/DashboardView.cs`：将遥测行和高级行改为布局组驱动，减少无效留白并支持内部滚动。
@@ -72,18 +78,25 @@
 **Interfaces:**
 - `ResponsiveUiLayoutPolicy.Resolve(float width, float height, RuntimeUiLayoutMode previousMode) -> RuntimeUiLayoutMode`
 - `ResponsiveUiLayoutPolicy.GetEffectiveCanvasScale(float width, float height, Vector2 referenceResolution, float match) -> float`
+- `ResponsiveUiTypography.GetActualPixelSize(int logicalSize, float effectiveScale) -> float`
 - `ResponsiveUiTypography.ForMode(RuntimeUiLayoutMode mode, float width, float height) -> ResponsiveUiTypographyProfile`
-- `ResponsiveUiTypographyProfile` 至少包含 `sectionTitleSize`、`labelSize`、`valueSize`、`buttonSize`、`auxiliarySize`、`showLowPriorityText`。
+- `ResponsiveUiTypographyProfile` 至少包含 `sectionTitleSize`、`labelSize`、`valueSize`、`buttonSize`、`auxiliarySize`、`minimumReadablePixelSize`、`showLowPriorityText`。
 
 - [ ] **Step 1: 写断点策略失败测试。**
 
 ```csharp
 [TestCase(1920f, 1080f, RuntimeUiLayoutMode.FullThreeColumn)]
+[TestCase(1616f, 900f, RuntimeUiLayoutMode.FullThreeColumn)]
+[TestCase(1584f, 900f, RuntimeUiLayoutMode.CompressedThreeColumn)]
 [TestCase(1600f, 900f, RuntimeUiLayoutMode.FullThreeColumn)]
 [TestCase(1366f, 768f, RuntimeUiLayoutMode.CompressedThreeColumn)]
 [TestCase(1280f, 720f, RuntimeUiLayoutMode.CompressedThreeColumn)]
 [TestCase(1279f, 720f, RuntimeUiLayoutMode.Drawer)]
 [TestCase(1024f, 640f, RuntimeUiLayoutMode.Drawer)]
+[TestCase(1280f, 623f, RuntimeUiLayoutMode.Drawer)]
+[TestCase(1280f, 624f, RuntimeUiLayoutMode.CompressedThreeColumn)]
+[TestCase(1280f, 655f, RuntimeUiLayoutMode.CompressedThreeColumn)]
+[TestCase(1280f, 656f, RuntimeUiLayoutMode.CompressedThreeColumn)]
 [TestCase(1000f, 620f, RuntimeUiLayoutMode.Drawer)]
 public void Resolve_UsesWindowDimensions(float width, float height, RuntimeUiLayoutMode expected)
 {
@@ -96,12 +109,16 @@ public void Resolve_UsesHysteresisAroundDrawerBoundary()
     Assert.That(ResponsiveUiLayoutPolicy.Resolve(1280f, 720f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.Drawer));
     Assert.That(ResponsiveUiLayoutPolicy.Resolve(1296f, 720f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
     Assert.That(ResponsiveUiLayoutPolicy.Resolve(1264f, 720f, RuntimeUiLayoutMode.CompressedThreeColumn), Is.EqualTo(RuntimeUiLayoutMode.Drawer));
+    Assert.That(ResponsiveUiLayoutPolicy.Resolve(1280f, 655f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.Drawer));
+    Assert.That(ResponsiveUiLayoutPolicy.Resolve(1280f, 656f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
+    Assert.That(ResponsiveUiLayoutPolicy.Resolve(1584f, 900f, RuntimeUiLayoutMode.FullThreeColumn), Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
+    Assert.That(ResponsiveUiLayoutPolicy.Resolve(1616f, 900f, RuntimeUiLayoutMode.CompressedThreeColumn), Is.EqualTo(RuntimeUiLayoutMode.FullThreeColumn));
 }
 ```
 
 - [ ] **Step 2: 运行新增 EditMode 测试确认它们失败。**
 
-Run: `.scripts	est-editmode.cmd`
+Run: `E:\upan\digital twin\scripts\test-editmode.cmd`
 
 Expected: 新增策略类型和方法尚未存在，测试失败；不修改已有测试结果。
 
@@ -115,10 +132,12 @@ Expected: 新增策略类型和方法尚未存在，测试失败；不修改已�
 [Test]
 public void Typography_DrawerModeKeepsReadableMinimums()
 {
+    const float effectiveScale = 0.533f;
     var profile = ResponsiveUiTypography.ForMode(RuntimeUiLayoutMode.Drawer, 1024f, 640f);
 
     Assert.That(profile.labelSize, Is.GreaterThanOrEqualTo(18));
-    Assert.That(profile.auxiliarySize, Is.GreaterThanOrEqualTo(16));
+    Assert.That(ResponsiveUiTypography.GetActualPixelSize(profile.labelSize, effectiveScale), Is.GreaterThanOrEqualTo(10f));
+    Assert.That(ResponsiveUiTypography.GetActualPixelSize(profile.buttonSize, effectiveScale), Is.GreaterThanOrEqualTo(10f));
     Assert.That(profile.showLowPriorityText, Is.False);
 }
 
@@ -129,17 +148,18 @@ public void Typography_DesktopShowsAllPriorityLevels()
 
     Assert.That(profile.labelSize, Is.GreaterThanOrEqualTo(16));
     Assert.That(profile.valueSize, Is.GreaterThanOrEqualTo(16));
+    Assert.That(profile.minimumReadablePixelSize, Is.EqualTo(10f));
     Assert.That(profile.showLowPriorityText, Is.True);
 }
 ```
 
 - [ ] **Step 5: 实现字体配置。**
 
-保持 CanvasScaler 参考分辨率不变，但不让标签继续使用 11–12 的逻辑字号。完整三栏使用标签 16、数值 16、标题 20；压缩三栏使用标签 16、数值 16、标题 18；抽屉模式使用标签 18、辅助文字 16、标题 20，并隐藏低优先级指标。`GetEffectiveCanvasScale` 只用于选择 profile，不改变布局断点。
+保持 CanvasScaler 参考分辨率不变，但不让标签继续使用 11–12 的逻辑字号。完整三栏使用标签 16、数值 16、标题 20；压缩三栏使用标签 16、数值 16、标题 18；抽屉模式使用标签 20、辅助文字 18、标题 20，并隐藏低优先级指标。`GetEffectiveCanvasScale` 使用 CanvasScaler 的有效缩放公式选择 profile，`GetActualPixelSize` 负责验证实际显示字号至少 10px；字体策略不改变布局断点。
 
 - [ ] **Step 6: 运行测试并提交。**
 
-Run: `.scripts\test-editmode.cmd`
+Run: `E:\upan\digital twin\scripts\test-editmode.cmd`
 
 Expected: 新增布局策略和字体测试通过，已有测试保持通过。
 
@@ -159,7 +179,7 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/UI/ResponsiveUiLayoutPolicy
 
 **Interfaces:**
 - `RuntimeUiRoot.DrawerLayer` 返回现有 `modalRoot`，不创建新对象。
-- `RuntimeUiReferences.layout` 类型为 `ResponsiveLayoutRefs`，包含 `systemBar`、`configurationArea`、`mainBody`、`telemetryColumn`、`viewportColumn`、`statusColumn`、`playbackBar`、`drawerScrim`、`telemetryDrawerToggle`、`statusDrawerToggle`。
+- `RuntimeUiReferences.layout` 类型为 `ResponsiveLayoutRefs`，包含 `systemBar`、`configurationArea`、`mainBody`、`telemetryColumn`、`viewportColumn`、`statusColumn`、`playbackBar`、`drawerEntryLayer`、`drawerScrim`、`telemetryDrawerToggle`、`statusDrawerToggle`。
 - `EditableUiSceneBuilder` 必须保持 `BuildMainScene` 幂等，重复执行不能生成第二个 `RuntimeUiRoot`、`RuntimeCanvas` 或 `ModalRoot`。
 
 - [ ] **Step 1: 为 ModalRoot 归属写回归测试。**
@@ -171,12 +191,14 @@ Assert.That(runtimeRoot.ModalRoot.name, Is.EqualTo("ModalRoot"));
 Assert.That(runtimeRoot.DrawerLayer, Is.SameAs(runtimeRoot.ModalRoot));
 Assert.That(FindSceneObject(scene, "OceanCurrentDrawer").transform.parent.name, Is.EqualTo("ModalRoot"));
 Assert.That(FindSceneObject(scene, "FlightLegDrawer").transform.parent.name, Is.EqualTo("ModalRoot"));
+Assert.That(FindSceneObject(scene, "TelemetryDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
+Assert.That(FindSceneObject(scene, "StatusDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
 Assert.That(FindSceneObjects(scene, "DrawerLayer").Count, Is.EqualTo(0));
 ```
 
 - [ ] **Step 2: 运行回归测试确认新引用尚未实现。**
 
-Run: `.scripts\test-editmode.cmd`
+Run: `E:\upan\digital twin\scripts\test-editmode.cmd`
 
 Expected: 新增属性或布局引用缺失导致新增断言失败。
 
@@ -188,7 +210,7 @@ Expected: 新增属性或布局引用缺失导致新增断言失败。
 
 - [ ] **Step 4: 更新 EditableUiSceneBuilder。**
 
-调整 `BuildMainScene`、`AssignMainReferences`、`AssignUiGroup`、`EnsurePanelPrefabInstance` 和 `EnsureModalPrefabInstance`：在 `RuntimeCanvas` 下创建 `UiRoot/SystemBar/ConfigurationArea/MainBody/TelemetryColumn/ViewportColumn/StatusColumn/PlaybackBar`，在 `ModalRoot` 下创建 `DrawerScrim` 和现有两个 Drawer Prefab 实例；把新的 `ResponsiveUiLayoutController` 挂到 `UiRoot`。
+调整 `BuildMainScene`、`AssignMainReferences`、`AssignUiGroup`、`EnsurePanelPrefabInstance` 和 `EnsureModalPrefabInstance`：在 `RuntimeCanvas` 下创建 `UiRoot/SystemBar/ConfigurationArea/MainBody/TelemetryColumn/ViewportColumn/StatusColumn/PlaybackBar/DrawerEntryLayer`，并让 `ModalRoot` 作为 `RuntimeCanvas` 的唯一抽屉容器；在 `ModalRoot` 下创建 `DrawerScrim` 和现有两个 Drawer Prefab 实例；把新的 `ResponsiveUiLayoutController` 挂到 `UiRoot`。`TelemetryDrawerToggle` 和 `StatusDrawerToggle` 必须位于 `DrawerEntryLayer`，不能位于会被隐藏的左右栏。
 
 - [ ] **Step 5: 写入 Main.unity 并验证幂等。**
 
@@ -196,7 +218,7 @@ Expected: 新增属性或布局引用缺失导致新增断言失败。
 
 - [ ] **Step 6: 运行 EditMode/PlayMode 回归并提交。**
 
-Run: `.scripts\test-editmode.cmd`；随后在 Unity Test Runner 运行 `EditableUiPlayModeTests` 与 `ResponsiveUiLayoutPlayModeTests`。
+Run: `E:\upan\digital twin\scripts\test-editmode.cmd`；随后在 Unity Test Runner 运行 `EditableUiPlayModeTests` 与 `ResponsiveUiLayoutPlayModeTests`。
 
 Expected: 场景只有一个 `RuntimeUiRoot`、一个 Canvas、一个 EventSystem 和一个 `ModalRoot`。
 
@@ -228,7 +250,7 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiRoot.cs Underwa
 
 - [ ] **Step 2: 运行测试确认当前颜色断言不满足。**
 
-Run: `.scripts\test-editmode.cmd`
+Run: `E:\upan\digital twin\scripts\test-editmode.cmd`
 
 Expected: 当前 `CommandPanelEdge`、`CommandAccent` 和工作区中高饱和 Prefab 覆盖值导致新增视觉断言失败。
 
@@ -244,6 +266,10 @@ Expected: 当前 `CommandPanelEdge`、`CommandAccent` 和工作区中高饱和 P
 
 为 `DashboardPanel`、`StatusPanel`、`DataInputPanel`、`PlaybackControlsPanel`、`OceanCommandToolbar` 和两个 Drawer 设置深色面板、统一边线、内部间距、最小高度、滚动视口和文本溢出规则。删除四个当前工作区 Prefab 中的大面积青色/黄色覆盖色，但保留功能组件和事件引用。
 
+- [ ] **Step 5b: 验证 Prefab 覆盖保护。**
+
+在修改前读取现有 Prefab 与场景实例的序列化覆盖，修改后确认用户已有颜色、位置、字体、事件引用和实例覆盖仍在。`EditableUiSceneBuilder` 只补齐缺失节点；不得调用整体重置或静默删除同名非 Prefab 对象。恢复默认样式只能由显式 `ResetMainUiDefaults` 操作触发，并为“不覆盖”和“拒绝非 Prefab 同名对象”保留回归测试。
+
 - [ ] **Step 6: 在四组尺寸下做一次人工布局检查并提交。**
 
 运行生成式 UI 和可编辑场景 UI，检查 1920×1080、1366×768、1280×720、1024×640 下没有新遮挡；截图保存到 `TestResults/ui-plan-task3-*.png`。
@@ -256,6 +282,7 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/UI/UiFactory.cs UnderwaterG
 
 **Files:**
 - Create: `UnderwaterGliderTwin/Assets/Scripts/UI/ResponsiveUiLayoutController.cs`
+- Create: `UnderwaterGliderTwin/Assets/Tests/PlayMode/GeneratedRuntimeUiPlayModeTests.cs`
 - Modify: `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiRoot.cs`
 - Modify: `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiReferences.cs`
 - Modify: `UnderwaterGliderTwin/Assets/Scripts/UI/DataInputView.Layout.cs`
@@ -274,6 +301,12 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/UI/UiFactory.cs UnderwaterG
 
 验证 `RefreshForScreen(1366,768)` 保持三栏，`RefreshForScreen(1279,720)` 进入抽屉模式；从 1280 到 1279 只切换一次；从抽屉模式恢复到 1296 后进入压缩三栏；同侧抽屉打开时另一个抽屉关闭。
 
+- [ ] **Step 1b: 增加生成式 UI 结构测试。**
+
+在 `GeneratedRuntimeUiPlayModeTests` 中将 `TwinBootstrap` 置于生成式 UI 路径，等待运行时初始化后断言存在 `UiRoot`、`SystemBar`、`ConfigurationArea`、`MainBody`、`ViewportColumn`、`PlaybackBar` 和唯一 `ModalRoot`；再用 `allowRuntimeFallback = false` 验证 fallback 不会绕过配置直接运行。
+
+重复调用 `RefreshForScreen` 相同尺寸时，断言不会重复创建入口、遮罩或抽屉对象。
+
 - [ ] **Step 2: 实现区域模式切换。**
 
 控制器从 `RuntimeUiReferences.layout` 取得区域引用，设置三栏的 `GameObject.activeSelf`、入口按钮和 `LayoutElement`；不读取布局后宽度作为断点。窗口变化由 `OnRectTransformDimensionsChange` 或显式 `RefreshForScreen` 触发，但每次只根据 Canvas 尺寸计算一次目标模式。
@@ -286,13 +319,17 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/UI/UiFactory.cs UnderwaterG
 
 在 `DataInputView.Layout.cs` 中保留 `bottomDrawerContent`、`bottomDrawerViewport` 和 `bottomDrawerScrollRect`，将高频字段移动到固定可见区域，把动态参数放进单一 ScrollRect；不要把该区域再注册成 `ModalRoot` 子对象。
 
+- [ ] **Step 4b: 验证关闭动画后的最终状态。**
+
+将 `animationsEnabled` 设为 `false`，打开和关闭侧栏后立即断言最终位置、透明度、`blocksRaycasts`、`interactable` 和键盘焦点与启用动画完成后的状态一致。
+
 - [ ] **Step 5: 在 TwinBootstrap 两条 UI 路径初始化控制器。**
 
 当 `useGeneratedRuntimeUi` 为真时，`UiFactory` 生成完 `RuntimeCanvas` 后创建/绑定控制器；当使用序列化 `RuntimeUiRoot` 时，在 `ValidateConfiguredRuntimeUi` 通过后绑定同一控制器。两条路径均不能创建第二个 Canvas 或第二个 ModalRoot。
 
 - [ ] **Step 6: 运行测试并提交。**
 
-Run: `.scripts\test-editmode.cmd`；Unity Test Runner 运行 `ResponsiveUiLayoutPlayModeTests`。
+Run: `E:\upan\digital twin\scripts\test-editmode.cmd`；Unity Test Runner 运行 `ResponsiveUiLayoutPlayModeTests`。
 
 Expected: 断点不会震荡，抽屉只在主动打开时覆盖中央区域，关闭后焦点回到入口。
 
@@ -342,7 +379,7 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/UI/ResponsiveUiLayoutContro
 
 - [ ] **Step 6: 运行业务回归并提交。**
 
-Run: `.scripts\test-editmode.cmd`；Unity Test Runner 运行 `EditableUiPlayModeTests` 和 `ResponsiveUiLayoutPlayModeTests`。
+Run: `E:\upan\digital twin\scripts\test-editmode.cmd`；Unity Test Runner 运行 `EditableUiPlayModeTests` 和 `ResponsiveUiLayoutPlayModeTests`。
 
 Expected: CSV、仿真、预测、海流配置、播放、图层、相机和退出动作保持原行为，且不存在重复相机控制入口。
 
@@ -363,7 +400,7 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/UI/DashboardView.cs Underwa
 
 - [ ] **Step 1: 增加尺寸矩阵 PlayMode 测试。**
 
-对四组尺寸分别调用 `Screen.SetResolution` 或现有 screenshot capture 的分辨率参数，等待一帧布局稳定后断言当前模式、中央视图最小宽度约束、抽屉可打开、根 Canvas/ModalRoot 数量和滚动节点层级。
+对四组尺寸分别在实际 Windows Player 中执行 screenshot capture，等待一帧布局稳定后断言当前模式、中央视图最小宽度约束、抽屉可打开、根 Canvas/ModalRoot 数量和滚动节点层级。`Screen.SetResolution` 只作为 PlayMode 快速回归工具，不作为最终视觉验收依据。
 
 - [ ] **Step 2: 检查实际文字可读性。**
 
@@ -375,7 +412,7 @@ Commit: `git add UnderwaterGliderTwin/Assets/Scripts/UI/DashboardView.cs Underwa
 
 - [ ] **Step 4: 运行完整 EditMode 和 PlayMode 回归。**
 
-Run: `.scripts\test-editmode.cmd`
+Run: `E:\upan\digital twin\scripts\test-editmode.cmd`
 
 Run: Unity Test Runner PlayMode，至少执行 `EditableUiPlayModeTests`、`ResponsiveUiLayoutPlayModeTests` 和现有 PlayMode 测试。
 
@@ -383,7 +420,7 @@ Expected: EditMode 全部通过；PlayMode 无 UI 根重复、抽屉父级错误
 
 - [ ] **Step 5: 生成 Windows 构建并检查启动日志。**
 
-Run: `.scripts\build-windows.cmd`
+Run: `E:\upan\digital twin\scripts\build-windows.cmd`
 
 Expected: `TestResults/WindowsBuild.log` 包含 `Build Finished, Result: Success`，启动后使用与四组尺寸对应的截图参数完成视觉检查。
 
