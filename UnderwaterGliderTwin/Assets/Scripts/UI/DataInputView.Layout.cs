@@ -16,6 +16,7 @@ namespace UnderwaterGliderTwin.UI
         private bool bottomDrawerExpandedBeforeFlightLeg;
         private const float ExpandedTaskDrawerHeight = 320f;
         private const float TaskParameterFieldWidth = 280f;
+        private const float DrawerScrollSensitivity = 45f;
 
         private void ConfigureResponsiveBottomDrawer(RectTransform drawer)
         {
@@ -58,6 +59,7 @@ namespace UnderwaterGliderTwin.UI
             bottomDrawerScrollRect.horizontal = false;
             bottomDrawerScrollRect.vertical = true;
             bottomDrawerScrollRect.movementType = ScrollRect.MovementType.Clamped;
+            bottomDrawerScrollRect.scrollSensitivity = DrawerScrollSensitivity;
 
             var missionSection = CreateSectionCard("MissionSectionCard", "任务与预测", bottomDrawerContent);
             var simulationSection = CreateSectionCard("SimulationSectionCard", "仿真参数", bottomDrawerContent);
@@ -568,6 +570,7 @@ namespace UnderwaterGliderTwin.UI
             scroll.horizontal = false;
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = DrawerScrollSensitivity;
             Canvas.ForceUpdateCanvases();
         }
 
@@ -660,6 +663,7 @@ namespace UnderwaterGliderTwin.UI
             scroll.horizontal = false;
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = DrawerScrollSensitivity;
         }
 
         private sealed class DrawerHeightLimiter : MonoBehaviour
