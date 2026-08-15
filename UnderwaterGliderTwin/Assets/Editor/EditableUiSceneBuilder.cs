@@ -161,6 +161,9 @@ namespace UnderwaterGliderTwin.Editor
                 ConfigureRect(modalRoot.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             }
 
+            EnsureModalPrefabInstance(scene, modalRoot.transform, "OceanCurrentDrawer");
+            EnsureModalPrefabInstance(scene, modalRoot.transform, "FlightLegDrawer");
+
             EnsureEventSystem(scene);
             AssignMainReferences(runtimeRoot, canvas, modalRoot.GetComponent<RectTransform>(), rootWasCreated);
             EditorSceneManager.MarkSceneDirty(scene);
@@ -205,6 +208,10 @@ namespace UnderwaterGliderTwin.Editor
             var serialized = new SerializedObject(runtimeRoot);
             serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
             serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
+            var oceanDrawer = modalRoot != null ? modalRoot.Find("OceanCurrentDrawer") : null;
+            var flightLegDrawer = modalRoot != null ? modalRoot.Find("FlightLegDrawer") : null;
+            serialized.FindProperty("references.dataInput.ocean.oceanCurrentDrawer").objectReferenceValue = oceanDrawer as RectTransform;
+            serialized.FindProperty("references.dataInput.flightLeg.drawer").objectReferenceValue = flightLegDrawer as RectTransform;
             if (rootWasCreated)
             {
                 serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.None;
@@ -273,6 +280,38 @@ namespace UnderwaterGliderTwin.Editor
             ConfigureNewPanelLayout(instance.transform as RectTransform, panelName);
         }
 
+        private static void EnsureModalPrefabInstance(Scene scene, Transform modalRoot, string drawerName)
+        {
+            var prefabPath = PrefabFolderPath + "/" + drawerName + ".prefab";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null)
+            {
+                prefab = CreateModalPrefab(prefabPath, drawerName);
+            }
+
+            var existing = FindDirectChild(modalRoot, drawerName);
+            if (existing != null)
+            {
+                if (PrefabUtility.GetPrefabInstanceStatus(existing) != PrefabInstanceStatus.Connected)
+                {
+                    throw new InvalidOperationException("Main UI contains a same-name non-Prefab modal: " + GetTransformPath(existing.transform));
+                }
+
+                return;
+            }
+
+            var instance = PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+            if (instance == null)
+            {
+                throw new InvalidOperationException("Could not instantiate UI modal Prefab: " + prefabPath);
+            }
+
+            SceneManager.MoveGameObjectToScene(instance, scene);
+            instance.transform.SetParent(modalRoot, false);
+            ConfigureModalLayout(instance.transform as RectTransform, drawerName);
+            instance.SetActive(false);
+        }
+
         private static GameObject CreatePanelPrefab(string prefabPath, string panelName)
         {
             var temporary = new GameObject(panelName, typeof(RectTransform), typeof(Image));
@@ -283,6 +322,35 @@ namespace UnderwaterGliderTwin.Editor
             var prefab = PrefabUtility.SaveAsPrefabAsset(temporary, prefabPath);
             UnityEngine.Object.DestroyImmediate(temporary);
             return prefab;
+        }
+
+        private static GameObject CreateModalPrefab(string prefabPath, string drawerName)
+        {
+            var temporary = new GameObject(drawerName, typeof(RectTransform), typeof(Image));
+            var image = temporary.GetComponent<Image>();
+            image.color = drawerName == "FlightLegDrawer"
+                ? new Color(0.015f, 0.075f, 0.1f, 0.98f)
+                : new Color(0.015f, 0.075f, 0.1f, 0.98f);
+            var prefab = PrefabUtility.SaveAsPrefabAsset(temporary, prefabPath);
+            UnityEngine.Object.DestroyImmediate(temporary);
+            return prefab;
+        }
+
+        private static void ConfigureModalLayout(RectTransform rect, string drawerName)
+        {
+            if (rect == null)
+            {
+                return;
+            }
+
+            if (drawerName == "FlightLegDrawer")
+            {
+                ConfigureRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(660f, 350f));
+            }
+            else
+            {
+                ConfigureRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760f, 600f));
+            }
         }
 
         private static void EnsurePrefabFolder()

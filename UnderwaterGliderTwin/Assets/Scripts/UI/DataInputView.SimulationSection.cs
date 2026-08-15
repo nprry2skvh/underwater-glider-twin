@@ -76,6 +76,16 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            if (descentNetBuoyancyInput == null
+                || descentPitchInput == null
+                || descentRollInput == null
+                || ascentNetBuoyancyInput == null
+                || ascentPitchInput == null
+                || ascentRollInput == null)
+            {
+                return;
+            }
+
             var profile = simulationProfileTemplate ?? SimulationProfile.Default;
             refreshingFlightLegInputs = true;
             var maxBuoyancy = Mathf.Max(0.1f, profile.Dynamics?.MaxBuoyancyForceN ?? GliderDynamicsProfile.Default.MaxBuoyancyForceN);

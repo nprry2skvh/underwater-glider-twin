@@ -290,6 +290,16 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            if (oceanCurrentDrawerMinDepthInput == null
+                || oceanCurrentDrawerMaxDepthInput == null
+                || oceanCurrentDrawerEastwardInput == null
+                || oceanCurrentDrawerNorthwardInput == null
+                || oceanCurrentPrefetchHalfWidthInput == null
+                || oceanCurrentForecastWindowInput == null)
+            {
+                return;
+            }
+
             var layers = GetOceanCurrentProfile().Layers;
             if (selectedOceanCurrentLayerIndex >= 0 && selectedOceanCurrentLayerIndex < layers.Count)
             {
@@ -311,9 +321,12 @@ namespace UnderwaterGliderTwin.UI
                     : $"网格：未加载 | ±{profile.OceanCurrentPrefetchHalfWidthKm:0.#} km | {profile.OceanCurrentForecastWindowHours:0.#} h";
             }
 
-            oceanCurrentDrawerSummary.text = selectedOceanCurrentLayerIndex >= 0
-                ? $"当前层：{selectedOceanCurrentLayerIndex + 1}/{layers.Count}  {FormatOceanCurrentCoverage(layers)}"
-                : "当前层：0";
+            if (oceanCurrentDrawerSummary != null)
+            {
+                oceanCurrentDrawerSummary.text = selectedOceanCurrentLayerIndex >= 0
+                    ? $"当前层：{selectedOceanCurrentLayerIndex + 1}/{layers.Count}  {FormatOceanCurrentCoverage(layers)}"
+                    : "当前层：0";
+            }
             RefreshOceanCurrentQualitySummary();
             RefreshDynamicsEditor();
         }

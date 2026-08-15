@@ -156,6 +156,33 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void DataInputView_BoundModalDoesNotCreateAdditionalCanvas()
+        {
+            var canvasObject = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas));
+            var modalRoot = new GameObject("ModalRoot", typeof(RectTransform));
+            modalRoot.transform.SetParent(canvasObject.transform, false);
+            var drawer = new GameObject("OceanCurrentDrawer", typeof(RectTransform));
+            drawer.transform.SetParent(modalRoot.transform, false);
+            drawer.SetActive(false);
+            var panel = new GameObject("DataInputPanel", typeof(RectTransform));
+            panel.transform.SetParent(canvasObject.transform, false);
+            var toggle = new GameObject("OceanCurrentDrawerButton", typeof(RectTransform), typeof(Button)).GetComponent<Button>();
+            toggle.transform.SetParent(panel.transform, false);
+            var refs = new DataInputPanelRefs();
+            refs.ocean.oceanCurrentDrawer = drawer.GetComponent<RectTransform>();
+            refs.ocean.drawerButton = toggle;
+            var view = panel.AddComponent<DataInputView>();
+            var canvasCountBefore = Object.FindObjectsOfType<Canvas>(true).Length;
+
+            view.Bind(refs, string.Empty, SimulationProfile.Default, null);
+            toggle.onClick.Invoke();
+
+            Assert.That(drawer.activeSelf, Is.True);
+            Assert.That(Object.FindObjectsOfType<Canvas>(true).Length, Is.EqualTo(canvasCountBefore));
+            Assert.That(drawer.transform.parent, Is.EqualTo(modalRoot.transform));
+        }
+
+        [Test]
         public void OceanCurrentLayerRowView_BindWithMissingRefsDoesNotThrow()
         {
             var row = new GameObject("OceanCurrentLayerRow").AddComponent<OceanCurrentLayerRowView>();

@@ -397,6 +397,8 @@ namespace UnderwaterGliderTwin.Tests
                 Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("DataInputPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
                 Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("PlaybackControlsPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
                 Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("OceanCommandToolbar")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+                Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(FindSceneObjectIncludingInactive("OceanCurrentDrawer")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+                Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(FindSceneObjectIncludingInactive("FlightLegDrawer")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
             }
             finally
             {
@@ -420,6 +422,8 @@ namespace UnderwaterGliderTwin.Tests
                 AssertPanelUnderCanvasWithSource("DataInputPanel", runtimeCanvas, "Assets/UI/Prefabs/DataInputPanel.prefab");
                 AssertPanelUnderCanvasWithSource("PlaybackControlsPanel", runtimeCanvas, "Assets/UI/Prefabs/PlaybackControlsPanel.prefab");
                 AssertPanelUnderCanvasWithSource("OceanCommandToolbar", runtimeCanvas, "Assets/UI/Prefabs/OceanCommandToolbar.prefab");
+                Assert.That(FindSceneObjectIncludingInactive("OceanCurrentDrawer").transform.parent.name, Is.EqualTo("ModalRoot"));
+                Assert.That(FindSceneObjectIncludingInactive("FlightLegDrawer").transform.parent.name, Is.EqualTo("ModalRoot"));
             }
             finally
             {
@@ -518,6 +522,19 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(panel.transform.parent, Is.EqualTo(runtimeCanvas));
             var source = UnityEditor.PrefabUtility.GetCorrespondingObjectFromSource(panel);
             Assert.That(UnityEditor.AssetDatabase.GetAssetPath(source), Is.EqualTo(expectedPrefabPath));
+        }
+
+        private static GameObject FindSceneObjectIncludingInactive(string objectName)
+        {
+            foreach (var transform in Object.FindObjectsOfType<Transform>(true))
+            {
+                if (transform.name == objectName)
+                {
+                    return transform.gameObject;
+                }
+            }
+
+            return null;
         }
 
         private static void RestorePreviousScene(string previous)
