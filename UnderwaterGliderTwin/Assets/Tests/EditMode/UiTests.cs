@@ -879,6 +879,45 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void BoundTaskParameterPanelBuildsScrollableDrawerFromPrefabPanel()
+        {
+            var panel = new GameObject("DataInputPanel", typeof(RectTransform));
+            var csvInput = CreateInput(panel.transform, "CsvPathInput");
+            var loadButton = new GameObject("LoadCsvButton", typeof(RectTransform), typeof(Button)).GetComponent<Button>();
+            loadButton.transform.SetParent(panel.transform, false);
+            var refs = new DataInputPanelRefs
+            {
+                panel = panel.GetComponent<RectTransform>()
+            };
+            refs.mission.csvPathInput = csvInput;
+            refs.mission.loadCsvButton = loadButton;
+            var view = panel.AddComponent<DataInputView>();
+
+            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            var scroll = panel.GetComponent<ScrollRect>();
+            Assert.That(scroll, Is.Not.Null);
+            Assert.That(scroll.viewport, Is.Not.Null);
+            Assert.That(scroll.content, Is.Not.Null);
+            Assert.That(scroll.content.name, Is.EqualTo("MissionConfigurationContent"));
+            Assert.That(csvInput.transform.IsChildOf(scroll.content), Is.True);
+            Assert.That(scroll.scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
+
+            scroll.viewport.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 120f);
+            scroll.content.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 600f);
+            scroll.verticalNormalizedPosition = 1f;
+            var eventSystem = Object.FindObjectOfType<EventSystem>() ?? new GameObject("EventSystem", typeof(EventSystem)).GetComponent<EventSystem>();
+            var eventData = new PointerEventData(eventSystem)
+            {
+                scrollDelta = new Vector2(0f, -1f)
+            };
+
+            ExecuteEvents.ExecuteHierarchy(csvInput.gameObject, eventData, ExecuteEvents.scrollHandler);
+
+            Assert.That(scroll.verticalNormalizedPosition, Is.LessThan(1f));
+        }
+
+        [Test]
         public void MissionConfigurationStatusDoesNotOverlapOceanConfigurationButton()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();

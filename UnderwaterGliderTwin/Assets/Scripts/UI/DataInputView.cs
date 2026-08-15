@@ -243,7 +243,7 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            configurationPanel = refs.configurationPanel;
+            configurationPanel = refs.panel != null ? refs.panel : refs.configurationPanel;
             dynamicRowsRoot = refs.ocean.dynamicRowsRoot;
             oceanLayerRowTemplate = refs.ocean.oceanLayerRowTemplate;
             oceanCurrentDrawerLookupButton = refs.ocean.drawerLookupButton;
@@ -307,6 +307,7 @@ namespace UnderwaterGliderTwin.UI
             dynamicsRollDeadbandInput = refs.dynamics.rollDeadbandInput;
             dynamicsRollRestoringGainInput = refs.dynamics.rollRestoringGainInput;
             dynamicsMaxRollMomentInput = refs.dynamics.maxRollMomentInput;
+            ConfigureResponsiveBottomDrawer(configurationPanel);
             ConfigureBoundParameterDrawerScrolling();
 
             if (csvPathInput != null)
