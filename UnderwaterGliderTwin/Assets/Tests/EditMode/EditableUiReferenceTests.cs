@@ -185,6 +185,30 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void RuntimeUiRoot_ValidatesOceanLayerRowTemplateProvider()
+        {
+            var rootObject = scope.CreateRoot("RuntimeUiRoot");
+            var canvas = new GameObject("RuntimeCanvas", typeof(Canvas)).GetComponent<Canvas>();
+            canvas.transform.SetParent(rootObject.transform, false);
+            var modalRoot = new GameObject("ModalRoot").AddComponent<RectTransform>();
+            modalRoot.transform.SetParent(canvas.transform, false);
+            var template = new GameObject("OceanCurrentLayerRowTemplate", typeof(RectTransform));
+            template.transform.SetParent(canvas.transform, false);
+            template.AddComponent<OceanCurrentLayerRowView>();
+            var root = AddRuntimeUiRoot(rootObject);
+            var serialized = new UnityEditor.SerializedObject(root);
+            serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
+            serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
+            serialized.FindProperty("references.dataInput.ocean.oceanLayerRowTemplate").objectReferenceValue = template.GetComponent<RectTransform>();
+            ApplySerialized(serialized);
+
+            var issues = root.ValidateReferences(RuntimeUiValidationProfile.Strict);
+
+            Assert.That(issues, Has.Some.Property("FieldName").EqualTo("titleText"));
+            Assert.That(issues, Has.Some.Property("FieldName").EqualTo("editButton"));
+        }
+
+        [Test]
         public void UiFactory_RejectsRuntimeCanvasCreationWhenFallbackDisabled()
         {
             RuntimeUiFallback.AllowRuntimeFallback = false;

@@ -111,6 +111,90 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void DataInputView_BindsExistingCsvInputAndLoadButton()
+        {
+            var panel = new GameObject("DataInputPanel", typeof(RectTransform));
+            var input = CreateInput(panel.transform, "CsvPathInput");
+            var reload = new GameObject("LoadCsvButton", typeof(RectTransform), typeof(Button)).GetComponent<Button>();
+            reload.transform.SetParent(panel.transform, false);
+            var refs = new DataInputPanelRefs
+            {
+                panel = panel.GetComponent<RectTransform>()
+            };
+            refs.mission.csvPathInput = input;
+            refs.mission.loadCsvButton = reload;
+            var requestedPath = string.Empty;
+            var view = new GameObject("DataInput").AddComponent<DataInputView>();
+            var csvPath = CreateTempCsv();
+
+            view.Bind(refs, csvPath, SimulationProfile.Default, null, path => requestedPath = path, _ => { }, null);
+            reload.onClick.Invoke();
+
+            Assert.That(input.text, Is.EqualTo(csvPath));
+            Assert.That(requestedPath, Is.EqualTo(csvPath));
+        }
+
+        [Test]
+        public void DataInputView_ClearDynamicRuntimeUiPreservesOceanLayerRowTemplate()
+        {
+            var rowsRoot = new GameObject("DynamicRowsRoot", typeof(RectTransform)).GetComponent<RectTransform>();
+            var template = new GameObject("RowTemplate", typeof(RectTransform)).GetComponent<RectTransform>();
+            template.SetParent(rowsRoot, false);
+            var dynamicRow = new GameObject("DynamicRow", typeof(RectTransform)).GetComponent<RectTransform>();
+            dynamicRow.SetParent(rowsRoot, false);
+            var refs = new DataInputPanelRefs();
+            refs.ocean.dynamicRowsRoot = rowsRoot;
+            refs.ocean.oceanLayerRowTemplate = template;
+            var view = new GameObject("DataInput").AddComponent<DataInputView>();
+
+            view.BindDynamicContainersForTests(refs);
+            view.ClearDynamicRuntimeUi();
+
+            Assert.That(template, Is.Not.Null);
+            Assert.That(template.gameObject, Is.Not.Null);
+            Assert.That(dynamicRow == null, Is.True);
+        }
+
+        [Test]
+        public void OceanCurrentLayerRowView_BindWithMissingRefsDoesNotThrow()
+        {
+            var row = new GameObject("OceanCurrentLayerRow").AddComponent<OceanCurrentLayerRowView>();
+
+            LogAssert.Expect(LogType.Error, "OceanCurrentLayerRow.prefab: OceanCurrentLayerRow -> titleText: Required UI reference is missing.");
+            LogAssert.Expect(LogType.Error, "OceanCurrentLayerRow.prefab: OceanCurrentLayerRow -> depthRangeText: Required UI reference is missing.");
+            LogAssert.Expect(LogType.Error, "OceanCurrentLayerRow.prefab: OceanCurrentLayerRow -> velocityText: Required UI reference is missing.");
+            LogAssert.Expect(LogType.Error, "OceanCurrentLayerRow.prefab: OceanCurrentLayerRow -> editButton: Required UI reference is missing.");
+            LogAssert.Expect(LogType.Error, "OceanCurrentLayerRow.prefab: OceanCurrentLayerRow -> removeButton: Required UI reference is missing.");
+            Assert.DoesNotThrow(() => row.Bind(0, new OceanCurrentLayer(0f, 25f, 0.10f, 0.20f), null, null));
+        }
+
+        [Test]
+        public void OceanCurrentLayerRowView_BindWithNullCallbacksDoesNotThrowOnClick()
+        {
+            var rowObject = new GameObject("OceanCurrentLayerRow");
+            var row = rowObject.AddComponent<OceanCurrentLayerRowView>();
+            var title = CreateText(rowObject.transform, "TitleText");
+            var depth = CreateText(rowObject.transform, "DepthRangeText");
+            var velocity = CreateText(rowObject.transform, "VelocityText");
+            var edit = new GameObject("EditButton", typeof(RectTransform), typeof(Button)).GetComponent<Button>();
+            edit.transform.SetParent(rowObject.transform, false);
+            var remove = new GameObject("RemoveButton", typeof(RectTransform), typeof(Button)).GetComponent<Button>();
+            remove.transform.SetParent(rowObject.transform, false);
+            var serialized = new UnityEditor.SerializedObject(row);
+            serialized.FindProperty("titleText").objectReferenceValue = title;
+            serialized.FindProperty("depthRangeText").objectReferenceValue = depth;
+            serialized.FindProperty("velocityText").objectReferenceValue = velocity;
+            serialized.FindProperty("editButton").objectReferenceValue = edit;
+            serialized.FindProperty("removeButton").objectReferenceValue = remove;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            row.Bind(0, new OceanCurrentLayer(0f, 25f, 0.10f, 0.20f), null, null);
+
+            Assert.DoesNotThrow(() => edit.onClick.Invoke());
+            Assert.DoesNotThrow(() => remove.onClick.Invoke());
+        }
+
+        [Test]
         public void OceanCommandToolbarView_BindsExistingCommandReferences()
         {
             var visibleCount = new GameObject("VisibleArrowCount", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
@@ -1675,6 +1759,15 @@ namespace UnderwaterGliderTwin.Tests
             var textObject = new GameObject(name, typeof(RectTransform), typeof(Text));
             textObject.transform.SetParent(parent, false);
             return textObject.GetComponent<Text>();
+        }
+
+        private static InputField CreateInput(Transform parent, string name)
+        {
+            var inputObject = new GameObject(name, typeof(RectTransform), typeof(InputField));
+            inputObject.transform.SetParent(parent, false);
+            var input = inputObject.GetComponent<InputField>();
+            input.textComponent = CreateText(inputObject.transform, "Text");
+            return input;
         }
 
         private static PlaybackController CreatePlayback(IReadOnlyList<TelemetryFrame> frames)

@@ -89,6 +89,7 @@ namespace UnderwaterGliderTwin.UI
         private SimulationRuntimeSession subscribedRuntimeSession;
         private RectTransform configurationPanel;
         private RectTransform dynamicRowsRoot;
+        private RectTransform oceanLayerRowTemplate;
         private Canvas legacyCanvas;
 
         public void Initialize(
@@ -216,6 +217,152 @@ namespace UnderwaterGliderTwin.UI
             ConfigureOceanCurrentModalDrawer(oceanCurrentDrawer);
             ConfigureInlineDrawer(flightLegDrawer);
             AttachRuntimeSession(SimulationRuntimeRegistry.Active);
+        }
+
+        public void Bind(
+            DataInputPanelRefs refs,
+            string currentCsvPath,
+            SimulationProfile currentProfile,
+            PredictionController controller,
+            Action<string> onLoadRequested = null,
+            Action<SimulationProfile> onSimulationRequested = null,
+            Action<SimulationProfile> onOceanCurrentSettingsApplied = null)
+        {
+            loadRequested = onLoadRequested;
+            simulationRequested = onSimulationRequested;
+            oceanCurrentSettingsApplied = onOceanCurrentSettingsApplied;
+            predictionController = controller;
+            simulationProfileTemplate = (currentProfile ?? SimulationProfile.Default).Clone();
+            flightLegSettingsEdited = HasExplicitFlightLegSettings(simulationProfileTemplate);
+            selectedOceanCurrentLayerIndex = simulationProfileTemplate.OceanCurrentProfile?.Layers.Count > 0 ? 0 : -1;
+            EnsureRuntimeModelAvailable();
+            if (refs == null)
+            {
+                ClearDynamicRuntimeUi();
+                return;
+            }
+
+            configurationPanel = refs.configurationPanel;
+            dynamicRowsRoot = refs.ocean.dynamicRowsRoot;
+            oceanLayerRowTemplate = refs.ocean.oceanLayerRowTemplate;
+            oceanCurrentDrawerLookupButton = refs.ocean.drawerLookupButton;
+            csvPathInput = refs.mission.csvPathInput;
+            statusText = refs.statusText;
+            missionLongitudeInput = refs.mission.missionLongitudeInput;
+            missionLatitudeInput = refs.mission.missionLatitudeInput;
+            predictionHorizonInput = refs.prediction.predictionHorizonInput;
+            predictionToggleButton = refs.prediction.predictionToggleButton;
+            simulationCyclesInput = refs.simulation.cyclesInput;
+            simulationDurationInput = refs.simulation.durationInput;
+            simulationDepthInput = refs.simulation.targetDepthInput;
+            simulationWaterColumnInput = refs.simulation.waterColumnDepthInput;
+            referenceCycleDurationValue = refs.simulation.referenceCycleDurationValue;
+            simulationHeadingInput = refs.simulation.headingInput;
+            simulationHeadingDeltaInput = refs.simulation.headingDeltaInput;
+            simulationPitchInput = refs.simulation.pitchInput;
+            simulationRollInput = refs.simulation.rollInput;
+            oceanCurrentMinDepthInput = refs.ocean.minDepthInput;
+            oceanCurrentMaxDepthInput = refs.ocean.maxDepthInput;
+            oceanCurrentEastwardInput = refs.ocean.eastwardInput;
+            oceanCurrentNorthwardInput = refs.ocean.northwardInput;
+            oceanCurrentLayerSummary = refs.ocean.layerSummaryText;
+            oceanCurrentDrawer = refs.ocean.oceanCurrentDrawer;
+            oceanCurrentDrawerSummary = refs.ocean.drawerSummaryText;
+            oceanCurrentQualitySummary = refs.ocean.qualitySummaryText;
+            oceanCurrentDrawerMinDepthInput = refs.ocean.drawerMinDepthInput;
+            oceanCurrentDrawerMaxDepthInput = refs.ocean.drawerMaxDepthInput;
+            oceanCurrentDrawerEastwardInput = refs.ocean.drawerEastwardInput;
+            oceanCurrentDrawerNorthwardInput = refs.ocean.drawerNorthwardInput;
+            oceanCurrentPrefetchHalfWidthInput = refs.ocean.prefetchHalfWidthInput;
+            oceanCurrentForecastWindowInput = refs.ocean.forecastWindowInput;
+            oceanCurrentFieldSummary = refs.ocean.fieldSummaryText;
+            oceanCurrentLocalFileInput = refs.ocean.localFileInput;
+            oceanCurrentAcquisitionModeText = refs.ocean.acquisitionModeText;
+            oceanCurrentActualSourceText = refs.ocean.actualSourceText;
+            oceanCurrentDrawerStatus = refs.ocean.drawerStatusText;
+            flightLegDrawer = refs.flightLeg.drawer;
+            flightLegDrawerStatus = refs.flightLeg.statusText;
+            descentNetBuoyancyInput = refs.flightLeg.descentNetBuoyancyInput;
+            descentPitchInput = refs.flightLeg.descentPitchInput;
+            descentRollInput = refs.flightLeg.descentRollInput;
+            ascentNetBuoyancyInput = refs.flightLeg.ascentNetBuoyancyInput;
+            ascentPitchInput = refs.flightLeg.ascentPitchInput;
+            ascentRollInput = refs.flightLeg.ascentRollInput;
+            dynamicsMassInput = refs.dynamics.massInput;
+            dynamicsReferenceAreaInput = refs.dynamics.referenceAreaInput;
+            dynamicsReferenceLengthInput = refs.dynamics.referenceLengthInput;
+            dynamicsWingSpanInput = refs.dynamics.wingSpanInput;
+            dynamicsMeanChordInput = refs.dynamics.meanChordInput;
+            dynamicsRollInertiaInput = refs.dynamics.rollInertiaInput;
+            dynamicsPitchInertiaInput = refs.dynamics.pitchInertiaInput;
+            dynamicsYawInertiaInput = refs.dynamics.yawInertiaInput;
+            dynamicsLiftSlopeInput = refs.dynamics.liftSlopeInput;
+            dynamicsBaseDragInput = refs.dynamics.baseDragInput;
+            dynamicsTurnaroundDurationInput = refs.dynamics.turnaroundDurationInput;
+            dynamicsBuoyancyExponentInput = refs.dynamics.buoyancyExponentInput;
+            dynamicsBuoyancyDeadbandInput = refs.dynamics.buoyancyDeadbandInput;
+            dynamicsPistonHysteresisInput = refs.dynamics.pistonHysteresisInput;
+            dynamicsRollExponentInput = refs.dynamics.rollExponentInput;
+            dynamicsRollDeadbandInput = refs.dynamics.rollDeadbandInput;
+            dynamicsRollRestoringGainInput = refs.dynamics.rollRestoringGainInput;
+            dynamicsMaxRollMomentInput = refs.dynamics.maxRollMomentInput;
+
+            if (csvPathInput != null)
+            {
+                csvPathInput.text = currentCsvPath ?? string.Empty;
+            }
+
+            modelButtons.Clear();
+            if (refs.prediction.xgBoostModelButton != null)
+            {
+                modelButtons[PredictionModelKind.XGBoost] = refs.prediction.xgBoostModelButton;
+                BindButton(refs.prediction.xgBoostModelButton, () => SelectModel(PredictionModelKind.XGBoost));
+            }
+
+            BindButton(refs.mission.loadCsvButton, OnLoadClicked);
+            BindButton(refs.prediction.applyPredictionConfigButton, ApplyPredictionConfig);
+            BindButton(refs.prediction.predictionToggleButton, TogglePrediction);
+            BindButton(refs.simulation.applyReferenceCycleButton, ApplyReferenceCycleDuration);
+            BindButton(refs.simulation.applyButton, OnSimulationClicked);
+            BindButton(refs.simulation.flightLegSettingsButton, ToggleFlightLegDrawer);
+            BindButton(refs.ocean.previousLayerButton, () => SelectOceanCurrentLayer(selectedOceanCurrentLayerIndex - 1));
+            BindButton(refs.ocean.nextLayerButton, () => SelectOceanCurrentLayer(selectedOceanCurrentLayerIndex + 1));
+            BindButton(refs.ocean.addLayerButton, AddOceanCurrentLayer);
+            BindButton(refs.ocean.saveLayerButton, SaveOceanCurrentLayer);
+            BindButton(refs.ocean.deleteLayerButton, DeleteOceanCurrentLayer);
+            BindButton(refs.ocean.lookupButton, LookupOceanCurrent);
+            BindButton(refs.ocean.drawerButton, ToggleOceanCurrentDrawer);
+            BindButton(refs.ocean.onlineModeButton, () => SetOceanCurrentAcquisitionMode(OceanCurrentAcquisitionMode.Online));
+            BindButton(refs.ocean.cacheOnlyModeButton, () => SetOceanCurrentAcquisitionMode(OceanCurrentAcquisitionMode.CacheOnly));
+            BindButton(refs.ocean.localFileModeButton, () => SetOceanCurrentAcquisitionMode(OceanCurrentAcquisitionMode.LocalFile));
+            BindButton(refs.ocean.drawerPreviousButton, () => SelectOceanCurrentLayer(selectedOceanCurrentLayerIndex - 1));
+            BindButton(refs.ocean.drawerNextButton, () => SelectOceanCurrentLayer(selectedOceanCurrentLayerIndex + 1));
+            BindButton(refs.ocean.drawerAddButton, AddOceanCurrentLayer);
+            BindButton(refs.ocean.drawerDeleteButton, DeleteOceanCurrentLayer);
+            BindButton(refs.ocean.drawerSaveButton, SaveOceanCurrentDrawerLayer);
+            BindButton(refs.ocean.drawerLookupButton, LookupOceanCurrentFromDrawer);
+            BindButton(refs.flightLeg.closeButton, ToggleFlightLegDrawer);
+            BindButton(refs.flightLeg.restoreDefaultsButton, RestoreFlightLegDefaults);
+            BindButton(refs.dynamics.seaTrialPresetButton, ApplySeaTrialDynamicsPreset);
+            BindButton(refs.dynamics.calmWaterPresetButton, ApplyCalmWaterDynamicsPreset);
+            BindButton(refs.dynamics.calibrateFromCsvButton, CalibrateDynamicsFromCsv);
+            ClearDynamicRuntimeUi();
+            if (oceanCurrentMinDepthInput != null)
+            {
+                RefreshOceanCurrentLayerEditor();
+            }
+            RefreshDynamicsEditor();
+        }
+
+        private static void BindButton(Button button, UnityEngine.Events.UnityAction action)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(action);
         }
 
         public void BringConfigurationToFront()
@@ -438,10 +585,10 @@ namespace UnderwaterGliderTwin.UI
             bottomDrawerScrollRect = null;
             bottomDrawerToggleButton = null;
             oceanCurrentModalCanvas = null;
-            ClearChildren(dynamicRowsRoot);
+            ClearChildren(dynamicRowsRoot, oceanLayerRowTemplate);
         }
 
-        private static void ClearChildren(Transform root)
+        private static void ClearChildren(Transform root, Transform protectedChild = null)
         {
             if (root == null)
             {
@@ -451,6 +598,11 @@ namespace UnderwaterGliderTwin.UI
             for (var index = root.childCount - 1; index >= 0; index--)
             {
                 var child = root.GetChild(index).gameObject;
+                if (protectedChild != null && child == protectedChild.gameObject)
+                {
+                    continue;
+                }
+
                 if (Application.isPlaying)
                 {
                     Destroy(child);
@@ -466,6 +618,7 @@ namespace UnderwaterGliderTwin.UI
         public void BindDynamicContainersForTests(DataInputPanelRefs refs)
         {
             dynamicRowsRoot = refs != null && refs.ocean != null ? refs.ocean.dynamicRowsRoot : null;
+            oceanLayerRowTemplate = refs != null && refs.ocean != null ? refs.ocean.oceanLayerRowTemplate : null;
         }
 #endif
 

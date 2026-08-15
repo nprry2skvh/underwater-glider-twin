@@ -178,6 +178,16 @@ namespace UnderwaterGliderTwin.Bootstrap
             if (runtimeUiRoot != null)
             {
                 var refs = runtimeUiRoot.References;
+                var dataInput = canvasRoot.AddComponent<DataInputView>();
+                dataInput.Bind(
+                    refs.dataInput,
+                    CurrentCsvPath,
+                    RuntimeDataSourceState.SimulationProfile,
+                    prediction,
+                    ReloadFromCsvPath,
+                    ReloadFromSimulationProfile,
+                    oceanVolume != null ? oceanVolume.UpdateCurrentProfile : null);
+                dataInput.BringConfigurationToFront();
                 canvasRoot.AddComponent<DashboardView>().Bind(refs.dashboard, PlaybackController, prediction);
                 canvasRoot.AddComponent<StatusPanelView>().Bind(refs.status, PlaybackController, AlarmEvaluator, Logger, prediction);
                 canvasRoot.AddComponent<OceanCommandToolbarView>().Bind(refs.oceanToolbar, cameraController, trajectoryView);
