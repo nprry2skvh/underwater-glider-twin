@@ -21,6 +21,7 @@ namespace UnderwaterGliderTwin.Bootstrap
         [SerializeField] private RuntimeUiRoot runtimeUiRoot;
         [SerializeField] private bool allowRuntimeFallback;
         [SerializeField] private bool strictUiValidation;
+        [SerializeField] private bool useGeneratedRuntimeUi = true;
 
         public PlaybackController PlaybackController { get; private set; }
         public GeoCoordinateMapper Mapper { get; private set; }
@@ -50,7 +51,8 @@ namespace UnderwaterGliderTwin.Bootstrap
 
         private void InitializeRuntime()
         {
-            RuntimeUiFallback.AllowRuntimeFallback = allowRuntimeFallback;
+            var useGeneratedUi = ShouldUseGeneratedRuntimeUi();
+            RuntimeUiFallback.AllowRuntimeFallback = allowRuntimeFallback || useGeneratedUi;
             ValidateConfiguredRuntimeUi();
             if (!enabled)
             {
@@ -174,8 +176,13 @@ namespace UnderwaterGliderTwin.Bootstrap
             var screenshotCapture = gameObject.AddComponent<RuntimeScreenshotCapture>();
             screenshotCapture.Initialize(screenshotOptions);
 
-            var canvasRoot = runtimeUiRoot != null ? runtimeUiRoot.gameObject : new GameObject("RuntimeUI");
-            if (runtimeUiRoot != null)
+            if (useGeneratedUi && runtimeUiRoot != null)
+            {
+                runtimeUiRoot.gameObject.SetActive(false);
+            }
+
+            var canvasRoot = useGeneratedUi || runtimeUiRoot == null ? new GameObject("RuntimeUI") : runtimeUiRoot.gameObject;
+            if (!useGeneratedUi && runtimeUiRoot != null)
             {
                 var refs = runtimeUiRoot.References;
                 var dataInput = canvasRoot.AddComponent<DataInputView>();
@@ -275,6 +282,17 @@ namespace UnderwaterGliderTwin.Bootstrap
 
         private void ValidateConfiguredRuntimeUi()
         {
+            if (ShouldUseGeneratedRuntimeUi())
+            {
+                RuntimeUiFallback.AllowRuntimeFallback = true;
+                if (runtimeUiRoot == null)
+                {
+                    RuntimeUiFallback.LogFallback("RuntimeUiRoot");
+                }
+
+                return;
+            }
+
             if (runtimeUiRoot == null)
             {
                 if (allowRuntimeFallback)
@@ -313,6 +331,11 @@ namespace UnderwaterGliderTwin.Bootstrap
             {
                 enabled = false;
             }
+        }
+
+        private bool ShouldUseGeneratedRuntimeUi()
+        {
+            return useGeneratedRuntimeUi || runtimeUiRoot == null;
         }
 
         private IEnumerator RunRuntimeSmoke(RuntimeSmokeOptions options)

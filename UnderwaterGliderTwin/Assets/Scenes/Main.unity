@@ -1837,6 +1837,7 @@ MonoBehaviour:
   runtimeUiRoot: {fileID: 1780013916}
   allowRuntimeFallback: 0
   strictUiValidation: 1
+  useGeneratedRuntimeUi: 1
 --- !u!1001 &1027444277
 PrefabInstance:
   m_ObjectHideFlags: 0

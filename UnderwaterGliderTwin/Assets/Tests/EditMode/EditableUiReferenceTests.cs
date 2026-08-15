@@ -457,7 +457,7 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void TwinBootstrap_ProductionWithoutRuntimeUiRootDisablesInsteadOfUsingLegacyUi()
+        public void TwinBootstrap_DefaultsToGeneratedRuntimeUiWhenEditableRootIsUnavailable()
         {
             var bootstrapObject = scope.CreateRoot("TwinBootstrapWithoutUiRoot");
             bootstrapObject.SetActive(false);
@@ -467,10 +467,10 @@ namespace UnderwaterGliderTwin.Tests
                 BindingFlags.Instance | BindingFlags.NonPublic);
 
             Assert.That(validateMethod, Is.Not.Null);
-            LogAssert.Expect(LogType.Error, "TwinBootstrap requires a serialized RuntimeUiRoot when runtime fallback is disabled.");
             validateMethod.Invoke(bootstrap, null);
 
-            Assert.That(bootstrap.enabled, Is.False);
+            Assert.That(bootstrap.enabled, Is.True);
+            Assert.That(RuntimeUiFallback.AllowRuntimeFallback, Is.True);
         }
 
         [Test]
