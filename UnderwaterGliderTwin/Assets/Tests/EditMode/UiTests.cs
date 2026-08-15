@@ -633,18 +633,18 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void NumericInputsUseCompactWidthWhileCsvInputStaysWide()
+        public void TaskParameterFieldCardsUseFixedWidth()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
             Canvas.ForceUpdateCanvases();
 
-            var cycles = GameObject.Find("SimulationCyclesInput").GetComponent<RectTransform>();
-            var duration = GameObject.Find("SimulationDurationInput").GetComponent<RectTransform>();
-            var csv = GameObject.Find("CsvPathInput").GetComponent<RectTransform>();
-            Assert.That(cycles.rect.width, Is.LessThanOrEqualTo(180f));
-            Assert.That(duration.rect.width, Is.LessThanOrEqualTo(180f));
-            Assert.That(csv.rect.width, Is.GreaterThan(500f));
+            var cycles = GameObject.Find("SimulationCyclesInputField").GetComponent<RectTransform>();
+            var duration = GameObject.Find("SimulationDurationInputField").GetComponent<RectTransform>();
+            var csv = GameObject.Find("CsvPathField").GetComponent<RectTransform>();
+            Assert.That(cycles.rect.width, Is.EqualTo(280f).Within(0.1f));
+            Assert.That(duration.rect.width, Is.EqualTo(280f).Within(0.1f));
+            Assert.That(csv.rect.width, Is.EqualTo(280f).Within(0.1f));
         }
 
         [Test]
@@ -664,14 +664,22 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(GameObject.Find("SimulationSectionFields").GetComponent<GridLayoutGroup>(), Is.Not.Null);
             Assert.That(GameObject.Find("OceanSectionFields").GetComponent<GridLayoutGroup>(), Is.Not.Null);
             var layout = GameObject.Find("MissionSectionFields").GetComponent<ResponsiveTaskParameterLayout>();
+            var grid = GameObject.Find("MissionSectionFields").GetComponent<GridLayoutGroup>();
             layout.RefreshForWidth(1920f);
             Assert.That(layout.ColumnCount, Is.EqualTo(4));
+            Assert.That(grid.cellSize.x, Is.EqualTo(280f).Within(0.1f));
             layout.RefreshForWidth(1280f);
-            Assert.That(layout.ColumnCount, Is.EqualTo(3));
+            Assert.That(layout.ColumnCount, Is.EqualTo(4));
+            Assert.That(grid.cellSize.x, Is.EqualTo(280f).Within(0.1f));
             layout.RefreshForWidth(900f);
-            Assert.That(layout.ColumnCount, Is.EqualTo(2));
+            Assert.That(layout.ColumnCount, Is.EqualTo(3));
+            Assert.That(grid.cellSize.x, Is.EqualTo(280f).Within(0.1f));
             layout.RefreshForWidth(600f);
+            Assert.That(layout.ColumnCount, Is.EqualTo(2));
+            Assert.That(grid.cellSize.x, Is.EqualTo(280f).Within(0.1f));
+            layout.RefreshForWidth(560f);
             Assert.That(layout.ColumnCount, Is.EqualTo(1));
+            Assert.That(grid.cellSize.x, Is.EqualTo(280f).Within(0.1f));
         }
 
         [Test]

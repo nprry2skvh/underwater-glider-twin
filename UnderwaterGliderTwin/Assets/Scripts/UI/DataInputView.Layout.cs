@@ -15,6 +15,7 @@ namespace UnderwaterGliderTwin.UI
         private bool bottomDrawerExpandedBeforeModal;
         private bool bottomDrawerExpandedBeforeFlightLeg;
         private const float ExpandedTaskDrawerHeight = 320f;
+        private const float TaskParameterFieldWidth = 280f;
 
         private void ConfigureResponsiveBottomDrawer(RectTransform drawer)
         {
@@ -171,7 +172,7 @@ namespace UnderwaterGliderTwin.UI
             cardLayout.childForceExpandHeight = false;
             var element = card.gameObject.AddComponent<LayoutElement>();
             element.preferredHeight = fullWidth ? 62f : 56f;
-            element.minWidth = fullWidth ? 560f : 240f;
+            element.minWidth = fullWidth ? 560f : TaskParameterFieldWidth;
             if (labelName != null)
             {
                 MoveLeaf(labelName, card, 18f);
@@ -323,9 +324,9 @@ namespace UnderwaterGliderTwin.UI
                 var element = childRect.GetComponent<LayoutElement>();
                 if (input != null)
                 {
-                    element.minWidth = 150f;
-                    element.preferredWidth = 150f;
-                    element.flexibleWidth = 0f;
+                    element.minWidth = 0f;
+                    element.preferredWidth = 0f;
+                    element.flexibleWidth = 1f;
                 }
                 else
                 {
@@ -357,9 +358,9 @@ namespace UnderwaterGliderTwin.UI
                 }
                 else if (input != null)
                 {
-                    element.minWidth = 150f;
-                    element.preferredWidth = 150f;
-                    element.flexibleWidth = 0f;
+                    element.minWidth = 0f;
+                    element.preferredWidth = 0f;
+                    element.flexibleWidth = 1f;
                 }
                 else if (button != null)
                 {
@@ -721,7 +722,7 @@ namespace UnderwaterGliderTwin.UI
 
     public sealed class ResponsiveTaskParameterLayout : MonoBehaviour
     {
-        private const float MinimumCardWidth = 320f;
+        private const float FixedCardWidth = 280f;
         private const float HorizontalGap = 8f;
         private const float VerticalGap = 4f;
         private GridLayoutGroup grid;
@@ -757,18 +758,17 @@ namespace UnderwaterGliderTwin.UI
             }
 
             var available = Mathf.Max(0f, width - grid.padding.horizontal);
-            var columns = available > MinimumCardWidth * 4f + HorizontalGap * 3f
+            var columns = available > FixedCardWidth * 4f + HorizontalGap * 3f
                 ? 4
-                : available > MinimumCardWidth * 3f + HorizontalGap * 2f
+                : available > FixedCardWidth * 3f + HorizontalGap * 2f
                     ? 3
-                    : available >= MinimumCardWidth * 2f + HorizontalGap
+                    : available >= FixedCardWidth * 2f + HorizontalGap
                         ? 2
                         : 1;
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = columns;
             grid.spacing = new Vector2(HorizontalGap, VerticalGap);
-            var cellWidth = Mathf.Max(MinimumCardWidth, (available - HorizontalGap * (columns - 1)) / columns);
-            grid.cellSize = new Vector2(cellWidth, 54f);
+            grid.cellSize = new Vector2(FixedCardWidth, 54f);
             if (fitter != null)
             {
                 fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
