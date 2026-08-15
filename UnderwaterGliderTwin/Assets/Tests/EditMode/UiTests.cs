@@ -858,6 +858,27 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void BoundParameterDrawersUseFastMouseWheelScrolling()
+        {
+            var panel = new GameObject("MissionConfigurationPanel", typeof(RectTransform), typeof(ScrollRect));
+            var oceanDrawer = new GameObject("OceanCurrentDrawerPanel", typeof(RectTransform), typeof(ScrollRect));
+            var flightDrawer = new GameObject("FlightLegDrawerPanel", typeof(RectTransform), typeof(ScrollRect));
+            var refs = new DataInputPanelRefs
+            {
+                configurationPanel = panel.GetComponent<RectTransform>()
+            };
+            refs.ocean.oceanCurrentDrawer = oceanDrawer.GetComponent<RectTransform>();
+            refs.flightLeg.drawer = flightDrawer.GetComponent<RectTransform>();
+            var view = new GameObject("DataInput").AddComponent<DataInputView>();
+
+            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            Assert.That(panel.GetComponent<ScrollRect>().scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
+            Assert.That(oceanDrawer.GetComponent<ScrollRect>().scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
+            Assert.That(flightDrawer.GetComponent<ScrollRect>().scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
+        }
+
+        [Test]
         public void MissionConfigurationStatusDoesNotOverlapOceanConfigurationButton()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();

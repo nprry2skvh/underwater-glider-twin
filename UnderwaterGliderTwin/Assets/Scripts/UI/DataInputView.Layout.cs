@@ -59,7 +59,7 @@ namespace UnderwaterGliderTwin.UI
             bottomDrawerScrollRect.horizontal = false;
             bottomDrawerScrollRect.vertical = true;
             bottomDrawerScrollRect.movementType = ScrollRect.MovementType.Clamped;
-            bottomDrawerScrollRect.scrollSensitivity = DrawerScrollSensitivity;
+            ConfigureFastDrawerScroll(bottomDrawerScrollRect);
 
             var missionSection = CreateSectionCard("MissionSectionCard", "任务与预测", bottomDrawerContent);
             var simulationSection = CreateSectionCard("SimulationSectionCard", "仿真参数", bottomDrawerContent);
@@ -570,7 +570,7 @@ namespace UnderwaterGliderTwin.UI
             scroll.horizontal = false;
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
-            scroll.scrollSensitivity = DrawerScrollSensitivity;
+            ConfigureFastDrawerScroll(scroll);
             Canvas.ForceUpdateCanvases();
         }
 
@@ -663,6 +663,38 @@ namespace UnderwaterGliderTwin.UI
             scroll.horizontal = false;
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
+            ConfigureFastDrawerScroll(scroll);
+        }
+
+        private void ConfigureBoundParameterDrawerScrolling()
+        {
+            ConfigureFastDrawerScroll(configurationPanel);
+            ConfigureFastDrawerScroll(oceanCurrentDrawer);
+            ConfigureFastDrawerScroll(flightLegDrawer);
+        }
+
+        private static void ConfigureFastDrawerScroll(RectTransform drawer)
+        {
+            if (drawer == null)
+            {
+                return;
+            }
+
+            var rootScroll = drawer.GetComponent<ScrollRect>();
+            ConfigureFastDrawerScroll(rootScroll);
+            foreach (var childScroll in drawer.GetComponentsInChildren<ScrollRect>(true))
+            {
+                ConfigureFastDrawerScroll(childScroll);
+            }
+        }
+
+        private static void ConfigureFastDrawerScroll(ScrollRect scroll)
+        {
+            if (scroll == null)
+            {
+                return;
+            }
+
             scroll.scrollSensitivity = DrawerScrollSensitivity;
         }
 

@@ -307,6 +307,7 @@ namespace UnderwaterGliderTwin.UI
             dynamicsRollDeadbandInput = refs.dynamics.rollDeadbandInput;
             dynamicsRollRestoringGainInput = refs.dynamics.rollRestoringGainInput;
             dynamicsMaxRollMomentInput = refs.dynamics.maxRollMomentInput;
+            ConfigureBoundParameterDrawerScrolling();
 
             if (csvPathInput != null)
             {
