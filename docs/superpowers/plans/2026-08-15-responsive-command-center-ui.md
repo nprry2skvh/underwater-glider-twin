@@ -109,8 +109,8 @@ public void Resolve_UsesHysteresisAroundDrawerBoundary()
     Assert.That(ResponsiveUiLayoutPolicy.Resolve(1280f, 720f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.Drawer));
     Assert.That(ResponsiveUiLayoutPolicy.Resolve(1296f, 720f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
     Assert.That(ResponsiveUiLayoutPolicy.Resolve(1264f, 720f, RuntimeUiLayoutMode.CompressedThreeColumn), Is.EqualTo(RuntimeUiLayoutMode.Drawer));
-    Assert.That(ResponsiveUiLayoutPolicy.Resolve(1280f, 655f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.Drawer));
-    Assert.That(ResponsiveUiLayoutPolicy.Resolve(1280f, 656f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
+    Assert.That(ResponsiveUiLayoutPolicy.Resolve(1296f, 655f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.Drawer));
+    Assert.That(ResponsiveUiLayoutPolicy.Resolve(1296f, 656f, RuntimeUiLayoutMode.Drawer), Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
     Assert.That(ResponsiveUiLayoutPolicy.Resolve(1584f, 900f, RuntimeUiLayoutMode.FullThreeColumn), Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
     Assert.That(ResponsiveUiLayoutPolicy.Resolve(1616f, 900f, RuntimeUiLayoutMode.CompressedThreeColumn), Is.EqualTo(RuntimeUiLayoutMode.FullThreeColumn));
 }
