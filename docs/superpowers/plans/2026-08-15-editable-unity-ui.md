@@ -25,6 +25,7 @@
 - Tests must not destroy every `GameObject` in the loaded scene. Each test creates a private root container and only destroys that root.
 - `RuntimeUiRoot.ValidateReferences()` must report duplicate Canvas, duplicate EventSystem, and duplicate long-lived UI objects.
 - Reference validation is staged. Tasks 2-9 run with `RuntimeUiValidationProfile.BootstrapOnly` or `EnabledPanels`; Task 10 switches production to `Strict` after all Prefab references exist.
+- `EnabledPanels` validation uses an explicit serialized `RuntimeUiPanelFlags enabledPanelValidationMask`; it must not infer validation scope from `GameObject.activeInHierarchy`.
 - When `allowRuntimeFallback` is enabled, missing UI references are logged and the bootstrap continues through the fallback path; when fallback is disabled, blocking reference errors stop binding.
 - Required and optional UI references must be explicit. Missing required controls block strict binding; missing optional/decorative controls are marked with `[OptionalUiReference]`, skipped by blocking validation, and cannot disable the whole UI.
 - `RuntimeUiFallback.AllowRuntimeFallback` must be explicitly set during each bootstrap and restored to false on scene destroy or bootstrap cleanup.
@@ -42,7 +43,7 @@
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceIssue.cs`: value type describing a missing or duplicate UI reference.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/IUiReferenceProvider.cs`: interface for reference validation providers.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceValidator.cs`: shared validation and object-path formatting.
-- Create `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiValidationProfile.cs`: staged validation profile for migration-safe binding.
+- Create `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiValidationProfile.cs`: staged validation profile and explicit panel validation flags for migration-safe binding.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/OptionalUiReferenceAttribute.cs`: marker for non-blocking optional UI fields.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiRoot.cs`: serialized owner for `RuntimeCanvas`, long-lived panels, `ModalRoot`, drawer roots, and row templates.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiReferences.cs`: grouped references used by view `Bind(...)` methods.
@@ -102,6 +103,7 @@ Use this command for PlayMode verification:
 - Produces: `UiReferenceValidator.RequireFields(object references, Component owner, string prefabName, string groupPath, List<UiReferenceIssue> issues)`
 - Produces: `UiReferenceValidator.GetPath(Transform transform)`
 - Produces: `RuntimeUiValidationProfile.BootstrapOnly`, `.EnabledPanels`, `.Strict`
+- Produces: `RuntimeUiPanelFlags.None`, `.Dashboard`, `.Status`, `.DataInput`, `.Playback`, `.OceanToolbar`, `.All`
 - Produces: `[OptionalUiReference]` for decorative or migration-only fields that should not block binding
 - Produces: `RuntimeUiFallback.AllowRuntimeFallback`
 - Produces: `RuntimeUiFallback.LogFallback(string panelName)`
@@ -241,6 +243,18 @@ namespace UnderwaterGliderTwin.UI
         BootstrapOnly,
         EnabledPanels,
         Strict
+    }
+
+    [System.Flags]
+    public enum RuntimeUiPanelFlags
+    {
+        None = 0,
+        Dashboard = 1 << 0,
+        Status = 1 << 1,
+        DataInput = 1 << 2,
+        Playback = 1 << 3,
+        OceanToolbar = 1 << 4,
+        All = Dashboard | Status | DataInput | Playback | OceanToolbar
     }
 }
 ```
@@ -491,22 +505,27 @@ public void RuntimeUiRoot_ReportsMissingGroupedReferences()
 }
 
 [Test]
-public void RuntimeUiRoot_EnabledPanelsDoesNotValidateUncreatedPanelGroups()
+public void RuntimeUiRoot_EnabledPanelsUsesExplicitPanelMask()
 {
     var rootObject = scope.CreateRoot("RuntimeUiRoot");
     var canvas = new GameObject("RuntimeCanvas", typeof(Canvas)).GetComponent<Canvas>();
     canvas.transform.SetParent(rootObject.transform, false);
     var modalRoot = new GameObject("ModalRoot").AddComponent<RectTransform>();
     modalRoot.transform.SetParent(canvas.transform, false);
+    var hiddenDashboard = new GameObject("DashboardPanel").AddComponent<RectTransform>();
+    hiddenDashboard.gameObject.SetActive(false);
+    hiddenDashboard.transform.SetParent(canvas.transform, false);
     var root = rootObject.AddComponent<RuntimeUiRoot>();
     var serialized = new UnityEditor.SerializedObject(root);
     serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
     serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
+    serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.Dashboard;
+    serialized.FindProperty("references.dashboard.panel").objectReferenceValue = hiddenDashboard;
     serialized.ApplyModifiedPropertiesWithoutUndo();
 
     var issues = root.ValidateReferences(RuntimeUiValidationProfile.EnabledPanels);
 
-    Assert.That(issues, Has.None.Property("FieldName").EqualTo("references.dashboard.depthValue"));
+    Assert.That(issues, Has.Some.Property("FieldName").EqualTo("references.dashboard.depthValue"));
     Assert.That(issues, Has.None.Property("FieldName").EqualTo("references.dataInput.mission.csvPathInput"));
 }
 ```
@@ -677,10 +696,12 @@ namespace UnderwaterGliderTwin.UI
     {
         [SerializeField] private Canvas runtimeCanvas;
         [SerializeField] private RectTransform modalRoot;
+        [SerializeField] private RuntimeUiPanelFlags enabledPanelValidationMask;
         [SerializeField] private RuntimeUiReferences references = new RuntimeUiReferences();
 
         public Canvas RuntimeCanvas => runtimeCanvas;
         public RectTransform ModalRoot => modalRoot;
+        public RuntimeUiPanelFlags EnabledPanelValidationMask => enabledPanelValidationMask;
         public RuntimeUiReferences References => references;
 
         public List<UiReferenceIssue> ValidateReferences(RuntimeUiValidationProfile profile = RuntimeUiValidationProfile.EnabledPanels)
@@ -738,11 +759,11 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            CollectGroupIfEnabled(references.dashboard != null ? references.dashboard.panel : null, references.dashboard, "references.dashboard", issues);
-            CollectGroupIfEnabled(references.status != null ? references.status.panel : null, references.status, "references.status", issues);
-            CollectGroupIfEnabled(references.dataInput != null ? references.dataInput.panel : null, references.dataInput, "references.dataInput", issues);
-            CollectGroupIfEnabled(references.playback != null ? references.playback.panel : null, references.playback, "references.playback", issues);
-            CollectGroupIfEnabled(references.oceanToolbar != null ? references.oceanToolbar.panel : null, references.oceanToolbar, "references.oceanToolbar", issues);
+            CollectGroupIfSelected(RuntimeUiPanelFlags.Dashboard, references.dashboard, "references.dashboard", issues);
+            CollectGroupIfSelected(RuntimeUiPanelFlags.Status, references.status, "references.status", issues);
+            CollectGroupIfSelected(RuntimeUiPanelFlags.DataInput, references.dataInput, "references.dataInput", issues);
+            CollectGroupIfSelected(RuntimeUiPanelFlags.Playback, references.playback, "references.playback", issues);
+            CollectGroupIfSelected(RuntimeUiPanelFlags.OceanToolbar, references.oceanToolbar, "references.oceanToolbar", issues);
             var rowTemplate = GetOceanLayerRowTemplate();
             if (rowTemplate != null)
             {
@@ -750,9 +771,9 @@ namespace UnderwaterGliderTwin.UI
             }
         }
 
-        private void CollectGroupIfEnabled(RectTransform panel, IUiReferenceGroup group, string groupPath, List<UiReferenceIssue> issues)
+        private void CollectGroupIfSelected(RuntimeUiPanelFlags flag, IUiReferenceGroup group, string groupPath, List<UiReferenceIssue> issues)
         {
-            if (panel == null || !panel.gameObject.activeInHierarchy)
+            if ((enabledPanelValidationMask & flag) == 0)
             {
                 return;
             }
@@ -911,6 +932,17 @@ if (usePrefabUi && !runtimeUiRoot.TryEnsureSingleEventSystem())
 ```
 
 Do not set `strictUiValidation` to true until Task 10. During Tasks 2-9, the project remains runnable because missing references for panels that have not been migrated yet do not disable `TwinBootstrap`. If `allowRuntimeFallback` is true, reference errors must always be visible in the Console but must not block the fallback path.
+
+During migration, maintain `RuntimeUiRoot.enabledPanelValidationMask` explicitly:
+
+```text
+Task 2-5: None
+Task 6: Dashboard | Status | Playback | OceanToolbar
+Task 7-9: Dashboard | Status | Playback | OceanToolbar | DataInput
+Task 10: Strict validation ignores the mask and validates all required references
+```
+
+Do not use `panel.gameObject.activeInHierarchy` to decide whether a panel requires validation; hidden drawers, panels, or first-run disabled controls may still be opened by runtime behavior.
 
 Remove the older stop-on-any-issue shape:
 
@@ -1470,6 +1502,8 @@ Run the EditMode command. Expected: assertion failure because `Main.unity` has n
 
 Add `BuildMainScene()` menu item and method. It calls `EnsureNoUnsavedSceneChanges("Main UI rebuild")`, opens `Assets/Scenes/Main.unity`, creates or reuses `RuntimeUiRoot`, creates or reuses `RuntimeCanvas` with `CanvasScaler` reference resolution `1920x1080`, ensures the required child objects exist once, adds `RuntimeUiRoot` component, assigns serialized fields through `SerializedObject`, and saves the scene.
 
+When `BuildMainScene()` first creates the root in Task 5, assign `enabledPanelValidationMask = RuntimeUiPanelFlags.None`. Task 6 updates the scene value to `Dashboard | Status | Playback | OceanToolbar`; Task 7 updates it to include `DataInput`.
+
 The hierarchy must be exactly:
 
 ```text
@@ -1641,6 +1675,12 @@ else if (allowRuntimeFallback)
 ```
 
 Keep the existing mission-view lambda body unchanged.
+
+After the four base panels are bound and their Prefab references are assigned, update `RuntimeUiRoot.enabledPanelValidationMask` in `Assets/Scenes/Main.unity` to:
+
+```csharp
+RuntimeUiPanelFlags.Dashboard | RuntimeUiPanelFlags.Status | RuntimeUiPanelFlags.Playback | RuntimeUiPanelFlags.OceanToolbar
+```
 
 - [ ] **Step 5: Run EditMode tests**
 
@@ -1822,6 +1862,8 @@ Use:
 dataInput.Bind(runtimeUiRoot.References.dataInput, CurrentCsvPath, RuntimeDataSourceState.SimulationProfile, prediction, ReloadFromCsvPath, ReloadFromSimulationProfile, oceanVolume != null ? oceanVolume.UpdateCurrentProfile : null);
 ```
 
+After DataInput refs and RowTemplate refs are assigned, update `RuntimeUiRoot.enabledPanelValidationMask` in `Assets/Scenes/Main.unity` to include `RuntimeUiPanelFlags.DataInput`.
+
 - [ ] **Step 9: Run EditMode tests**
 
 Run the EditMode command. Expected: DataInput bind test passes; existing DataInput behavior tests pass through fallback or bound refs.
@@ -1859,6 +1901,7 @@ Add:
 public void OceanDrawer_UsesModalRootWithoutCreatingExtraCanvas()
 {
     RuntimeUiFallback.AllowRuntimeFallback = false;
+    var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
     var root = scope.CreateRoot("ModalTestRoot");
     var modalRoot = new GameObject("ModalRoot").AddComponent<RectTransform>();
     modalRoot.SetParent(root.transform, false);
@@ -1871,7 +1914,20 @@ public void OceanDrawer_UsesModalRootWithoutCreatingExtraCanvas()
 
     view.Bind(refs, string.Empty, SimulationProfile.Default, null, _ => { }, _ => { }, null);
 
-    Assert.That(GameObject.Find("OceanCurrentModalCanvas"), Is.Null);
+    Assert.That(CountObjectsNamedInScene(scene, "OceanCurrentModalCanvas"), Is.EqualTo(0));
+}
+
+private static int CountObjectsNamedInScene(UnityEngine.SceneManagement.Scene scene, string objectName)
+{
+    var count = 0;
+    foreach (var transform in Object.FindObjectsOfType<Transform>(true))
+    {
+        if (transform.gameObject.scene == scene && transform.name == objectName)
+        {
+            count++;
+        }
+    }
+    return count;
 }
 ```
 
@@ -2101,6 +2157,8 @@ Add PlayMode assertion that no object named `RuntimeUI` exists after loading `Ma
 
 Set `TwinBootstrap.strictUiValidation` to true in `Assets/Scenes/Main.unity` after all long-lived panel, drawer, modal, and RowTemplate references have been assigned.
 
+Also set `RuntimeUiRoot.enabledPanelValidationMask` to `RuntimeUiPanelFlags.All`. `Strict` validation validates all required groups regardless of the mask, but setting the mask to `All` keeps editor `EnabledPanels` validation and scene intent aligned.
+
 Add an EditMode scene test:
 
 ```csharp
@@ -2182,6 +2240,7 @@ Spec coverage:
 - `DashboardView` refresh uses the real existing `OnFrameChanged(...)` path through `RefreshFromCurrentFrame()`, covered by Task 6.
 - Builder idempotency and dual-resolution screenshots are covered by Task 9.
 - Staged reference validation is covered by Tasks 1, 2, and 10 through `RuntimeUiValidationProfile.BootstrapOnly`, `EnabledPanels`, and `Strict`.
+- `EnabledPanels` validation uses explicit `RuntimeUiPanelFlags` instead of `activeInHierarchy`, covered by Tasks 1, 2, 5, 6, 7, and 10.
 - Full grouped reference validation is covered by Task 1 and Task 2 through `UiReferenceGroupBase`, `UiReferenceValidator.RequireFields(...)`, and `references.CollectReferenceIssues(...)`, but is only enforced as a production blocker in Task 10.
 - Duplicate detection scope is limited to the owner scene for Canvas/EventSystem and to the `RuntimeUiRoot` subtree for long-lived panels, covered by Task 2.
 - `DataInputPanel.prefab` is included in Task 5 file creation, Prefab instance tests, and stable Prefab name list.
@@ -2190,7 +2249,7 @@ Spec coverage:
 - `EditableUiSceneBuilder` protects unsaved scene changes before rebuilding scenes, including explicit batchmode dirty-scene failure, covered by Tasks 4 and 5.
 - PlayMode tests prepare `RuntimeDataSourceState.UseSimulation(SimulationProfile.Default)` before loading `Main`, covered by Task 9.
 - Dynamic ocean current rows use `OceanCurrentLayerRowView`, and RowTemplate internals are validated from `RuntimeUiRoot`, covered by Tasks 2 and 7.
-- Modal/drawer tests use `UiTestObjectScope`, covered by Task 8.
+- Modal/drawer tests use `UiTestObjectScope` and scene-scoped object counting instead of global `GameObject.Find(...)`, covered by Task 8.
 - `UiReferenceValidator.Require(...)` handles null owner, null prefab name, and null field name, covered by Task 1.
 - Optional UI references use `[OptionalUiReference]` and do not block strict validation, covered by Tasks 1 and 2.
 
