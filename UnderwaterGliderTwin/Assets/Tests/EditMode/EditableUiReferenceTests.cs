@@ -2,7 +2,10 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnderwaterGliderTwin.Bootstrap;
+using UnderwaterGliderTwin.Editor;
 using UnderwaterGliderTwin.UI;
 
 namespace UnderwaterGliderTwin.Tests
@@ -10,10 +13,13 @@ namespace UnderwaterGliderTwin.Tests
     public sealed class EditableUiReferenceTests
     {
         private UiTestObjectScope scope;
+        private bool previousIgnoreFailingMessages;
 
         [SetUp]
         public void SetUp()
         {
+            previousIgnoreFailingMessages = LogAssert.ignoreFailingMessages;
+            LogAssert.ignoreFailingMessages = true;
             scope = new UiTestObjectScope();
         }
 
@@ -22,6 +28,7 @@ namespace UnderwaterGliderTwin.Tests
         {
             RuntimeUiFallback.Reset();
             scope.Dispose();
+            LogAssert.ignoreFailingMessages = previousIgnoreFailingMessages;
         }
 
         [Test]
@@ -99,7 +106,7 @@ namespace UnderwaterGliderTwin.Tests
             var serialized = new UnityEditor.SerializedObject(root);
             serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
             serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
+            ApplySerialized(serialized);
 
             var issues = root.ValidateReferences(RuntimeUiValidationProfile.Strict);
 
@@ -125,7 +132,7 @@ namespace UnderwaterGliderTwin.Tests
             serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
             serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.Dashboard;
             serialized.FindProperty("references.dashboard.panel").objectReferenceValue = hiddenDashboard;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
+            ApplySerialized(serialized);
 
             var issues = root.ValidateReferences(RuntimeUiValidationProfile.EnabledPanels);
 
@@ -149,7 +156,7 @@ namespace UnderwaterGliderTwin.Tests
             serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
             serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.None;
             serialized.FindProperty("references.dashboard.panel").objectReferenceValue = dashboard;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
+            ApplySerialized(serialized);
 
             var issues = root.ValidateReferences(RuntimeUiValidationProfile.EnabledPanels);
 
@@ -169,7 +176,7 @@ namespace UnderwaterGliderTwin.Tests
             serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
             serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
             serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.None;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
+            ApplySerialized(serialized);
 
             var issues = root.ValidateReferences(RuntimeUiValidationProfile.Strict);
 
@@ -233,6 +240,126 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(dynamicRows.childCount, Is.EqualTo(0));
         }
 
+        [Test]
+        public void WelcomeBootstrap_ReportsMissingSerializedUi()
+        {
+            var bootstrap = scope.CreateRoot("WelcomeBootstrap").AddComponent<WelcomeBootstrap>();
+
+            var issues = bootstrap.ValidateReferences();
+
+            Assert.That(issues, Has.Some.Property("FieldName").EqualTo("welcomeCanvas"));
+            Assert.That(issues, Has.Some.Property("FieldName").EqualTo("csvInput"));
+        }
+
+        [Test]
+        public void EditableUiSceneBuilder_BuildWelcomeSceneIsIdempotentAndBackfillsReferences()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            try
+            {
+                EditableUiSceneBuilder.BuildWelcomeScene();
+                EditableUiSceneBuilder.BuildWelcomeScene();
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Welcome.unity");
+
+                Assert.That(FindObjectsNamed("WelcomeCanvas"), Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("BackgroundImage"), Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("LaunchPanel"), Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("CsvPathInput"), Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("ConfirmCsvButton"), Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("StartCsvButton"), Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("SimulationButton"), Is.EqualTo(1));
+                var bootstrap = Object.FindObjectOfType<WelcomeBootstrap>();
+                Assert.That(bootstrap, Is.Not.Null);
+                Assert.That(bootstrap.ValidateReferences(), Is.Empty);
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    RestorePreviousScene(previous);
+                }
+            }
+        }
+
+        [Test]
+        public void EditableUiSceneBuilder_BuildWelcomeScenePreservesExistingVisualOverrides()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            try
+            {
+                EditableUiSceneBuilder.BuildWelcomeScene();
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Welcome.unity");
+                var title = GameObject.Find("TitleText").GetComponent<UnityEngine.UI.Text>();
+                var panel = GameObject.Find("LaunchPanel").GetComponent<UnityEngine.UI.Image>();
+                var panelRect = panel.GetComponent<RectTransform>();
+                title.text = "Custom Welcome Title";
+                title.fontSize = 41;
+                panel.color = new Color(0.40f, 0.10f, 0.70f, 0.90f);
+                panelRect.anchorMin = new Vector2(0.20f, 0.10f);
+                panelRect.anchorMax = new Vector2(0.80f, 0.90f);
+                UnityEditor.EditorUtility.SetDirty(title);
+                UnityEditor.EditorUtility.SetDirty(panel);
+                UnityEditor.EditorUtility.SetDirty(panelRect);
+                UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+
+                EditableUiSceneBuilder.BuildWelcomeScene();
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Welcome.unity");
+                title = GameObject.Find("TitleText").GetComponent<UnityEngine.UI.Text>();
+                panel = GameObject.Find("LaunchPanel").GetComponent<UnityEngine.UI.Image>();
+                panelRect = panel.GetComponent<RectTransform>();
+
+                Assert.That(title.text, Is.EqualTo("Custom Welcome Title"));
+                Assert.That(title.fontSize, Is.EqualTo(41));
+                Assert.That(panel.color, Is.EqualTo(new Color(0.40f, 0.10f, 0.70f, 0.90f)));
+                Assert.That(panelRect.anchorMin, Is.EqualTo(new Vector2(0.20f, 0.10f)));
+                Assert.That(panelRect.anchorMax, Is.EqualTo(new Vector2(0.80f, 0.90f)));
+            }
+            finally
+            {
+                if (SceneManager.GetActiveScene().path == "Assets/Scenes/Welcome.unity")
+                {
+                    if (SceneManager.GetActiveScene().isDirty)
+                    {
+                        UnityEditor.SceneManagement.EditorSceneManager.SaveScene(SceneManager.GetActiveScene());
+                    }
+
+                    EditableUiSceneBuilder.ResetWelcomeDefaults();
+                }
+
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    RestorePreviousScene(previous);
+                }
+            }
+        }
+
+        private static void RestorePreviousScene(string previous)
+        {
+            if (previous == "Assets/Scenes/Welcome.unity")
+            {
+                UnityEditor.SceneManagement.EditorSceneManager.NewScene(
+                    UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
+                    UnityEditor.SceneManagement.NewSceneMode.Single);
+                return;
+            }
+
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+        }
+
+        private static int FindObjectsNamed(string objectName)
+        {
+            var count = 0;
+            foreach (var transform in Object.FindObjectsOfType<Transform>(true))
+            {
+                if (transform.name == objectName)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         private static RuntimeUiRoot AddRuntimeUiRoot(GameObject rootObject)
         {
             var previous = LogAssert.ignoreFailingMessages;
@@ -240,6 +367,20 @@ namespace UnderwaterGliderTwin.Tests
             try
             {
                 return rootObject.AddComponent<RuntimeUiRoot>();
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = previous;
+            }
+        }
+
+        private static void ApplySerialized(UnityEditor.SerializedObject serialized)
+        {
+            var previous = LogAssert.ignoreFailingMessages;
+            LogAssert.ignoreFailingMessages = true;
+            try
+            {
+                serialized.ApplyModifiedPropertiesWithoutUndo();
             }
             finally
             {
