@@ -19,6 +19,7 @@ namespace UnderwaterGliderTwin.UI
         private Func<string> screenshotAction;
         private readonly Dictionary<float, Button> speedButtons = new Dictionary<float, Button>();
 
+        [System.Obsolete("Use Bind(...) with editable UI references.")]
         public void Initialize(PlaybackController playbackController, TwinCameraController cameraController, UnderwaterEnvironmentBuilder environmentBuilder, TrajectoryView trajectoryView, Action onExitRequested = null, Func<string> onScreenshotRequested = null, Action onMissionViewRequested = null)
         {
             playback = playbackController;

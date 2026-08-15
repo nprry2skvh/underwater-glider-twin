@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -430,6 +431,89 @@ namespace UnderwaterGliderTwin.Tests
                 if (!string.IsNullOrEmpty(previous))
                 {
                     RestorePreviousScene(previous);
+                }
+            }
+        }
+
+        [Test]
+        public void MainScene_PassesStrictRuntimeUiValidation()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            try
+            {
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+                var root = Object.FindObjectOfType<RuntimeUiRoot>();
+
+                Assert.That(root, Is.Not.Null);
+                Assert.That(root.ValidateReferences(RuntimeUiValidationProfile.Strict), Is.Empty);
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+                }
+            }
+        }
+
+        [Test]
+        public void TwinBootstrap_ProductionWithoutRuntimeUiRootDisablesInsteadOfUsingLegacyUi()
+        {
+            var bootstrapObject = scope.CreateRoot("TwinBootstrapWithoutUiRoot");
+            bootstrapObject.SetActive(false);
+            var bootstrap = bootstrapObject.AddComponent<TwinBootstrap>();
+            var validateMethod = typeof(TwinBootstrap).GetMethod(
+                "ValidateConfiguredRuntimeUi",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            Assert.That(validateMethod, Is.Not.Null);
+            LogAssert.Expect(LogType.Error, "TwinBootstrap requires a serialized RuntimeUiRoot when runtime fallback is disabled.");
+            validateMethod.Invoke(bootstrap, null);
+
+            Assert.That(bootstrap.enabled, Is.False);
+        }
+
+        [Test]
+        public void EditableUiSceneBuilder_BuildMainSceneIsIdempotentWithModalPrefabs()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            try
+            {
+                EditableUiSceneBuilder.BuildMainScene();
+                EditableUiSceneBuilder.BuildMainScene();
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+
+                var scene = SceneManager.GetActiveScene();
+                var canvasCount = 0;
+                var eventSystemCount = 0;
+                foreach (var canvas in Object.FindObjectsOfType<Canvas>(true))
+                {
+                    if (canvas.gameObject.scene == scene)
+                    {
+                        canvasCount++;
+                    }
+                }
+
+                foreach (var eventSystem in Object.FindObjectsOfType<EventSystem>(true))
+                {
+                    if (eventSystem.gameObject.scene == scene)
+                    {
+                        eventSystemCount++;
+                    }
+                }
+
+                Assert.That(canvasCount, Is.EqualTo(1));
+                Assert.That(eventSystemCount, Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("DashboardPanel"), Is.EqualTo(1));
+                Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("DashboardPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+                Assert.That(FindObjectsNamed("OceanCurrentDrawer"), Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("FlightLegDrawer"), Is.EqualTo(1));
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
                 }
             }
         }

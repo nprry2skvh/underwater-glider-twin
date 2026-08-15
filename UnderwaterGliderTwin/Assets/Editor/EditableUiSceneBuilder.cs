@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -208,14 +209,18 @@ namespace UnderwaterGliderTwin.Editor
             var serialized = new SerializedObject(runtimeRoot);
             serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
             serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
-            var oceanDrawer = modalRoot != null ? modalRoot.Find("OceanCurrentDrawer") : null;
-            var flightLegDrawer = modalRoot != null ? modalRoot.Find("FlightLegDrawer") : null;
-            serialized.FindProperty("references.dataInput.ocean.oceanCurrentDrawer").objectReferenceValue = oceanDrawer as RectTransform;
-            serialized.FindProperty("references.dataInput.flightLeg.drawer").objectReferenceValue = flightLegDrawer as RectTransform;
-            if (rootWasCreated)
-            {
-                serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.None;
-            }
+            serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.All;
+
+            var dashboard = FindDirectChild(canvas.transform, "DashboardPanel");
+            var status = FindDirectChild(canvas.transform, "StatusPanel");
+            var dataInput = FindDirectChild(canvas.transform, "DataInputPanel");
+            var playback = FindDirectChild(canvas.transform, "PlaybackControlsPanel");
+            var oceanToolbar = FindDirectChild(canvas.transform, "OceanCommandToolbar");
+            AssignUiGroup(serialized, new DashboardPanelRefs(), "references.dashboard", dashboard != null ? dashboard.transform : null, modalRoot);
+            AssignUiGroup(serialized, new StatusPanelRefs(), "references.status", status != null ? status.transform : null, modalRoot);
+            AssignUiGroup(serialized, new DataInputPanelRefs(), "references.dataInput", dataInput != null ? dataInput.transform : null, modalRoot);
+            AssignUiGroup(serialized, new PlaybackControlsRefs(), "references.playback", playback != null ? playback.transform : null, modalRoot);
+            AssignUiGroup(serialized, new OceanToolbarRefs(), "references.oceanToolbar", oceanToolbar != null ? oceanToolbar.transform : null, modalRoot);
 
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(runtimeRoot);
@@ -226,9 +231,123 @@ namespace UnderwaterGliderTwin.Editor
             {
                 var bootstrapSerialized = new SerializedObject(twinBootstrap);
                 bootstrapSerialized.FindProperty("runtimeUiRoot").objectReferenceValue = runtimeRoot;
+                bootstrapSerialized.FindProperty("allowRuntimeFallback").boolValue = false;
+                bootstrapSerialized.FindProperty("strictUiValidation").boolValue = true;
                 bootstrapSerialized.ApplyModifiedPropertiesWithoutUndo();
                 EditorUtility.SetDirty(twinBootstrap);
             }
+        }
+
+        private static void AssignUiGroup(SerializedObject serialized, object group, string groupPath, Transform panelRoot, RectTransform modalRoot)
+        {
+            foreach (var field in group.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public))
+            {
+                var property = serialized.FindProperty(groupPath + "." + field.Name);
+                if (property == null)
+                {
+                    continue;
+                }
+
+                if (typeof(IUiReferenceGroup).IsAssignableFrom(field.FieldType))
+                {
+                    var nested = field.GetValue(group);
+                    if (nested != null)
+                    {
+                        AssignUiGroup(serialized, nested, groupPath + "." + field.Name, panelRoot, modalRoot);
+                    }
+
+                    continue;
+                }
+
+                if (!typeof(UnityEngine.Object).IsAssignableFrom(field.FieldType))
+                {
+                    continue;
+                }
+
+                var targetRoot = ResolveReferenceRoot(groupPath, field.Name, panelRoot, modalRoot);
+                UnityEngine.Object value = null;
+                if (field.Name == "panel")
+                {
+                    value = panelRoot as RectTransform;
+                }
+                else if (targetRoot != null)
+                {
+                    if (groupPath == "references.dataInput.ocean" && field.Name == "oceanCurrentDrawer")
+                    {
+                        value = FindDirectChild(modalRoot, "OceanCurrentDrawer")?.GetComponent(field.FieldType);
+                    }
+                    else if (groupPath == "references.dataInput.flightLeg" && field.Name == "drawer")
+                    {
+                        value = FindDirectChild(modalRoot, "FlightLegDrawer")?.GetComponent(field.FieldType);
+                    }
+                    else
+                    {
+                        var objectName = GetUiObjectName(field.Name);
+                        var target = FindDescendant(targetRoot, objectName);
+                        if (target != null)
+                        {
+                            value = field.FieldType == typeof(GameObject)
+                                ? target
+                                : target.GetComponent(field.FieldType);
+                        }
+                    }
+                }
+
+                property.objectReferenceValue = value;
+            }
+        }
+
+        private static Transform ResolveReferenceRoot(string groupPath, string fieldName, Transform panelRoot, RectTransform modalRoot)
+        {
+            if (groupPath == "references.dataInput.dynamics"
+                || groupPath == "references.dataInput.flightLeg"
+                || (groupPath == "references.dataInput.ocean" && ShouldLiveInModal("dataInput.ocean", fieldName)))
+            {
+                if (modalRoot == null)
+                {
+                    return null;
+                }
+
+                if (groupPath == "references.dataInput.flightLeg")
+                {
+                    return FindDirectChild(modalRoot, "FlightLegDrawer")?.transform;
+                }
+
+                return FindDirectChild(modalRoot, "OceanCurrentDrawer")?.transform;
+            }
+
+            return panelRoot;
+        }
+
+        private static string GetUiObjectName(string fieldName)
+        {
+            switch (fieldName)
+            {
+                case "dynamicRowsRoot": return "DynamicRowsRoot";
+                case "oceanLayerRowTemplate": return "OceanCurrentLayerRowTemplate";
+                case "predictionMetricRowsRoot": return "PredictionMetricRowsRoot";
+                case "predictionMetricRowTemplate": return "PredictionMetricRowTemplate";
+                case "advancedRowsRoot": return "AdvancedRowsRoot";
+                default: return char.ToUpperInvariant(fieldName[0]) + fieldName.Substring(1);
+            }
+        }
+
+        private static GameObject FindDescendant(Transform root, string objectName)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            foreach (var transform in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (transform.name == objectName)
+                {
+                    return transform.gameObject;
+                }
+            }
+
+            return null;
         }
 
         private static void EnsurePanelPrefabInstance(Scene scene, Transform runtimeCanvas, string panelName)
@@ -238,6 +357,11 @@ namespace UnderwaterGliderTwin.Editor
             if (prefab == null)
             {
                 prefab = CreatePanelPrefab(prefabPath, panelName);
+            }
+            else if (prefab.transform.childCount == 0)
+            {
+                PopulateExistingPanelPrefab(prefabPath, panelName);
+                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
             }
 
             var existing = default(GameObject);
@@ -288,6 +412,11 @@ namespace UnderwaterGliderTwin.Editor
             {
                 prefab = CreateModalPrefab(prefabPath, drawerName);
             }
+            else if (prefab.transform.childCount == 0)
+            {
+                PopulateExistingModalPrefab(prefabPath, drawerName);
+                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            }
 
             var existing = FindDirectChild(modalRoot, drawerName);
             if (existing != null)
@@ -319,6 +448,7 @@ namespace UnderwaterGliderTwin.Editor
             image.color = panelName == "PlaybackControlsPanel"
                 ? new Color(0.015f, 0.09f, 0.14f, 0.98f)
                 : new Color(0.025f, 0.12f, 0.18f, 0.92f);
+            PopulatePanelPrefabVisuals(temporary, panelName);
             var prefab = PrefabUtility.SaveAsPrefabAsset(temporary, prefabPath);
             UnityEngine.Object.DestroyImmediate(temporary);
             return prefab;
@@ -331,9 +461,260 @@ namespace UnderwaterGliderTwin.Editor
             image.color = drawerName == "FlightLegDrawer"
                 ? new Color(0.015f, 0.075f, 0.1f, 0.98f)
                 : new Color(0.015f, 0.075f, 0.1f, 0.98f);
+            PopulateModalPrefabVisuals(temporary, drawerName);
             var prefab = PrefabUtility.SaveAsPrefabAsset(temporary, prefabPath);
             UnityEngine.Object.DestroyImmediate(temporary);
             return prefab;
+        }
+
+        private static void PopulateExistingPanelPrefab(string prefabPath, string panelName)
+        {
+            var contents = PrefabUtility.LoadPrefabContents(prefabPath);
+            try
+            {
+                PopulatePanelPrefabVisuals(contents, panelName);
+                PrefabUtility.SaveAsPrefabAsset(contents, prefabPath);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+
+        private static void PopulateExistingModalPrefab(string prefabPath, string drawerName)
+        {
+            var contents = PrefabUtility.LoadPrefabContents(prefabPath);
+            try
+            {
+                PopulateModalPrefabVisuals(contents, drawerName);
+                PrefabUtility.SaveAsPrefabAsset(contents, prefabPath);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+
+        private static void PopulatePanelPrefabVisuals(GameObject root, string panelName)
+        {
+            var index = 0;
+            var title = CreateTextControl(root.transform, "TitleText", panelName, 18, ref index);
+            title.alignment = TextAnchor.MiddleLeft;
+
+            switch (panelName)
+            {
+                case "DashboardPanel":
+                    PopulateReferenceGroup(root.transform, new DashboardPanelRefs(), "dashboard", false);
+                    break;
+                case "StatusPanel":
+                    PopulateReferenceGroup(root.transform, new StatusPanelRefs(), "status", false);
+                    break;
+                case "DataInputPanel":
+                    PopulateReferenceGroup(root.transform, new DataInputPanelRefs(), "dataInput", true);
+                    break;
+                case "PlaybackControlsPanel":
+                    PopulateReferenceGroup(root.transform, new PlaybackControlsRefs(), "playback", false);
+                    break;
+                case "OceanCommandToolbar":
+                    PopulateReferenceGroup(root.transform, new OceanToolbarRefs(), "oceanToolbar", false);
+                    break;
+            }
+        }
+
+        private static void PopulateModalPrefabVisuals(GameObject root, string drawerName)
+        {
+            var index = 0;
+            CreateTextControl(root.transform, "TitleText", drawerName, 20, ref index);
+            if (drawerName == "OceanCurrentDrawer")
+            {
+                PopulateReferenceGroup(root.transform, new OceanSectionRefs(), "oceanDrawer", false, ref index);
+                PopulateReferenceGroup(root.transform, new DynamicsSectionRefs(), "dynamics", false, ref index);
+            }
+            else
+            {
+                PopulateReferenceGroup(root.transform, new FlightLegSectionRefs(), "flightLeg", false, ref index);
+            }
+        }
+
+        private static void PopulateReferenceGroup(Transform parent, object group, string groupPath, bool dataInputPanel, ref int index)
+        {
+            foreach (var field in group.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public))
+            {
+                if (typeof(IUiReferenceGroup).IsAssignableFrom(field.FieldType))
+                {
+                    if (dataInputPanel && (field.Name == "dynamics" || field.Name == "flightLeg"))
+                    {
+                        continue;
+                    }
+
+                    var nested = field.GetValue(group);
+                    if (nested != null)
+                    {
+                        PopulateReferenceGroup(parent, nested, groupPath + "." + field.Name, dataInputPanel, ref index);
+                    }
+
+                    continue;
+                }
+
+                if (!typeof(UnityEngine.Object).IsAssignableFrom(field.FieldType)
+                    || field.Name == "panel"
+                    || (dataInputPanel && ShouldLiveInModal(groupPath, field.Name)))
+                {
+                    continue;
+                }
+
+                var objectName = GetUiObjectName(field.Name);
+                if (FindDirectChild(parent, objectName) != null || FindDescendant(parent, objectName) != null)
+                {
+                    continue;
+                }
+
+                var created = CreateReferenceControl(parent, field.FieldType, objectName, ref index);
+                if (field.GetCustomAttribute<OptionalUiReferenceAttribute>() != null)
+                {
+                    created.SetActive(false);
+                }
+
+                if (field.Name == "oceanLayerRowTemplate")
+                {
+                    var row = created.GetComponent<OceanCurrentLayerRowView>() ?? created.AddComponent<OceanCurrentLayerRowView>();
+                    PopulateRowTemplate(row);
+                }
+            }
+        }
+
+        private static void PopulateReferenceGroup(Transform parent, object group, string groupPath, bool dataInputPanel)
+        {
+            var index = 0;
+            PopulateReferenceGroup(parent, group, groupPath, dataInputPanel, ref index);
+        }
+
+        private static bool ShouldLiveInModal(string groupPath, string fieldName)
+        {
+            if (groupPath == "dataInput.dynamics" || groupPath == "dataInput.flightLeg")
+            {
+                return true;
+            }
+
+            if (groupPath != "dataInput.ocean")
+            {
+                return false;
+            }
+
+            return fieldName == "oceanCurrentDrawer"
+                || fieldName.StartsWith("drawer", StringComparison.Ordinal)
+                || fieldName == "qualitySummaryText"
+                || fieldName == "prefetchHalfWidthInput"
+                || fieldName == "forecastWindowInput"
+                || fieldName == "fieldSummaryText"
+                || fieldName == "onlineModeButton"
+                || fieldName == "cacheOnlyModeButton"
+                || fieldName == "localFileModeButton"
+                || fieldName == "acquisitionModeText"
+                || fieldName == "localFileInput"
+                || fieldName == "actualSourceText";
+        }
+
+        private static GameObject CreateReferenceControl(Transform parent, Type fieldType, string objectName, ref int index)
+        {
+            var rect = new GameObject(objectName, typeof(RectTransform));
+            rect.transform.SetParent(parent, false);
+            ConfigureReferenceRect(rect.GetComponent<RectTransform>(), index++);
+
+            if (fieldType == typeof(Text))
+            {
+                var text = rect.AddComponent<Text>();
+                ConfigureText(text, objectName, 13);
+            }
+            else if (fieldType == typeof(Image))
+            {
+                rect.AddComponent<Image>().color = new Color(0.04f, 0.16f, 0.2f, 0.88f);
+            }
+            else if (fieldType == typeof(Button))
+            {
+                var image = rect.AddComponent<Image>();
+                image.color = new Color(0.05f, 0.42f, 0.55f, 0.95f);
+                var button = rect.AddComponent<Button>();
+                button.targetGraphic = image;
+                var label = CreateTextControl(rect.transform, objectName + "Label", objectName, 12, ref index);
+                label.alignment = TextAnchor.MiddleCenter;
+            }
+            else if (fieldType == typeof(InputField))
+            {
+                var image = rect.AddComponent<Image>();
+                image.color = new Color(0.02f, 0.1f, 0.14f, 0.96f);
+                var input = rect.AddComponent<InputField>();
+                var text = CreateTextControl(rect.transform, objectName + "Text", string.Empty, 13, ref index);
+                input.textComponent = text;
+            }
+            else if (fieldType == typeof(Toggle))
+            {
+                rect.AddComponent<Toggle>();
+                var label = CreateTextControl(rect.transform, objectName + "Label", objectName, 12, ref index);
+                label.alignment = TextAnchor.MiddleLeft;
+            }
+            else if (fieldType == typeof(Slider))
+            {
+                rect.AddComponent<Slider>();
+            }
+            else if (fieldType == typeof(GameObject))
+            {
+                rect.AddComponent<Image>().color = new Color(0.04f, 0.16f, 0.2f, 0.88f);
+            }
+
+            return rect;
+        }
+
+        private static Text CreateTextControl(Transform parent, string objectName, string value, int fontSize, ref int index)
+        {
+            var objectToUse = FindDirectChild(parent, objectName);
+            if (objectToUse == null)
+            {
+                objectToUse = new GameObject(objectName, typeof(RectTransform));
+                objectToUse.transform.SetParent(parent, false);
+                ConfigureReferenceRect(objectToUse.GetComponent<RectTransform>(), index++);
+            }
+
+            var text = objectToUse.GetComponent<Text>() ?? objectToUse.AddComponent<Text>();
+            ConfigureText(text, value, fontSize);
+            return text;
+        }
+
+        private static void ConfigureText(Text text, string value, int fontSize)
+        {
+            text.text = value;
+            text.fontSize = fontSize;
+            text.color = Color.white;
+            text.alignment = TextAnchor.MiddleLeft;
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        }
+
+        private static void ConfigureReferenceRect(RectTransform rect, int index)
+        {
+            var column = index % 3;
+            var row = index / 3;
+            rect.anchorMin = new Vector2(column / 3f, 1f);
+            rect.anchorMax = new Vector2((column + 1) / 3f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(0f, -34f - row * 28f);
+            rect.sizeDelta = new Vector2(-8f, 24f);
+        }
+
+        private static void PopulateRowTemplate(OceanCurrentLayerRowView row)
+        {
+            var index = 0;
+            var title = CreateTextControl(row.transform, "TitleText", "Layer", 12, ref index);
+            var depth = CreateTextControl(row.transform, "DepthRangeText", "0-0 m", 12, ref index);
+            var velocity = CreateTextControl(row.transform, "VelocityText", "0 m/s", 12, ref index);
+            var edit = CreateReferenceControl(row.transform, typeof(Button), "EditButton", ref index).GetComponent<Button>();
+            var remove = CreateReferenceControl(row.transform, typeof(Button), "RemoveButton", ref index).GetComponent<Button>();
+            var serialized = new SerializedObject(row);
+            serialized.FindProperty("titleText").objectReferenceValue = title;
+            serialized.FindProperty("depthRangeText").objectReferenceValue = depth;
+            serialized.FindProperty("velocityText").objectReferenceValue = velocity;
+            serialized.FindProperty("editButton").objectReferenceValue = edit;
+            serialized.FindProperty("removeButton").objectReferenceValue = remove;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static void ConfigureModalLayout(RectTransform rect, string drawerName)

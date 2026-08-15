@@ -40,6 +40,7 @@ namespace UnderwaterGliderTwin.UI
         private readonly List<GameObject> predictionMetricRows = new List<GameObject>();
         private bool minimalBoundReferences;
 
+        [System.Obsolete("Use Bind(...) with editable UI references.")]
         public void Initialize(PlaybackController playbackController, AlarmEvaluator evaluator, TwinLogger twinLogger, PredictionController predictionController)
         {
             playback = playbackController;

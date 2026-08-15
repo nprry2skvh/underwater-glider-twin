@@ -9,6 +9,7 @@ namespace UnderwaterGliderTwin.UI
         private Text visibleArrowCountText;
         private OceanVolumeView oceanVolume;
 
+        [System.Obsolete("Use Bind(...) with editable UI references.")]
         public void Initialize(TwinCameraController cameraController, TrajectoryView trajectoryView)
         {
             var canvas = UiFactory.EnsureCanvas(transform);

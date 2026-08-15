@@ -280,9 +280,11 @@ namespace UnderwaterGliderTwin.Bootstrap
                 if (allowRuntimeFallback)
                 {
                     RuntimeUiFallback.LogFallback("RuntimeUiRoot");
+                    return;
                 }
 
-                // Main scene migration keeps the legacy path alive until Task 10 creates and binds the root.
+                Debug.LogError("TwinBootstrap requires a serialized RuntimeUiRoot when runtime fallback is disabled.", this);
+                enabled = false;
                 return;
             }
 

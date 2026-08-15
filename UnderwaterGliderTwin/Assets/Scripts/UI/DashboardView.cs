@@ -55,6 +55,7 @@ namespace UnderwaterGliderTwin.UI
         private bool showingDetails;
         private bool minimalBoundReferences;
 
+        [System.Obsolete("Use Bind(...) with editable UI references.")]
         public void Initialize(PlaybackController playbackController, PredictionController predictionController)
         {
             playback = playbackController;

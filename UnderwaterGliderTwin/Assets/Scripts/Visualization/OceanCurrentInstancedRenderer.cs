@@ -238,8 +238,28 @@ namespace UnderwaterGliderTwin.Visualization
 
             combinedMesh = new Mesh { name = "VolumetricOceanCurrentMesh" };
             combinedMesh.MarkDynamic();
-            meshFilter = GetComponent<MeshFilter>() ?? gameObject.AddComponent<MeshFilter>();
-            meshRenderer = GetComponent<MeshRenderer>() ?? gameObject.AddComponent<MeshRenderer>();
+            // Do not use C#'s `??` here: Unity objects can be destroyed while their
+            // managed wrapper is still non-null. Unity's overloaded `==` check is
+            // required so a stale component reference is replaced safely.
+            meshFilter = GetComponent<MeshFilter>();
+            if (meshFilter == null)
+            {
+                meshFilter = gameObject.AddComponent<MeshFilter>();
+            }
+
+            meshRenderer = GetComponent<MeshRenderer>();
+            if (meshRenderer == null)
+            {
+                meshRenderer = gameObject.AddComponent<MeshRenderer>();
+            }
+
+            if (meshFilter == null || meshRenderer == null)
+            {
+                Debug.LogError("OceanCurrentInstancedRenderer could not create its MeshFilter/MeshRenderer.", this);
+                enabled = false;
+                return;
+            }
+
             meshFilter.sharedMesh = combinedMesh;
             meshRenderer.sharedMaterial = arrowMaterial;
             meshRenderer.shadowCastingMode = ShadowCastingMode.Off;

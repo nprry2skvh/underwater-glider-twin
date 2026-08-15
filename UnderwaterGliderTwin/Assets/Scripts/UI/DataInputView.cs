@@ -92,6 +92,7 @@ namespace UnderwaterGliderTwin.UI
         private RectTransform oceanLayerRowTemplate;
         private Canvas legacyCanvas;
 
+        [System.Obsolete("Use Bind(...) with editable UI references.")]
         public void Initialize(
             string currentCsvPath,
             SimulationProfile currentProfile,
