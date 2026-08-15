@@ -88,6 +88,8 @@ namespace UnderwaterGliderTwin.UI
         private bool refreshingFlightLegInputs;
         private SimulationRuntimeSession subscribedRuntimeSession;
         private RectTransform configurationPanel;
+        private RectTransform dynamicRowsRoot;
+        private Canvas legacyCanvas;
 
         public void Initialize(
             string currentCsvPath,
@@ -105,10 +107,32 @@ namespace UnderwaterGliderTwin.UI
             simulationProfileTemplate = currentProfile.Clone();
             flightLegSettingsEdited = HasExplicitFlightLegSettings(simulationProfileTemplate);
             selectedOceanCurrentLayerIndex = simulationProfileTemplate.OceanCurrentProfile?.Layers.Count > 0 ? 0 : -1;
-            ClearRuntimeUi();
+            ClearDynamicRuntimeUi();
+            if (RuntimeUiFallback.AllowRuntimeFallback)
+            {
+                if (legacyCanvas != null)
+                {
+                    if (Application.isPlaying)
+                    {
+                        Destroy(legacyCanvas.gameObject);
+                    }
+                    else
+                    {
+                        DestroyImmediate(legacyCanvas.gameObject);
+                    }
+
+                    legacyCanvas = null;
+                }
+
+                ClearChildren(transform);
+            }
             EnsureRuntimeModelAvailable();
 
-            var canvas = UiFactory.EnsureCanvas(transform);
+            var configuredCanvas = transform.GetComponent<Canvas>()
+                ?? transform.GetComponentInParent<Canvas>()
+                ?? RuntimeUiFallback.LegacyCanvas;
+            var canvas = UiFactory.EnsureCanvas(transform, "DataInput", configuredCanvas);
+            legacyCanvas = RuntimeUiFallback.AllowRuntimeFallback ? canvas : null;
             var header = UiFactory.EnsureCommandCenterHeader(canvas.transform);
             var panel = UiFactory.CommandPanel(
                 "MissionConfigurationPanel",
@@ -406,7 +430,7 @@ namespace UnderwaterGliderTwin.UI
             initialPredictionStatus = "XGBoost 预测模型不可用";
         }
 
-        private void ClearRuntimeUi()
+        public void ClearDynamicRuntimeUi()
         {
             modelButtons.Clear();
             bottomDrawerContent = null;
@@ -414,9 +438,19 @@ namespace UnderwaterGliderTwin.UI
             bottomDrawerScrollRect = null;
             bottomDrawerToggleButton = null;
             oceanCurrentModalCanvas = null;
-            for (var index = transform.childCount - 1; index >= 0; index--)
+            ClearChildren(dynamicRowsRoot);
+        }
+
+        private static void ClearChildren(Transform root)
+        {
+            if (root == null)
             {
-                var child = transform.GetChild(index).gameObject;
+                return;
+            }
+
+            for (var index = root.childCount - 1; index >= 0; index--)
+            {
+                var child = root.GetChild(index).gameObject;
                 if (Application.isPlaying)
                 {
                     Destroy(child);
@@ -427,6 +461,13 @@ namespace UnderwaterGliderTwin.UI
                 }
             }
         }
+
+#if UNITY_EDITOR
+        public void BindDynamicContainersForTests(DataInputPanelRefs refs)
+        {
+            dynamicRowsRoot = refs != null && refs.ocean != null ? refs.ocean.dynamicRowsRoot : null;
+        }
+#endif
 
         private static InputField AddLabeledInput(Transform panel, string label, string inputName, string value, float x, float y, float width)
         {

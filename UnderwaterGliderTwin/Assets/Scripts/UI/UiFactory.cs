@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace UnderwaterGliderTwin.UI
 {
-    internal static class UiFactory
+    public static class UiFactory
     {
         public static readonly Color CommandPanelFill = new Color(0.015f, 0.065f, 0.11f, 0.94f);
         public static readonly Color CommandPanelEdge = new Color(0.08f, 0.68f, 0.92f, 0.62f);
@@ -18,16 +18,50 @@ namespace UnderwaterGliderTwin.UI
 
         public static Canvas EnsureCanvas(Transform parent)
         {
-            var canvas = Object.FindObjectOfType<Canvas>();
-            EnsureEventSystem();
-            if (canvas != null)
+            var parentCanvas = parent != null
+                ? (parent.GetComponent<Canvas>() ?? parent.GetComponentInParent<Canvas>())
+                : null;
+            if (parentCanvas != null)
             {
-                return canvas;
+                RuntimeUiFallback.RememberLegacyCanvas(parentCanvas);
+                return parentCanvas;
             }
 
+            if (RuntimeUiFallback.LegacyCanvas != null)
+            {
+                return EnsureCanvas(parent, parent != null ? parent.name : "UnknownPanel", RuntimeUiFallback.LegacyCanvas);
+            }
+
+            var canvas = EnsureCanvas(parent, parent != null ? parent.name : "UnknownPanel", null);
+            RuntimeUiFallback.RememberLegacyCanvas(canvas);
+            return canvas;
+        }
+
+        public static Canvas EnsureCanvas(Transform parent, string fallbackPanelName, Canvas explicitFallbackCanvas = null)
+        {
+            EnsureEventSystem();
+            if (explicitFallbackCanvas != null)
+            {
+                return explicitFallbackCanvas;
+            }
+
+            var parentCanvas = parent != null
+                ? (parent.GetComponent<Canvas>() ?? parent.GetComponentInParent<Canvas>())
+                : null;
+            if (parentCanvas != null)
+            {
+                return parentCanvas;
+            }
+
+            if (!RuntimeUiFallback.AllowRuntimeFallback)
+            {
+                throw new System.InvalidOperationException($"Runtime UI fallback is disabled. Missing RuntimeCanvas for {fallbackPanelName}.");
+            }
+
+            RuntimeUiFallback.LogFallback(fallbackPanelName);
             var canvasObject = new GameObject("RuntimeCanvas");
             canvasObject.transform.SetParent(parent, false);
-            canvas = canvasObject.AddComponent<Canvas>();
+            var canvas = canvasObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 10;
             var scaler = canvasObject.AddComponent<CanvasScaler>();
@@ -35,6 +69,7 @@ namespace UnderwaterGliderTwin.UI
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             scaler.matchWidthOrHeight = 0.5f;
             canvasObject.AddComponent<GraphicRaycaster>();
+            RuntimeUiFallback.RememberLegacyCanvas(canvas);
             return canvas;
         }
 
@@ -61,7 +96,9 @@ namespace UnderwaterGliderTwin.UI
 
         public static RectTransform EnsureCommandCenterHeader(Transform parent)
         {
-            var canvas = Object.FindObjectOfType<Canvas>();
+            var canvas = parent != null
+                ? (parent.GetComponent<Canvas>() ?? parent.GetComponentInParent<Canvas>())
+                : null;
             var existing = canvas != null ? canvas.transform.Find("CommandCenterHeader") as RectTransform : null;
             if (existing != null)
             {

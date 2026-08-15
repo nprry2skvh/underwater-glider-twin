@@ -177,6 +177,62 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(issues, Has.Some.Property("FieldName").EqualTo("references.dataInput.mission.csvPathInput"));
         }
 
+        [Test]
+        public void UiFactory_RejectsRuntimeCanvasCreationWhenFallbackDisabled()
+        {
+            RuntimeUiFallback.AllowRuntimeFallback = false;
+            var owner = scope.CreateRoot("Dashboard").transform;
+
+            var ex = Assert.Throws<System.InvalidOperationException>(() => UiFactory.EnsureCanvas(owner, "DashboardPanel", null));
+
+            Assert.That(ex.Message, Does.Contain("Runtime UI fallback is disabled"));
+        }
+
+        [Test]
+        public void UiFactory_DoesNotUseUnrelatedGlobalCanvas()
+        {
+            RuntimeUiFallback.AllowRuntimeFallback = true;
+            var unrelated = scope.CreateRoot("UnrelatedCanvas").AddComponent<Canvas>();
+            var owner = scope.CreateRoot("Dashboard").transform;
+            var previous = LogAssert.ignoreFailingMessages;
+            LogAssert.ignoreFailingMessages = true;
+            Canvas canvas;
+            try
+            {
+                canvas = UiFactory.EnsureCanvas(owner, "DashboardPanel", null);
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = previous;
+            }
+
+            Assert.That(canvas, Is.Not.SameAs(unrelated));
+            Assert.That(canvas.transform.parent, Is.EqualTo(owner));
+        }
+
+        [Test]
+        public void ClearDynamicRuntimeUi_DoesNotDestroyRowTemplate()
+        {
+            var view = scope.CreateRoot("DataInput").AddComponent<DataInputView>();
+            var contentRoot = new GameObject("OceanLayerContent").AddComponent<RectTransform>();
+            contentRoot.transform.SetParent(view.transform, false);
+            var template = new GameObject("OceanCurrentLayerRowTemplate").AddComponent<RectTransform>();
+            template.transform.SetParent(contentRoot.transform, false);
+            var dynamicRows = new GameObject("DynamicRowsRoot").AddComponent<RectTransform>();
+            dynamicRows.transform.SetParent(contentRoot.transform, false);
+            var dynamicRow = new GameObject("OceanCurrentLayerRow1").AddComponent<RectTransform>();
+            dynamicRow.transform.SetParent(dynamicRows.transform, false);
+            var refs = new DataInputPanelRefs();
+            refs.ocean.oceanLayerRowTemplate = template;
+            refs.ocean.dynamicRowsRoot = dynamicRows;
+
+            view.BindDynamicContainersForTests(refs);
+            view.ClearDynamicRuntimeUi();
+
+            Assert.That(template, Is.Not.Null);
+            Assert.That(dynamicRows.childCount, Is.EqualTo(0));
+        }
+
         private static RuntimeUiRoot AddRuntimeUiRoot(GameObject rootObject)
         {
             var previous = LogAssert.ignoreFailingMessages;

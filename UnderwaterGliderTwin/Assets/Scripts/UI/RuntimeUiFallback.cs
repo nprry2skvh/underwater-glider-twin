@@ -5,6 +5,12 @@ namespace UnderwaterGliderTwin.UI
     public static class RuntimeUiFallback
     {
         public static bool AllowRuntimeFallback { get; set; }
+        internal static Canvas LegacyCanvas { get; private set; }
+
+        internal static void RememberLegacyCanvas(Canvas canvas)
+        {
+            LegacyCanvas = canvas;
+        }
 
         public static void LogFallback(string panelName)
         {
@@ -15,6 +21,7 @@ namespace UnderwaterGliderTwin.UI
         public static void Reset()
         {
             AllowRuntimeFallback = false;
+            LegacyCanvas = null;
         }
     }
 }

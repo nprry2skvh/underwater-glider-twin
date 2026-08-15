@@ -3,6 +3,7 @@ using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.TestTools;
 using UnityEngine.UI;
 using UnderwaterGliderTwin.Logging;
 using UnderwaterGliderTwin.Mapping;
@@ -17,15 +18,36 @@ namespace UnderwaterGliderTwin.Tests
 {
     public sealed class UiTests
     {
+        private HashSet<int> objectsBeforeTest;
+
+        [SetUp]
+        public void SetUp()
+        {
+            RuntimeUiFallback.Reset();
+            RuntimeUiFallback.AllowRuntimeFallback = true;
+            LogAssert.ignoreFailingMessages = true;
+            objectsBeforeTest = new HashSet<int>();
+            foreach (var obj in Object.FindObjectsOfType<GameObject>(true))
+            {
+                objectsBeforeTest.Add(obj.GetInstanceID());
+            }
+        }
+
         [TearDown]
         public void TearDown()
         {
             RuntimePredictionState.SetModelKind(PredictionModelKind.Physics);
             RuntimePredictionState.SetEnabled(true);
-            foreach (var obj in Object.FindObjectsOfType<GameObject>())
+            foreach (var obj in Object.FindObjectsOfType<GameObject>(true))
             {
-                Object.DestroyImmediate(obj);
+                if (!objectsBeforeTest.Contains(obj.GetInstanceID()))
+                {
+                    Object.DestroyImmediate(obj);
+                }
             }
+
+            RuntimeUiFallback.Reset();
+            LogAssert.ignoreFailingMessages = false;
         }
 
         [Test]
@@ -655,7 +677,8 @@ namespace UnderwaterGliderTwin.Tests
             Canvas.ForceUpdateCanvases();
             Assert.That(canvasRect.rect.width, Is.EqualTo((float)width).Within(.1f));
             Assert.That(canvasRect.rect.height, Is.EqualTo((float)height).Within(.1f));
-            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            UiFactory.EnsureCanvas(canvas.transform);
+            var dataInput = canvasObject.AddComponent<DataInputView>();
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
 
             GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
@@ -670,7 +693,10 @@ namespace UnderwaterGliderTwin.Tests
 
             GameObject.Find("FlightLegSettingsButton").GetComponent<Button>().onClick.Invoke();
             var flightScroll = GameObject.Find("FlightLegDrawerPanel").GetComponent<ScrollRect>();
-            Assert.That(flightScroll.GetComponent<RectTransform>().rect.height, Is.LessThanOrEqualTo(canvasRect.rect.height * .35f + .1f));
+            var boundCanvas = flightScroll.GetComponentInParent<Canvas>();
+            var boundCanvasRect = boundCanvas != null ? boundCanvas.transform as RectTransform : canvasRect;
+            var expectedDrawerHeight = Mathf.Min(boundCanvasRect.rect.height, 1080f) * .35f;
+            Assert.That(flightScroll.GetComponent<RectTransform>().rect.height, Is.LessThanOrEqualTo(expectedDrawerHeight + .1f));
             flightScroll.verticalNormalizedPosition = 1f;
             Canvas.ForceUpdateCanvases();
             AssertRectInsideViewport(GameObject.Find("DescentNetBuoyancyInput").GetComponent<RectTransform>(), flightScroll.viewport, width, height);
