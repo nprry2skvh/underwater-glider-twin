@@ -20,9 +20,11 @@
 - Dynamic repeated rows use a `RowTemplate` under a Prefab-owned content container.
 - Prefab edits are made in Prefab Mode; scenes keep only necessary instance overrides.
 - Key Prefab object paths are stable and covered by reference tests.
-- Scene UI panels must be actual Prefab instances. Builders must create temporary panel roots, save Prefab assets, delete temporary roots, instantiate Prefabs with `PrefabUtility.InstantiatePrefab`, and parent those instances under `RuntimeCanvas`.
+- Scene UI panels must be actual Prefab instances. Builders create default Prefab assets only when the target Prefab is missing; existing Prefabs and connected scene instances are reused without resaving, reparenting, or resetting visual overrides.
+- If a builder finds a same-name non-Prefab object where a connected Prefab instance is required, it must fail with a clear error and ask for explicit migrate/reset action; it must not delete or replace that object during normal rebuild.
 - `UiFactory.EnsureCanvas(...)` cannot call `Object.FindObjectOfType<Canvas>()`. Fallback may use only an explicitly supplied fallback Canvas or a Canvas found on the provided parent/ancestor chain.
 - Tests must not destroy every `GameObject` in the loaded scene. Each test creates a private root container and only destroys that root.
+- PlayMode and scene tests must scope object lookup to the current scene and/or `RuntimeUiRoot` subtree. Do not use unqualified `GameObject.Find(...)` for assertions when a scene-scoped helper can be used.
 - `RuntimeUiRoot.ValidateReferences()` must report duplicate Canvas, duplicate EventSystem, and duplicate long-lived UI objects.
 - Reference validation is staged. Tasks 2-9 run with `RuntimeUiValidationProfile.BootstrapOnly` or `EnabledPanels`; Task 10 switches production to `Strict` after all Prefab references exist.
 - `EnabledPanels` validation uses an explicit serialized `RuntimeUiPanelFlags enabledPanelValidationMask`; it must not infer validation scope from `GameObject.activeInHierarchy`.
@@ -31,13 +33,15 @@
 - `RuntimeUiFallback.AllowRuntimeFallback` must be explicitly set during each bootstrap and restored to false on scene destroy or bootstrap cleanup.
 - `EditableUiSceneBuilder` must be idempotent: repeated execution cannot create duplicate Canvas, EventSystem, Prefab instances, or root panels.
 - Builder `GetOrCreate...` helpers must preserve user-authored Inspector overrides on existing objects. Defaults are applied only when an object is newly created; resetting visuals requires an explicit `ResetToDefaults` operation.
+- Plan examples must compile as written: use `UnityEngine.Object` when referring to Unity object references, and keep code snippets UTF-8 safe. If encoding is uncertain, use ASCII labels in tests and set localized text through Prefab assets or a separate verified localization pass.
 - Acceptance includes runtime screenshots at 1920x1080 and 1366x768, plus proof that a manual Prefab visual edit appears at runtime without code changes.
-- `EditableUiSceneBuilder` must check for unsaved scene changes before overwriting `Welcome.unity` or `Main.unity`; in batchmode it fails with a clear error instead of silently discarding user edits.
+- `EditableUiSceneBuilder` must check for unsaved changes in both the active scene and the target scene path before overwriting `Welcome.unity` or `Main.unity`; in batchmode it fails with a clear error instead of silently discarding user edits.
 - Dynamic row templates use binding components such as `OceanCurrentLayerRowView`; production code must not depend on long chains of string-based child `Find(...)` calls for row internals.
 - `Welcome` builder methods must be idempotent and must backfill `WelcomeBootstrap` serialized references before saving the scene.
 - RowTemplate components such as `OceanCurrentLayerRowView` must be included in root validation, not only validated when a row is instantiated at runtime.
 - Optional references must be audited before enabling `Strict`: mode-specific prediction, confidence, decorative navigation cards, and hidden drawer affordances may be optional; functional buttons, input fields, core labels, and dynamic content containers are required.
 - Dynamic row `Bind(...)` methods must guard missing serialized references and null callbacks; migration/fallback tests must not fail with `NullReferenceException`.
+- RowTemplate objects must live outside dynamic row containers, or cleanup code must explicitly skip them. `ClearDynamicRuntimeUi()` may only clear `DynamicRowsRoot`/named runtime containers and cannot clear the parent that owns `RowTemplate`.
 
 ---
 
@@ -102,7 +106,7 @@ Use this command for PlayMode verification:
 - Produces: `UiReferenceIssue(string prefabName, string objectPath, string fieldName, string message)`
 - Produces: `IUiReferenceProvider.CollectReferenceIssues(List<UiReferenceIssue> issues)`
 - Produces: `IUiReferenceGroup.CollectReferenceIssues(Component owner, string prefabName, string groupPath, List<UiReferenceIssue> issues)`
-- Produces: `UiReferenceValidator.Require(Object value, Component owner, string prefabName, string fieldName, List<UiReferenceIssue> issues)`
+- Produces: `UiReferenceValidator.Require(UnityEngine.Object value, Component owner, string prefabName, string fieldName, List<UiReferenceIssue> issues)`
 - Produces: `UiReferenceValidator.RequireFields(object references, Component owner, string prefabName, string groupPath, List<UiReferenceIssue> issues)`
 - Produces: `UiReferenceValidator.GetPath(Transform transform)`
 - Produces: `RuntimeUiValidationProfile.BootstrapOnly`, `.EnabledPanels`, `.Strict`
@@ -288,7 +292,7 @@ namespace UnderwaterGliderTwin.UI
 {
     public static class UiReferenceValidator
     {
-        public static void Require(Object value, Component owner, string prefabName, string fieldName, List<UiReferenceIssue> issues)
+        public static void Require(UnityEngine.Object value, Component owner, string prefabName, string fieldName, List<UiReferenceIssue> issues)
         {
             if (value != null)
             {
@@ -325,9 +329,9 @@ namespace UnderwaterGliderTwin.UI
 
                 var fieldPath = string.IsNullOrEmpty(groupPath) ? field.Name : groupPath + "." + field.Name;
                 var value = field.GetValue(references);
-                if (typeof(Object).IsAssignableFrom(field.FieldType))
+                if (typeof(UnityEngine.Object).IsAssignableFrom(field.FieldType))
                 {
-                    Require(value as Object, owner, prefabName, fieldPath, issues);
+                    Require(value as UnityEngine.Object, owner, prefabName, fieldPath, issues);
                     continue;
                 }
 
@@ -719,12 +723,142 @@ namespace UnderwaterGliderTwin.UI
         public Button cameraOrbitCommand;
         public Button cameraResetCommand;
     }
-    [Serializable] public sealed class DataInputPanelRefs : UiReferenceGroupBase { public RectTransform panel; public MissionSectionRefs mission = new MissionSectionRefs(); public SimulationSectionRefs simulation = new SimulationSectionRefs(); public OceanSectionRefs ocean = new OceanSectionRefs(); public DynamicsSectionRefs dynamics = new DynamicsSectionRefs(); public PredictionSectionRefs prediction = new PredictionSectionRefs(); }
-    [Serializable] public sealed class MissionSectionRefs : UiReferenceGroupBase { public InputField csvPathInput; public Button reloadCsvButton; }
-    [Serializable] public sealed class SimulationSectionRefs : UiReferenceGroupBase { public Button applyButton; public RectTransform flightLegDrawer; }
-    [Serializable] public sealed class OceanSectionRefs : UiReferenceGroupBase { public Button drawerButton; public RectTransform oceanCurrentDrawer; public RectTransform oceanLayerContent; public RectTransform oceanLayerRowTemplate; }
-    [Serializable] public sealed class DynamicsSectionRefs : UiReferenceGroupBase { public InputField massInput; public InputField referenceAreaInput; }
-    [Serializable] public sealed class PredictionSectionRefs : UiReferenceGroupBase { public Button physicsModelButton; public Button xgBoostModelButton; }
+    [Serializable]
+    public sealed class DataInputPanelRefs : UiReferenceGroupBase
+    {
+        public RectTransform panel;
+        public Text titleText;
+        public Text statusText;
+        public RectTransform configurationPanel;
+        public MissionSectionRefs mission = new MissionSectionRefs();
+        public PredictionSectionRefs prediction = new PredictionSectionRefs();
+        public SimulationSectionRefs simulation = new SimulationSectionRefs();
+        public OceanSectionRefs ocean = new OceanSectionRefs();
+        public FlightLegSectionRefs flightLeg = new FlightLegSectionRefs();
+        public DynamicsSectionRefs dynamics = new DynamicsSectionRefs();
+    }
+
+    [Serializable]
+    public sealed class MissionSectionRefs : UiReferenceGroupBase
+    {
+        public Text csvSourceLabel;
+        public InputField csvPathInput;
+        public Button loadCsvButton;
+        public InputField missionLongitudeInput;
+        public InputField missionLatitudeInput;
+    }
+
+    [Serializable]
+    public sealed class PredictionSectionRefs : UiReferenceGroupBase
+    {
+        public Text modelLabel;
+        public RectTransform modelButtonsRoot;
+        public Button xgBoostModelButton;
+        public InputField predictionHorizonInput;
+        public Button applyPredictionConfigButton;
+        public Button predictionToggleButton;
+        public Text predictionRuntimeLabel;
+    }
+
+    [Serializable]
+    public sealed class SimulationSectionRefs : UiReferenceGroupBase
+    {
+        public InputField cyclesInput;
+        public InputField durationInput;
+        public InputField targetDepthInput;
+        public InputField waterColumnDepthInput;
+        public Text referenceCycleDurationValue;
+        public Button applyReferenceCycleButton;
+        public InputField headingInput;
+        public InputField headingDeltaInput;
+        public InputField pitchInput;
+        public InputField rollInput;
+        public Button applyButton;
+        public Button flightLegSettingsButton;
+    }
+
+    [Serializable]
+    public sealed class OceanSectionRefs : UiReferenceGroupBase
+    {
+        public InputField minDepthInput;
+        public InputField maxDepthInput;
+        public InputField eastwardInput;
+        public InputField northwardInput;
+        public Button previousLayerButton;
+        public Button nextLayerButton;
+        public Button addLayerButton;
+        public Button saveLayerButton;
+        public Button deleteLayerButton;
+        public Button lookupButton;
+        public Text layerSummaryText;
+        public Button drawerButton;
+        public RectTransform oceanCurrentDrawer;
+        public Text drawerSummaryText;
+        public Text qualitySummaryText;
+        public InputField drawerMinDepthInput;
+        public InputField drawerMaxDepthInput;
+        public InputField drawerEastwardInput;
+        public InputField drawerNorthwardInput;
+        public InputField prefetchHalfWidthInput;
+        public InputField forecastWindowInput;
+        public Text fieldSummaryText;
+        public Button onlineModeButton;
+        public Button cacheOnlyModeButton;
+        public Button localFileModeButton;
+        public Text acquisitionModeText;
+        public InputField localFileInput;
+        public Text actualSourceText;
+        public Button drawerPreviousButton;
+        public Button drawerNextButton;
+        public Button drawerAddButton;
+        public Button drawerDeleteButton;
+        public Button drawerSaveButton;
+        public Button drawerLookupButton;
+        public Text drawerStatusText;
+        public RectTransform dynamicRowsRoot;
+        public RectTransform oceanLayerRowTemplate;
+    }
+
+    [Serializable]
+    public sealed class FlightLegSectionRefs : UiReferenceGroupBase
+    {
+        public RectTransform drawer;
+        public Button closeButton;
+        public Button restoreDefaultsButton;
+        public InputField descentNetBuoyancyInput;
+        public InputField descentPitchInput;
+        public InputField descentRollInput;
+        public InputField ascentNetBuoyancyInput;
+        public InputField ascentPitchInput;
+        public InputField ascentRollInput;
+        public Text statusText;
+    }
+
+    [Serializable]
+    public sealed class DynamicsSectionRefs : UiReferenceGroupBase
+    {
+        public Button seaTrialPresetButton;
+        public Button calmWaterPresetButton;
+        public Button calibrateFromCsvButton;
+        public InputField massInput;
+        public InputField referenceAreaInput;
+        public InputField referenceLengthInput;
+        public InputField wingSpanInput;
+        public InputField meanChordInput;
+        public InputField rollInertiaInput;
+        public InputField pitchInertiaInput;
+        public InputField yawInertiaInput;
+        public InputField liftSlopeInput;
+        public InputField baseDragInput;
+        public InputField turnaroundDurationInput;
+        public InputField buoyancyExponentInput;
+        public InputField buoyancyDeadbandInput;
+        public InputField pistonHysteresisInput;
+        public InputField rollExponentInput;
+        public InputField rollDeadbandInput;
+        public InputField rollRestoringGainInput;
+        public InputField maxRollMomentInput;
+    }
 }
 ```
 
@@ -743,6 +877,104 @@ Optional:
 ```
 
 Apply `[OptionalUiReference]` only after documenting why the field is optional in a nearby comment. Do not mark buttons, input fields, dynamic content roots, or row templates optional unless the whole feature is intentionally disabled and covered by a test.
+
+Task 7 must keep this structure complete. The `DataInputPanelRefs` implementation is not allowed to stay as a demo subset. Every long-lived field currently assigned in `DataInputView.cs`, `DataInputView.OceanSection.cs`, `DataInputView.SimulationSection.cs`, `DataInputView.DynamicsSection.cs`, and `DataInputView.Layout.cs` must either:
+
+```text
+map to a serialized field in one of the refs groups above
+or be deleted from the long-lived UI path because that control moved to a dynamic row/template
+or be explicitly marked [OptionalUiReference] with a test proving the feature can be absent
+```
+
+Add an EditMode test `RuntimeUiReferences_DataInputContainsAllExistingLongLivedControls()` that compares a curated list of stable object names against the serialized refs. The list must include at least:
+
+```text
+CsvPathInput
+LoadCsvButton
+PredictionHorizonInput
+ApplyPredictionConfigButton
+PredictionToggleButton
+SimulationCyclesInput
+SimulationDurationInput
+SimulationDepthInput
+SimulationWaterColumnInput
+ReferenceCycleDurationValue
+ApplyReferenceCycleButton
+SimulationHeadingInput
+SimulationHeadingDeltaInput
+SimulationPitchInput
+SimulationRollInput
+SimulationApplyButton
+FlightLegSettingsButton
+OceanCurrentMinDepthInput
+OceanCurrentMaxDepthInput
+OceanCurrentEastwardInput
+OceanCurrentNorthwardInput
+OceanCurrentPreviousLayerButton
+OceanCurrentNextLayerButton
+OceanCurrentAddLayerButton
+OceanCurrentSaveLayerButton
+OceanCurrentDeleteLayerButton
+OceanCurrentLookupButton
+OceanCurrentLayerSummary
+MissionLongitudeInput
+MissionLatitudeInput
+OceanCurrentDrawerButton
+MissionConfigurationStatus
+OceanCurrentDrawerPanel
+OceanCurrentDrawerSummary
+OceanCurrentQualitySummary
+OceanCurrentDrawerMinDepthInput
+OceanCurrentDrawerMaxDepthInput
+OceanCurrentDrawerEastwardInput
+OceanCurrentDrawerNorthwardInput
+OceanCurrentPrefetchHalfWidthInput
+OceanCurrentForecastWindowInput
+OceanCurrentFieldSummary
+OceanCurrentOnlineModeButton
+OceanCurrentCacheOnlyModeButton
+OceanCurrentLocalFileModeButton
+OceanCurrentAcquisitionMode
+OceanCurrentLocalFileInput
+OceanCurrentActualSource
+OceanCurrentDrawerPreviousButton
+OceanCurrentDrawerNextButton
+OceanCurrentDrawerAddButton
+OceanCurrentDrawerDeleteButton
+OceanCurrentDrawerSaveButton
+OceanCurrentDrawerLookupButton
+DynamicsSeaTrialPresetButton
+DynamicsCalmWaterPresetButton
+DynamicsCalibrateFromCsvButton
+DynamicsMassInput
+DynamicsReferenceAreaInput
+DynamicsReferenceLengthInput
+DynamicsWingSpanInput
+DynamicsMeanChordInput
+DynamicsRollInertiaInput
+DynamicsPitchInertiaInput
+DynamicsYawInertiaInput
+DynamicsLiftSlopeInput
+DynamicsBaseDragInput
+DynamicsTurnaroundDurationInput
+DynamicsBuoyancyExponentInput
+DynamicsBuoyancyDeadbandInput
+DynamicsPistonHysteresisInput
+DynamicsRollExponentInput
+DynamicsRollDeadbandInput
+DynamicsRollRestoringGainInput
+DynamicsMaxRollMomentInput
+OceanCurrentDrawerStatus
+FlightLegDrawerPanel
+FlightLegRestoreDefaultsButton
+DescentNetBuoyancyInput
+DescentPitchInput
+DescentRollInput
+AscentNetBuoyancyInput
+AscentPitchInput
+AscentRollInput
+FlightLegDrawerStatus
+```
 
 Create `RuntimeUiRoot.cs`:
 
@@ -1083,6 +1315,29 @@ public void UiFactory_DoesNotUseUnrelatedGlobalCanvas()
     Assert.That(canvas, Is.Not.SameAs(unrelated));
     Assert.That(canvas.transform.parent, Is.EqualTo(owner));
 }
+
+[Test]
+public void ClearDynamicRuntimeUi_DoesNotDestroyRowTemplate()
+{
+    var view = scope.CreateRoot("DataInput").AddComponent<DataInputView>();
+    var contentRoot = new GameObject("OceanLayerContent").AddComponent<RectTransform>();
+    contentRoot.transform.SetParent(view.transform, false);
+    var template = new GameObject("OceanCurrentLayerRowTemplate").AddComponent<RectTransform>();
+    template.transform.SetParent(contentRoot.transform, false);
+    var dynamicRows = new GameObject("DynamicRowsRoot").AddComponent<RectTransform>();
+    dynamicRows.transform.SetParent(contentRoot.transform, false);
+    var dynamicRow = new GameObject("OceanCurrentLayerRow1").AddComponent<RectTransform>();
+    dynamicRow.transform.SetParent(dynamicRows.transform, false);
+    var refs = new DataInputPanelRefs();
+    refs.ocean.oceanLayerRowTemplate = template;
+    refs.ocean.dynamicRowsRoot = dynamicRows;
+
+    view.BindDynamicContainersForTests(refs);
+    view.ClearDynamicRuntimeUi();
+
+    Assert.That(template, Is.Not.Null);
+    Assert.That(dynamicRows.childCount, Is.EqualTo(0));
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1164,7 +1419,7 @@ private void ClearDynamicRuntimeUi()
     bottomDrawerScrollRect = null;
     bottomDrawerToggleButton = null;
     oceanCurrentModalCanvas = null;
-    ClearChildren(dynamicContentRoot);
+    ClearChildren(dynamicRowsRoot);
 }
 
 private static void ClearChildren(Transform root)
@@ -1189,7 +1444,24 @@ private static void ClearChildren(Transform root)
 }
 ```
 
-Add `private Transform dynamicContentRoot;` and assign it to the old runtime panel only in fallback mode. Prefab-bound mode assigns it to row/content containers supplied by refs.
+Add `private Transform dynamicRowsRoot;` and assign it only to a named runtime rows container:
+
+```text
+OceanLayerContent
+├── OceanCurrentLayerRowTemplate
+└── DynamicRowsRoot
+```
+
+Prefab-bound mode sets `dynamicRowsRoot = refs.ocean.dynamicRowsRoot`. Fallback mode may create the same `DynamicRowsRoot` child next to the template. Do not assign `dynamicRowsRoot` to `OceanLayerContent` or to any parent that owns `OceanCurrentLayerRowTemplate`.
+
+Add an internal test-only helper guarded with `#if UNITY_INCLUDE_TESTS`:
+
+```csharp
+internal void BindDynamicContainersForTests(DataInputPanelRefs refs)
+{
+    dynamicRowsRoot = refs.ocean.dynamicRowsRoot;
+}
+```
 
 - [ ] **Step 6: Run EditMode tests**
 
@@ -1275,7 +1547,7 @@ public void EditableUiSceneBuilder_BuildWelcomeScenePreservesExistingVisualOverr
         var title = GameObject.Find("TitleText").GetComponent<Text>();
         var panel = GameObject.Find("LaunchPanel").GetComponent<Image>();
         var panelRect = panel.GetComponent<RectTransform>();
-        title.text = "自定义欢迎标题";
+        title.text = "Custom Welcome Title";
         title.fontSize = 41;
         panel.color = new Color(0.40f, 0.10f, 0.70f, 0.90f);
         panelRect.anchorMin = new Vector2(0.20f, 0.10f);
@@ -1291,7 +1563,7 @@ public void EditableUiSceneBuilder_BuildWelcomeScenePreservesExistingVisualOverr
         panel = GameObject.Find("LaunchPanel").GetComponent<Image>();
         panelRect = panel.GetComponent<RectTransform>();
 
-        Assert.That(title.text, Is.EqualTo("自定义欢迎标题"));
+        Assert.That(title.text, Is.EqualTo("Custom Welcome Title"));
         Assert.That(title.fontSize, Is.EqualTo(41));
         Assert.That(panel.color, Is.EqualTo(new Color(0.40f, 0.10f, 0.70f, 0.90f)));
         Assert.That(panelRect.anchorMin, Is.EqualTo(new Vector2(0.20f, 0.10f)));
@@ -1394,6 +1666,7 @@ Create `EditableUiSceneBuilder.cs` with a menu item and callable method:
 
 ```csharp
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -1408,8 +1681,9 @@ namespace UnderwaterGliderTwin.Editor
         [MenuItem("UnderwaterGliderTwin/UI/Rebuild Welcome UI")]
         public static void BuildWelcomeScene()
         {
-            EnsureNoUnsavedSceneChanges("Welcome UI rebuild");
-            var scene = EditorSceneManager.OpenScene("Assets/Scenes/Welcome.unity");
+            const string scenePath = "Assets/Scenes/Welcome.unity";
+            EnsureNoUnsavedSceneChanges(scenePath, "Welcome UI rebuild");
+            var scene = EditorSceneManager.OpenScene(scenePath);
             var bootstrapObject = GameObject.Find("WelcomeBootstrap") ?? new GameObject("WelcomeBootstrap");
             var bootstrap = bootstrapObject.GetComponent<WelcomeBootstrap>() ?? bootstrapObject.AddComponent<WelcomeBootstrap>();
             var canvasObject = GameObject.Find("WelcomeCanvas") ?? new GameObject("WelcomeCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -1424,8 +1698,16 @@ namespace UnderwaterGliderTwin.Editor
             EditorSceneManager.SaveScene(scene);
         }
 
-        private static void EnsureNoUnsavedSceneChanges(string operationName)
+        private static void EnsureNoUnsavedSceneChanges(string targetScenePath, string operationName)
         {
+            foreach (var openScene in GetOpenScenes())
+            {
+                if (openScene.isDirty && (openScene.path == targetScenePath || openScene == EditorSceneManager.GetActiveScene()))
+                {
+                    throw new InvalidOperationException(operationName + " cancelled because scene has unsaved changes: " + openScene.path);
+                }
+            }
+
             if (Application.isBatchMode && EditorSceneManager.GetActiveScene().isDirty)
             {
                 throw new InvalidOperationException(operationName + " cancelled because the active scene has unsaved changes. Save or revert the scene before running the batch builder.");
@@ -1438,6 +1720,14 @@ namespace UnderwaterGliderTwin.Editor
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
             {
                 throw new InvalidOperationException(operationName + " cancelled because there are unsaved scene changes.");
+            }
+        }
+
+        private static IEnumerable<UnityEngine.SceneManagement.Scene> GetOpenScenes()
+        {
+            for (var index = 0; index < UnityEngine.SceneManagement.SceneManager.sceneCount; index++)
+            {
+                yield return UnityEngine.SceneManagement.SceneManager.GetSceneAt(index);
             }
         }
 
@@ -1477,12 +1767,12 @@ namespace UnderwaterGliderTwin.Editor
         {
             GetOrCreateImage(canvas, "BackgroundImage", Vector2.zero, Vector2.one, new Color(0.025f, 0.12f, 0.18f));
             var panel = GetOrCreateImage(canvas, "LaunchPanel", new Vector2(0.10f, 0.08f), new Vector2(0.90f, 0.92f), new Color(0.03f, 0.12f, 0.22f, 0.98f));
-            GetOrCreateText(panel.transform, "TitleText", "水下滑翔机数字孪生", 34, new Vector2(0.08f, 0.83f), new Vector2(0.92f, 0.96f));
-            GetOrCreateText(panel.transform, "DescriptionText", "CSV 遥测回放、参数化任务仿真与实验性短时预测", 18, new Vector2(0.08f, 0.73f), new Vector2(0.92f, 0.83f));
+            GetOrCreateText(panel.transform, "TitleText", "Underwater Glider Digital Twin", 34, new Vector2(0.08f, 0.83f), new Vector2(0.92f, 0.96f));
+            GetOrCreateText(panel.transform, "DescriptionText", "CSV replay, simulation, and short-horizon prediction", 18, new Vector2(0.08f, 0.73f), new Vector2(0.92f, 0.83f));
             var csvInput = GetOrCreateInput(panel.transform, "CsvPathInput", new Vector2(0.08f, 0.58f), new Vector2(0.72f, 0.67f));
-            var confirm = GetOrCreateButton(panel.transform, "ConfirmCsvButton", "确认 CSV 路径", new Vector2(0.74f, 0.58f), new Vector2(0.92f, 0.67f));
-            var start = GetOrCreateButton(panel.transform, "StartCsvButton", "开始上次 / 默认 CSV", new Vector2(0.08f, 0.43f), new Vector2(0.48f, 0.53f));
-            var simulation = GetOrCreateButton(panel.transform, "SimulationButton", "进入仿真模式", new Vector2(0.52f, 0.43f), new Vector2(0.92f, 0.53f));
+            var confirm = GetOrCreateButton(panel.transform, "ConfirmCsvButton", "Confirm CSV Path", new Vector2(0.74f, 0.58f), new Vector2(0.92f, 0.67f));
+            var start = GetOrCreateButton(panel.transform, "StartCsvButton", "Start CSV Replay", new Vector2(0.08f, 0.43f), new Vector2(0.48f, 0.53f));
+            var simulation = GetOrCreateButton(panel.transform, "SimulationButton", "Enter Simulation", new Vector2(0.52f, 0.43f), new Vector2(0.92f, 0.53f));
             var status = GetOrCreateText(panel.transform, "LaunchStatusText", string.Empty, 15, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.30f));
             return new WelcomeUiBuildRefs(csvInput, status, confirm, start, simulation);
         }
@@ -1613,6 +1903,93 @@ public void MainScene_LongLivedPanelsArePrefabInstances()
         }
     }
 }
+
+[Test]
+public void MainScene_LongLivedPanelsAreUnderRuntimeCanvasWithExpectedPrefabSources()
+{
+    var previous = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path;
+    try
+    {
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+        var runtimeCanvas = GameObject.Find("RuntimeCanvas").transform;
+        AssertPanelUnderCanvasWithSource("DashboardPanel", runtimeCanvas, "Assets/UI/Prefabs/DashboardPanel.prefab");
+        AssertPanelUnderCanvasWithSource("StatusPanel", runtimeCanvas, "Assets/UI/Prefabs/StatusPanel.prefab");
+        AssertPanelUnderCanvasWithSource("DataInputPanel", runtimeCanvas, "Assets/UI/Prefabs/DataInputPanel.prefab");
+        AssertPanelUnderCanvasWithSource("PlaybackControlsPanel", runtimeCanvas, "Assets/UI/Prefabs/PlaybackControlsPanel.prefab");
+        AssertPanelUnderCanvasWithSource("OceanCommandToolbar", runtimeCanvas, "Assets/UI/Prefabs/OceanCommandToolbar.prefab");
+    }
+    finally
+    {
+        if (!string.IsNullOrEmpty(previous))
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+        }
+    }
+}
+
+private static void AssertPanelUnderCanvasWithSource(string panelName, Transform runtimeCanvas, string expectedPrefabPath)
+{
+    var panel = GameObject.Find(panelName);
+    Assert.That(panel, Is.Not.Null);
+    Assert.That(panel.transform.parent, Is.EqualTo(runtimeCanvas));
+    var source = UnityEditor.PrefabUtility.GetCorrespondingObjectFromSource(panel);
+    Assert.That(UnityEditor.AssetDatabase.GetAssetPath(source), Is.EqualTo(expectedPrefabPath));
+}
+
+[Test]
+public void EditableUiSceneBuilder_BuildMainSceneRejectsSameNameNonPrefabPanel()
+{
+    var previous = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path;
+    try
+    {
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+        var canvas = GameObject.Find("RuntimeCanvas") ?? new GameObject("RuntimeCanvas", typeof(Canvas));
+        var dashboard = new GameObject("DashboardPanel");
+        dashboard.transform.SetParent(canvas.transform, false);
+        UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+
+        var ex = Assert.Throws<System.InvalidOperationException>(() => EditableUiSceneBuilder.BuildMainScene());
+
+        Assert.That(ex.Message, Does.Contain("same-name non-Prefab"));
+    }
+    finally
+    {
+        if (!string.IsNullOrEmpty(previous))
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+        }
+    }
+}
+
+[Test]
+public void EditableUiSceneBuilder_BuildMainScenePreservesExistingPrefabInstanceOverrides()
+{
+    var previous = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path;
+    try
+    {
+        EditableUiSceneBuilder.BuildMainScene();
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+        var panel = GameObject.Find("DashboardPanel").GetComponent<RectTransform>();
+        panel.anchoredPosition = new Vector2(123f, -456f);
+        panel.sizeDelta = new Vector2(777f, 333f);
+        UnityEditor.EditorUtility.SetDirty(panel);
+        UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+
+        EditableUiSceneBuilder.BuildMainScene();
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+        panel = GameObject.Find("DashboardPanel").GetComponent<RectTransform>();
+
+        Assert.That(panel.anchoredPosition, Is.EqualTo(new Vector2(123f, -456f)));
+        Assert.That(panel.sizeDelta, Is.EqualTo(new Vector2(777f, 333f)));
+    }
+    finally
+    {
+        if (!string.IsNullOrEmpty(previous))
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+        }
+    }
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1621,7 +1998,7 @@ Run the EditMode command. Expected: assertion failure because `Main.unity` has n
 
 - [ ] **Step 3: Extend editor builder**
 
-Add `BuildMainScene()` menu item and method. It calls `EnsureNoUnsavedSceneChanges("Main UI rebuild")`, opens `Assets/Scenes/Main.unity`, creates or reuses `RuntimeUiRoot`, creates or reuses `RuntimeCanvas` with `CanvasScaler` reference resolution `1920x1080`, ensures the required child objects exist once, adds `RuntimeUiRoot` component, assigns serialized fields through `SerializedObject`, and saves the scene.
+Add `BuildMainScene()` menu item and method. It calls `EnsureNoUnsavedSceneChanges("Assets/Scenes/Main.unity", "Main UI rebuild")`, opens `Assets/Scenes/Main.unity`, creates or reuses `RuntimeUiRoot`, creates or reuses `RuntimeCanvas` with `CanvasScaler` reference resolution `1920x1080`, ensures the required child objects exist once, adds `RuntimeUiRoot` component, assigns serialized fields through `SerializedObject`, and saves the scene.
 
 When `BuildMainScene()` first creates the root in Task 5, assign `enabledPanelValidationMask = RuntimeUiPanelFlags.None`. Task 6 updates the scene value to `Dashboard | Status | Playback | OceanToolbar`; Task 7 updates it to include `DataInput`.
 
@@ -1641,18 +2018,34 @@ RuntimeUiRoot
     └── ModalRoot
 ```
 
-- [ ] **Step 4: Create base Prefabs**
+- [ ] **Step 4: Create or reuse base Prefabs safely**
 
-Use the builder to create Prefab assets with this exact flow for each long-lived panel:
+Use the builder with this exact flow for each long-lived panel:
 
 ```text
-Create temporary panel root outside RuntimeCanvas
-Save it with PrefabUtility.SaveAsPrefabAsset
-Destroy the temporary panel root
-Delete any existing non-Prefab scene object with the same panel name
-Instantiate the saved Prefab with PrefabUtility.InstantiatePrefab
-Parent the Prefab instance under RuntimeCanvas
-Reset RectTransform anchors, position, size, and sibling order
+If Prefab asset is missing:
+  create temporary panel root outside RuntimeCanvas
+  apply default visual/layout values to the temporary root
+  save it with PrefabUtility.SaveAsPrefabAsset
+  destroy the temporary panel root
+
+If Prefab asset exists:
+  do not call PrefabUtility.SaveAsPrefabAsset
+  do not modify Prefab contents or importer state
+
+If scene instance with the panel name is missing:
+  instantiate the Prefab with PrefabUtility.InstantiatePrefab
+  parent the new instance under RuntimeCanvas
+  apply default RectTransform anchors, position, size, and sibling order only to this new instance
+
+If scene instance exists and is a connected Prefab instance:
+  ensure it is under RuntimeCanvas
+  ensure required components/references exist
+  do not reset RectTransform, color, text, sprite, font, or Prefab instance overrides
+
+If scene object exists with the same panel name but is not a connected Prefab instance:
+  throw InvalidOperationException with the object path and panel name
+  do not delete, move, or replace it during normal BuildMainScene()
 ```
 
 Keep these stable names:
@@ -1834,7 +2227,7 @@ git commit -m "feat: bind base UI panels from editable refs"
 **Interfaces:**
 - Consumes: `DataInputPanelRefs`
 - Produces: `DataInputView.Bind(DataInputPanelRefs refs, string csvPath, SimulationProfile profile, PredictionController prediction, Action<string> reloadCsv, Action<SimulationProfile> reloadSimulation, Action<OceanCurrentProfile> applyOceanCurrent)`
-- Produces: dynamic row creation under `refs.ocean.oceanLayerContent` using `refs.ocean.oceanLayerRowTemplate`
+- Produces: dynamic row creation under `refs.ocean.dynamicRowsRoot` using `refs.ocean.oceanLayerRowTemplate`
 - Produces: `OceanCurrentLayerRowView.Bind(int index, OceanCurrentLayer layer, Action<int> onEdit, Action<int> onRemove)`
 
 - [ ] **Step 1: Generate the required DataInput reference inventory**
@@ -1847,21 +2240,75 @@ Select-String -Path 'UnderwaterGliderTwin\Assets\Scripts\UI\DataInputView*.cs' -
 
 Update `RuntimeUiReferences.cs` so `MissionSectionRefs`, `SimulationSectionRefs`, `OceanSectionRefs`, `DynamicsSectionRefs`, and `PredictionSectionRefs` contain a field for every long-lived UI control from that inventory. The migration is not complete until all existing buttons, inputs, sliders, status texts, drawer roots, content roots, and row templates have refs or are explicitly classified as dynamic row internals.
 
-- [ ] **Step 2: Add failing DataInput binding test**
+- [ ] **Step 2: Add failing DataInput completeness and binding tests**
 
-Create a minimal refs object with CSV input, reload button, apply button, ocean drawer button, and row template. Call `Bind(...)` and assert that input text and button listeners work.
+Create a complete refs object using helper methods for every required field in `DataInputPanelRefs`. First call `refs.CollectReferenceIssues(...)` and assert it is empty; then call `Bind(...)` and assert that CSV input, simulation apply, prediction controls, ocean drawer controls, flight leg drawer controls, dynamics buttons, and row template behavior are wired.
+
+Also add the curated-name test from Task 2:
 
 ```csharp
 [Test]
-public void DataInputView_BindsExistingCsvInputAndReloadButton()
+public void RuntimeUiReferences_DataInputContainsAllExistingLongLivedControls()
+{
+    var requiredNames = new[]
+    {
+        "CsvPathInput",
+        "LoadCsvButton",
+        "PredictionHorizonInput",
+        "ApplyPredictionConfigButton",
+        "PredictionToggleButton",
+        "SimulationCyclesInput",
+        "SimulationDurationInput",
+        "SimulationDepthInput",
+        "SimulationWaterColumnInput",
+        "ReferenceCycleDurationValue",
+        "ApplyReferenceCycleButton",
+        "SimulationHeadingInput",
+        "SimulationHeadingDeltaInput",
+        "SimulationPitchInput",
+        "SimulationRollInput",
+        "SimulationApplyButton",
+        "FlightLegSettingsButton",
+        "OceanCurrentMinDepthInput",
+        "OceanCurrentMaxDepthInput",
+        "OceanCurrentEastwardInput",
+        "OceanCurrentNorthwardInput",
+        "OceanCurrentAddLayerButton",
+        "OceanCurrentSaveLayerButton",
+        "OceanCurrentDeleteLayerButton",
+        "OceanCurrentDrawerPanel",
+        "OceanCurrentDrawerLookupButton",
+        "DynamicsMassInput",
+        "DynamicsReferenceAreaInput",
+        "DynamicsMaxRollMomentInput",
+        "FlightLegDrawerPanel",
+        "DescentNetBuoyancyInput",
+        "AscentNetBuoyancyInput",
+        "FlightLegDrawerStatus"
+    };
+
+    var refs = CreateCompleteDataInputRefs();
+
+    Assert.That(GetAssignedObjectNames(refs), Is.SupersetOf(requiredNames));
+    var issues = new List<UiReferenceIssue>();
+    refs.CollectReferenceIssues(null, "DataInputPanel.prefab", "references.dataInput", issues);
+    Assert.That(issues, Is.Empty);
+}
+```
+
+`CreateCompleteDataInputRefs()` must populate every non-optional field from the full `DataInputPanelRefs` structure, not only the fields used by this test.
+
+```csharp
+[Test]
+public void DataInputView_BindsExistingCsvInputAndLoadButton()
 {
     var panel = new GameObject("DataInputPanel").AddComponent<RectTransform>();
     var input = CreateInput(panel.transform, "CsvPathInput");
-    var reload = CreateButton(panel.transform, "ReloadCsvButton");
+    var reload = CreateButton(panel.transform, "LoadCsvButton");
     var refs = new DataInputPanelRefs();
     refs.panel = panel;
     refs.mission.csvPathInput = input;
-    refs.mission.reloadCsvButton = reload;
+    refs.mission.loadCsvButton = reload;
     var requestedPath = string.Empty;
     var view = new GameObject("DataInput").AddComponent<DataInputView>();
 
@@ -1886,8 +2333,8 @@ Implement `Bind(...)` to assign callbacks and refs, initialize text fields, buil
 Remove calls that delete `transform` children in Prefab-bound mode. Limit cleanup to dynamic containers:
 
 ```csharp
-ClearChildren(refs.ocean.oceanLayerContent);
 HideRowTemplate(refs.ocean.oceanLayerRowTemplate);
+ClearChildren(refs.ocean.dynamicRowsRoot);
 ```
 
 - [ ] **Step 6: Add row binding component**
@@ -2019,7 +2466,7 @@ Use existing UI test helpers when available; otherwise add local `CreateText(Tra
 For ocean layers, instantiate:
 
 ```csharp
-var row = Instantiate(refs.ocean.oceanLayerRowTemplate, refs.ocean.oceanLayerContent);
+var row = Instantiate(refs.ocean.oceanLayerRowTemplate, refs.ocean.dynamicRowsRoot);
 row.gameObject.SetActive(true);
 row.name = $"OceanCurrentLayerRow{index + 1}";
 row.GetComponent<OceanCurrentLayerRowView>().Bind(index, layer, EditOceanLayer, RemoveOceanLayer);
@@ -2421,6 +2868,7 @@ Spec coverage:
 
 - UI root ownership is covered by Tasks 2, 5, 9, and 10.
 - `ClearRuntimeUi()` safety is covered by Tasks 3 and 7.
+- RowTemplate cleanup safety is covered by Task 3's `ClearDynamicRuntimeUi_DoesNotDestroyRowTemplate` test and Task 7's `DynamicRowsRoot` row creation rule.
 - `EnsureCanvas()` fallback restriction is covered by Task 3.
 - Welcome editable scene is covered by Task 4.
 - Main editable root and Prefabs are covered by Task 5.
@@ -2430,14 +2878,17 @@ Spec coverage:
 - EditMode, PlayMode, dual runtime uniqueness, and Prefab edit acceptance are covered by Task 9.
 - Production removal of long-lived runtime creation is covered by Task 10.
 - Prefab instance replacement is covered by Task 5.
-- Complete base-panel refs are covered by Task 2, and complete DataInput refs are enforced by Task 7's inventory step.
+- Main Builder non-overwrite behavior is covered by Task 5 tests for same-name non-Prefab rejection and existing Prefab instance override preservation.
+- Complete base-panel refs are covered by Task 2, and complete DataInput refs are enforced by the full `DataInputPanelRefs` structure, the curated long-lived control name test, and Task 7 completeness tests.
 - Canvas fallback no longer uses global `FindObjectOfType<Canvas>()`; Task 3 uses explicit fallback Canvas or parent-chain Canvas only.
 - Scoped test cleanup is covered by Task 1 and Task 3.
+- Scene and PlayMode object lookup must be scoped to the active scene or `RuntimeUiRoot` subtree, covered by global constraints and Task 8 scene-scoped modal assertions.
 - Duplicate Canvas, duplicate EventSystem, and duplicate long-lived UI detection are covered by Task 2 and Task 9.
 - Static fallback state isolation is covered by Task 1, Task 2, Task 3, and Task 4.
 - `DashboardView` refresh uses the real existing `OnFrameChanged(...)` path through `RefreshFromCurrentFrame()`, covered by Task 6.
 - Builder idempotency and dual-resolution screenshots are covered by Task 9.
 - Builder preservation of user-authored Inspector overrides is covered by Task 4 tests, Task 5 builder rules, and Task 9 manual rebuild acceptance.
+- Builder target-scene dirty checks are covered by the updated `EnsureNoUnsavedSceneChanges(targetScenePath, operationName)` contract in Task 4 and reused by Task 5.
 - Staged reference validation is covered by Tasks 1, 2, and 10 through `RuntimeUiValidationProfile.BootstrapOnly`, `EnabledPanels`, and `Strict`.
 - `EnabledPanels` validation uses explicit `RuntimeUiPanelFlags` instead of `activeInHierarchy`, covered by Tasks 1, 2, 5, 6, 7, and 10.
 - Mask behavior is explicitly tested for `None`, single-panel `EnabledPanels`, and `Strict` all-required validation in Task 2.
@@ -2452,7 +2903,9 @@ Spec coverage:
 - Dynamic row `Bind(...)` null-reference protection and null callback protection are covered by Task 7 tests.
 - Modal/drawer tests use `UiTestObjectScope` and scene-scoped object counting instead of global `GameObject.Find(...)`, covered by Task 8.
 - `UiReferenceValidator.Require(...)` handles null owner, null prefab name, and null field name, covered by Task 1.
+- `UiReferenceValidator.Require(...)` uses `UnityEngine.Object` explicitly to avoid `System.Object` ambiguity, covered by Task 1.
 - Optional UI references use `[OptionalUiReference]`, require documented classification, and do not block strict validation, covered by Tasks 1, 2, and 10.
+- UTF-8/code-snippet compile risk is controlled by ASCII-safe tests and explicit localization guidance, covered by global constraints and Task 4 builder examples.
 - Final manual acceptance covers Welcome CSV, simulation launch, playback controls, simulation parameter apply, ocean current drawer rows, flight leg drawer, and prediction enabled/disabled states in Task 9.
 
 Placeholder scan:
