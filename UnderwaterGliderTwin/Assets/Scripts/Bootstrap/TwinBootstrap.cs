@@ -174,33 +174,57 @@ namespace UnderwaterGliderTwin.Bootstrap
             var screenshotCapture = gameObject.AddComponent<RuntimeScreenshotCapture>();
             screenshotCapture.Initialize(screenshotOptions);
 
-            var canvasRoot = new GameObject("RuntimeUI");
-            var dataInput = canvasRoot.AddComponent<DataInputView>();
-            dataInput.Initialize(
-                CurrentCsvPath,
-                RuntimeDataSourceState.SimulationProfile,
-                prediction,
-                ReloadFromCsvPath,
-                ReloadFromSimulationProfile,
-                oceanVolume != null ? oceanVolume.UpdateCurrentProfile : null);
-            canvasRoot.AddComponent<DashboardView>().Initialize(PlaybackController, prediction);
-            canvasRoot.AddComponent<StatusPanelView>().Initialize(PlaybackController, AlarmEvaluator, Logger, prediction);
-            canvasRoot.AddComponent<OceanCommandToolbarView>().Initialize(cameraController, trajectoryView);
-            canvasRoot.AddComponent<PlaybackControlsView>().Initialize(PlaybackController, cameraController, environment, trajectoryView,
-                onScreenshotRequested: screenshotCapture.CaptureManual,
-                onMissionViewRequested: () =>
-                {
-                    if (RuntimeDataSourceState.CurrentMode != RuntimeDataSourceMode.Simulation)
+            var canvasRoot = runtimeUiRoot != null ? runtimeUiRoot.gameObject : new GameObject("RuntimeUI");
+            if (runtimeUiRoot != null)
+            {
+                var refs = runtimeUiRoot.References;
+                canvasRoot.AddComponent<DashboardView>().Bind(refs.dashboard, PlaybackController, prediction);
+                canvasRoot.AddComponent<StatusPanelView>().Bind(refs.status, PlaybackController, AlarmEvaluator, Logger, prediction);
+                canvasRoot.AddComponent<OceanCommandToolbarView>().Bind(refs.oceanToolbar, cameraController, trajectoryView);
+                canvasRoot.AddComponent<PlaybackControlsView>().Bind(refs.playback, PlaybackController, cameraController, environment, trajectoryView,
+                    onScreenshotRequested: screenshotCapture.CaptureManual,
+                    onMissionViewRequested: () =>
                     {
-                        cameraController.SetMode(CameraMode.Global);
-                        trajectoryView.SetCameraMode(CameraMode.Global);
-                        return;
-                    }
+                        if (RuntimeDataSourceState.CurrentMode != RuntimeDataSourceMode.Simulation)
+                        {
+                            cameraController.SetMode(CameraMode.Global);
+                            trajectoryView.SetCameraMode(CameraMode.Global);
+                            return;
+                        }
 
-                    cameraController.SetMissionVolumeView(RuntimeDataSourceState.SimulationProfile.TargetDepthM, missionHorizontalExtents, missionDepthScale);
-                    trajectoryView.SetCameraMode(CameraMode.Global);
-                });
-            dataInput.BringConfigurationToFront();
+                        cameraController.SetMissionVolumeView(RuntimeDataSourceState.SimulationProfile.TargetDepthM, missionHorizontalExtents, missionDepthScale);
+                        trajectoryView.SetCameraMode(CameraMode.Global);
+                    });
+            }
+            else
+            {
+                var dataInput = canvasRoot.AddComponent<DataInputView>();
+                dataInput.Initialize(
+                    CurrentCsvPath,
+                    RuntimeDataSourceState.SimulationProfile,
+                    prediction,
+                    ReloadFromCsvPath,
+                    ReloadFromSimulationProfile,
+                    oceanVolume != null ? oceanVolume.UpdateCurrentProfile : null);
+                canvasRoot.AddComponent<DashboardView>().Initialize(PlaybackController, prediction);
+                canvasRoot.AddComponent<StatusPanelView>().Initialize(PlaybackController, AlarmEvaluator, Logger, prediction);
+                canvasRoot.AddComponent<OceanCommandToolbarView>().Initialize(cameraController, trajectoryView);
+                canvasRoot.AddComponent<PlaybackControlsView>().Initialize(PlaybackController, cameraController, environment, trajectoryView,
+                    onScreenshotRequested: screenshotCapture.CaptureManual,
+                    onMissionViewRequested: () =>
+                    {
+                        if (RuntimeDataSourceState.CurrentMode != RuntimeDataSourceMode.Simulation)
+                        {
+                            cameraController.SetMode(CameraMode.Global);
+                            trajectoryView.SetCameraMode(CameraMode.Global);
+                            return;
+                        }
+
+                        cameraController.SetMissionVolumeView(RuntimeDataSourceState.SimulationProfile.TargetDepthM, missionHorizontalExtents, missionDepthScale);
+                        trajectoryView.SetCameraMode(CameraMode.Global);
+                    });
+                dataInput.BringConfigurationToFront();
+            }
 
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
             {

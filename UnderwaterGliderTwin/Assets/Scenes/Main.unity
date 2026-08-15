@@ -573,7 +573,7 @@ MonoBehaviour:
   rowsPerSecond: 120
   horizontalScale: 0.0025
   depthScale: 0.05
-  runtimeUiRoot: {fileID: 0}
+  runtimeUiRoot: {fileID: 1780013916}
   allowRuntimeFallback: 0
   strictUiValidation: 0
 --- !u!1001 &1027444277

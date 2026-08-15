@@ -3,6 +3,7 @@ using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 using UnderwaterGliderTwin.Logging;
@@ -23,6 +24,14 @@ namespace UnderwaterGliderTwin.Tests
         [SetUp]
         public void SetUp()
         {
+            var activeScene = SceneManager.GetActiveScene();
+            if (activeScene.path == "Assets/Scenes/Main.unity" || activeScene.path == "Assets/Scenes/Welcome.unity")
+            {
+                UnityEditor.SceneManagement.EditorSceneManager.NewScene(
+                    UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
+                    UnityEditor.SceneManagement.NewSceneMode.Single);
+            }
+
             RuntimeUiFallback.Reset();
             RuntimeUiFallback.AllowRuntimeFallback = true;
             LogAssert.ignoreFailingMessages = true;
@@ -65,6 +74,68 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(FindText("VelocityXValue").text, Is.EqualTo("0.00 m/s"));
             Assert.That(FindText("VelocityYValue").text, Is.EqualTo("0.00 m/s"));
             Assert.That(FindText("VelocityZValue").text, Is.EqualTo("0.00 m/s"));
+        }
+
+        [Test]
+        public void DashboardView_BindsExistingTelemetryText()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
+            var root = new GameObject("DashboardPanel", typeof(RectTransform));
+            var depth = CreateText(root.transform, "DepthValue");
+            var battery = CreateText(root.transform, "BatteryValue");
+            var refs = new DashboardPanelRefs { panel = root.GetComponent<RectTransform>(), depthValue = depth, batteryValue = battery };
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Bind(refs, playback, prediction);
+
+            Assert.That(depth.text, Is.EqualTo("10.0 m"));
+            Assert.That(battery.text, Is.EqualTo("15 %"));
+        }
+
+        [Test]
+        public void StatusPanelView_BindsExistingStatusText()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
+            var root = new GameObject("StatusPanel", typeof(RectTransform));
+            var mission = CreateText(root.transform, "MissionValue");
+            var battery = CreateText(root.transform, "BatteryValue");
+            var refs = new StatusPanelRefs { panel = root.GetComponent<RectTransform>(), missionValue = mission, batteryValue = battery };
+            var status = new GameObject("Status").AddComponent<StatusPanelView>();
+
+            status.Bind(refs, playback, new AlarmEvaluator(1000f, 1f, 90f), null, prediction);
+
+            Assert.That(mission.text, Is.Not.Empty);
+            Assert.That(battery.text, Is.EqualTo("15 %"));
+        }
+
+        [Test]
+        public void OceanCommandToolbarView_BindsExistingCommandReferences()
+        {
+            var visibleCount = new GameObject("VisibleArrowCount", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
+            var follow = new GameObject("CameraFollowCommand", typeof(RectTransform), typeof(Button)).GetComponent<Button>();
+            var refs = new OceanToolbarRefs { visibleArrowCount = visibleCount, cameraFollowCommand = follow };
+            var toolbar = new GameObject("OceanToolbar").AddComponent<OceanCommandToolbarView>();
+
+            toolbar.Bind(refs, null, null);
+
+            Assert.That(visibleCount, Is.Not.Null);
+            Assert.That(follow.onClick, Is.Not.Null);
+        }
+
+        [Test]
+        public void PlaybackControlsView_BindsExistingPlaybackReferences()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var play = new GameObject("PlayPauseButton", typeof(RectTransform), typeof(Button)).GetComponent<Button>();
+            var refs = new PlaybackControlsRefs { panel = new GameObject("PlaybackPanel", typeof(RectTransform)).GetComponent<RectTransform>(), playPauseButton = play };
+            var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
+
+            controls.Bind(refs, playback, null, null, null);
+            play.onClick.Invoke();
+
+            Assert.That(playback.Model.IsPlaying, Is.True);
         }
 
         [Test]
@@ -1597,6 +1668,13 @@ namespace UnderwaterGliderTwin.Tests
 
                 CollectChildrenNamed(child, name, matches);
             }
+        }
+
+        private static Text CreateText(Transform parent, string name)
+        {
+            var textObject = new GameObject(name, typeof(RectTransform), typeof(Text));
+            textObject.transform.SetParent(parent, false);
+            return textObject.GetComponent<Text>();
         }
 
         private static PlaybackController CreatePlayback(IReadOnlyList<TelemetryFrame> frames)

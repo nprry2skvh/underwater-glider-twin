@@ -38,6 +38,7 @@ namespace UnderwaterGliderTwin.UI
         private Text missionHealthValue;
         private string lastAlarmMessage;
         private readonly List<GameObject> predictionMetricRows = new List<GameObject>();
+        private bool minimalBoundReferences;
 
         public void Initialize(PlaybackController playbackController, AlarmEvaluator evaluator, TwinLogger twinLogger, PredictionController predictionController)
         {
@@ -84,6 +85,67 @@ namespace UnderwaterGliderTwin.UI
             alarmValue = UiFactory.Text("AlarmValue", alarmRect, "运行正常", 13, TextAnchor.MiddleCenter, Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(260f, 56f));
 
             playback.FrameChangedWithReason += OnFrameChanged;
+            OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
+        }
+
+        public void Bind(StatusPanelRefs refs, PlaybackController playbackController, AlarmEvaluator evaluator, TwinLogger twinLogger, PredictionController predictionController)
+        {
+            playback = playbackController;
+            alarmEvaluator = evaluator;
+            logger = twinLogger;
+            prediction = predictionController;
+            if (refs == null || playback == null || playback.Model == null)
+            {
+                return;
+            }
+
+            alarmBackground = refs.alarmBackground;
+            progressFill = refs.progressFill;
+            missionValue = refs.missionValue;
+            modeValue = refs.modeValue;
+            stateValue = refs.stateValue;
+            segmentValue = refs.segmentValue;
+            remainingDistanceValue = refs.remainingDistanceValue;
+            etaValue = refs.etaValue;
+            predictionStatusValue = refs.predictionStatusValue;
+            batteryValue = refs.batteryValue;
+            driftValue = refs.driftValue;
+            rmseValue = refs.rmseValue;
+            maeValue = refs.maeValue;
+            confidenceValue = refs.confidenceValue;
+            predictionTimeValue = refs.predictionTimeValue;
+            engineeringValidationValue = refs.engineeringValidationValue;
+            alarmValue = refs.alarmValue;
+            missionHealthValue = refs.missionHealthValue;
+            minimalBoundReferences = modeValue == null || stateValue == null || alarmValue == null;
+            cumulativeDistanceMeters = BuildDistanceCache(playback.Model);
+            playback.FrameChangedWithReason -= OnFrameChanged;
+            playback.FrameChangedWithReason += OnFrameChanged;
+            RefreshFromCurrentFrame();
+        }
+
+        internal void RefreshFromCurrentFrame()
+        {
+            if (playback == null || playback.Model == null)
+            {
+                return;
+            }
+
+            if (minimalBoundReferences)
+            {
+                if (missionValue != null)
+                {
+                    missionValue.text = RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Csv ? "CSV" : "Simulation";
+                }
+
+                if (batteryValue != null)
+                {
+                    batteryValue.text = $"{playback.Model.CurrentFrame.BatteryPercent:0} %";
+                }
+
+                return;
+            }
+
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
         }
 

@@ -212,6 +212,16 @@ namespace UnderwaterGliderTwin.Editor
 
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(runtimeRoot);
+
+            var bootstrapObject = FindSceneObject(runtimeRoot.gameObject.scene, "TwinBootstrap");
+            var twinBootstrap = bootstrapObject != null ? bootstrapObject.GetComponent<TwinBootstrap>() : null;
+            if (twinBootstrap != null)
+            {
+                var bootstrapSerialized = new SerializedObject(twinBootstrap);
+                bootstrapSerialized.FindProperty("runtimeUiRoot").objectReferenceValue = runtimeRoot;
+                bootstrapSerialized.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(twinBootstrap);
+            }
         }
 
         private static void EnsurePanelPrefabInstance(Scene scene, Transform runtimeCanvas, string panelName)

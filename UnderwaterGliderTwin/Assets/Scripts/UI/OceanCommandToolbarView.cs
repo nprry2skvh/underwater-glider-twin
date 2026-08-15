@@ -57,6 +57,30 @@ namespace UnderwaterGliderTwin.UI
             });
         }
 
+        public void Bind(OceanToolbarRefs refs, TwinCameraController cameraController, TrajectoryView trajectoryView)
+        {
+            if (refs == null)
+            {
+                return;
+            }
+
+            visibleArrowCountText = refs.visibleArrowCount;
+            BindCameraButton(refs.cameraFollowCommand, cameraController, trajectoryView, CameraMode.Follow);
+            BindCameraButton(refs.cameraGlobalCommand, cameraController, trajectoryView, CameraMode.Global);
+            BindCameraButton(refs.cameraTopCommand, cameraController, trajectoryView, CameraMode.Top);
+            BindCameraButton(refs.cameraSideCommand, cameraController, trajectoryView, CameraMode.Side);
+            BindCameraButton(refs.cameraOrbitCommand, cameraController, trajectoryView, CameraMode.Orbit);
+            if (refs.cameraResetCommand != null)
+            {
+                refs.cameraResetCommand.onClick.RemoveAllListeners();
+                refs.cameraResetCommand.onClick.AddListener(() =>
+                {
+                    cameraController?.ResetView();
+                    trajectoryView?.SetCameraMode(CameraMode.Global);
+                });
+            }
+        }
+
         private void Update()
         {
             if (visibleArrowCountText == null)
@@ -80,6 +104,21 @@ namespace UnderwaterGliderTwin.UI
             {
                 cameraController.SetMode(mode);
                 trajectoryView.SetCameraMode(mode);
+            });
+        }
+
+        private static void BindCameraButton(Button button, TwinCameraController cameraController, TrajectoryView trajectoryView, CameraMode mode)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() =>
+            {
+                cameraController?.SetMode(mode);
+                trajectoryView?.SetCameraMode(mode);
             });
         }
 

@@ -53,6 +53,7 @@ namespace UnderwaterGliderTwin.UI
         private Button detailsButton;
         private GameObject navigationReferenceCard;
         private bool showingDetails;
+        private bool minimalBoundReferences;
 
         public void Initialize(PlaybackController playbackController, PredictionController predictionController)
         {
@@ -106,6 +107,90 @@ namespace UnderwaterGliderTwin.UI
             playback.FrameChangedWithReason += OnFrameChanged;
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
             navigationReferenceCard = BuildNavigationReferenceCard(canvas.transform);
+            RefreshDetails();
+        }
+
+        public void Bind(DashboardPanelRefs refs, PlaybackController playbackController, PredictionController predictionController)
+        {
+            playback = playbackController;
+            prediction = predictionController;
+            if (refs == null || playback == null || playback.Model == null)
+            {
+                return;
+            }
+
+            panel = refs.panel;
+            detailsButton = refs.detailsButton;
+            navigationReferenceCard = refs.navigationReferenceCard;
+            depthValue = refs.depthValue;
+            headingValue = refs.headingValue;
+            pitchValue = refs.pitchValue;
+            rollValue = refs.rollValue;
+            yawValue = refs.yawValue;
+            batteryValue = refs.batteryValue;
+            latitudeValue = refs.latitudeValue;
+            longitudeValue = refs.longitudeValue;
+            velocityXValue = refs.velocityXValue;
+            velocityYValue = refs.velocityYValue;
+            velocityZValue = refs.velocityZValue;
+            speedValue = refs.speedValue;
+            verticalSpeedValue = refs.verticalSpeedValue;
+            horizontalSpeedValue = refs.horizontalSpeedValue;
+            missionTimeValue = refs.missionTimeValue;
+            distanceValue = refs.distanceValue;
+            predictionErrorValue = refs.predictionErrorValue;
+            oceanCurrentValue = refs.oceanCurrentValue;
+            waterSpeedValue = refs.waterSpeedValue;
+            groundSpeedValue = refs.groundSpeedValue;
+            sideSlipValue = refs.sideSlipValue;
+            netBuoyancyValue = refs.netBuoyancyValue;
+            energyValue = refs.energyValue;
+            angleOfAttackValue = refs.angleOfAttackValue;
+            liftForceValue = refs.liftForceValue;
+            dragForceValue = refs.dragForceValue;
+            angularRateValue = refs.angularRateValue;
+            hydrodynamicMomentValue = refs.hydrodynamicMomentValue;
+            inertiaValue = refs.inertiaValue;
+            pistonPositionValue = refs.pistonPositionValue;
+            controlSurfaceValue = refs.controlSurfaceValue;
+            actuatorPowerValue = refs.actuatorPowerValue;
+            dynamicsSummaryValue = refs.dynamicsSummaryValue;
+            minimalBoundReferences = headingValue == null || pitchValue == null || rollValue == null;
+            cumulativeDistanceMeters = BuildDistanceCache(playback.Model);
+            if (detailsButton != null)
+            {
+                detailsButton.onClick.RemoveAllListeners();
+                detailsButton.onClick.AddListener(ToggleDetails);
+            }
+
+            playback.FrameChangedWithReason -= OnFrameChanged;
+            playback.FrameChangedWithReason += OnFrameChanged;
+            RefreshFromCurrentFrame();
+        }
+
+        internal void RefreshFromCurrentFrame()
+        {
+            if (playback == null || playback.Model == null)
+            {
+                return;
+            }
+
+            if (minimalBoundReferences)
+            {
+                if (depthValue != null)
+                {
+                    depthValue.text = $"{playback.Model.CurrentFrame.DepthM:0.0} m";
+                }
+
+                if (batteryValue != null)
+                {
+                    batteryValue.text = $"{playback.Model.CurrentFrame.BatteryPercent:0} %";
+                }
+
+                return;
+            }
+
+            OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
             RefreshDetails();
         }
 

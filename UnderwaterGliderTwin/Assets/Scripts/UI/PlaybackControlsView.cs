@@ -73,6 +73,65 @@ namespace UnderwaterGliderTwin.UI
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01);
         }
 
+        public void Bind(PlaybackControlsRefs refs, PlaybackController playbackController, TwinCameraController cameraController, UnderwaterEnvironmentBuilder environmentBuilder, TrajectoryView trajectoryView, Action onExitRequested = null, Func<string> onScreenshotRequested = null, Action onMissionViewRequested = null)
+        {
+            playback = playbackController;
+            exitAction = onExitRequested;
+            screenshotAction = onScreenshotRequested;
+            missionViewAction = onMissionViewRequested;
+            if (refs == null || playback == null || playback.Model == null)
+            {
+                return;
+            }
+
+            playPauseButton = refs.playPauseButton;
+            progressSlider = refs.progressSlider;
+            statusText = refs.statusText;
+            BindButton(refs.playPauseButton, OnPlayPauseClicked);
+            BindButton(refs.reverseButton, OnReverseClicked);
+            BindButton(refs.replayButton, OnReplayClicked);
+            BindButton(refs.resetButton, OnResetClicked);
+            BindButton(refs.exportButton, OnExportClicked);
+            BindButton(refs.exitButton, OnExitClicked);
+            BindButton(refs.missionVolumeButton, OnMissionViewClicked);
+            BindCameraButton(refs.cameraFollowButton, cameraController, trajectoryView, CameraMode.Follow);
+            BindCameraButton(refs.cameraGlobalButton, cameraController, trajectoryView, CameraMode.Global);
+            BindCameraButton(refs.cameraOrbitButton, cameraController, trajectoryView, CameraMode.Orbit);
+            if (refs.fogToggle != null && environmentBuilder != null)
+            {
+                refs.fogToggle.onValueChanged.RemoveAllListeners();
+                refs.fogToggle.onValueChanged.AddListener(environmentBuilder.SetFogEnabled);
+            }
+
+            if (refs.particlesToggle != null && environmentBuilder != null)
+            {
+                refs.particlesToggle.onValueChanged.RemoveAllListeners();
+                refs.particlesToggle.onValueChanged.AddListener(environmentBuilder.SetParticlesEnabled);
+            }
+
+            if (refs.trajectoryToggle != null && trajectoryView != null)
+            {
+                refs.trajectoryToggle.onValueChanged.RemoveAllListeners();
+                refs.trajectoryToggle.onValueChanged.AddListener(trajectoryView.SetVisible);
+            }
+
+            speedButtons.Clear();
+            BindSpeedButton(refs.speed05Button, 0.5f);
+            BindSpeedButton(refs.speed1Button, 1f);
+            BindSpeedButton(refs.speed2Button, 2f);
+            BindSpeedButton(refs.speed5Button, 5f);
+            BindSpeedButton(refs.speed10Button, 10f);
+            if (progressSlider != null)
+            {
+                progressSlider.onValueChanged.RemoveAllListeners();
+                progressSlider.onValueChanged.AddListener(OnSliderChanged);
+            }
+
+            playback.FrameChanged -= OnFrameChanged;
+            playback.FrameChanged += OnFrameChanged;
+            OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01);
+        }
+
         private void OnDestroy()
         {
             if (playback != null)
@@ -186,9 +245,54 @@ namespace UnderwaterGliderTwin.UI
         private void OnFrameChanged(UnderwaterGliderTwin.Telemetry.TelemetryFrame frame, int index, float progress01)
         {
             updatingSlider = true;
-            progressSlider.value = progress01;
+            if (progressSlider != null)
+            {
+                progressSlider.value = progress01;
+            }
             updatingSlider = false;
             RefreshButtonLabels();
+        }
+
+        private void BindButton(Button button, UnityEngine.Events.UnityAction action)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(action);
+        }
+
+        private void BindSpeedButton(Button button, float speed)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            speedButtons[speed] = button;
+            BindButton(button, () =>
+            {
+                playback.SetSpeed(speed);
+                RefreshButtonLabels();
+                SetStatus($"speed {speed:0.##}x");
+            });
+        }
+
+        private static void BindCameraButton(Button button, TwinCameraController cameraController, TrajectoryView trajectoryView, CameraMode mode)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() =>
+            {
+                cameraController?.SetMode(mode);
+                trajectoryView?.SetCameraMode(mode);
+            });
         }
 
         private void RefreshButtonLabels()
