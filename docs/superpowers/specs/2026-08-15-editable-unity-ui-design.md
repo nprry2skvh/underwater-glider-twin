@@ -24,6 +24,32 @@
 
 本次改造不要求最终视觉风格一次定稿。重点是先把 UI 变成可编辑结构，让用户之后能持续调整。
 
+## 硬约束
+
+### UI 根节点唯一所有权
+
+改造后禁止运行时代码通过 `FindObjectOfType<Canvas>()` 自动寻找“第一个 Canvas”作为 UI 根节点。`WelcomeBootstrap` 必须通过 `[SerializeField]` 显式引用 `WelcomeCanvas`；`TwinBootstrap` 必须通过 `[SerializeField]` 显式引用 `RuntimeCanvas` 或 `RuntimeUiRoot`。
+
+`UiFactory.EnsureCanvas()` 不能再作为长期 UI 的入口。迁移期可保留一个 `allowRuntimeFallback` 开关，但默认关闭；生产路径缺少 Canvas 时必须报错，而不是静默创建另一套 UI。
+
+### 不允许清空 Prefab 根节点
+
+绑定脚本不能销毁包含可编辑 UI 的 Prefab 子物体。现有 `DataInputView.ClearRuntimeUi()` 会遍历并删除自身所有子节点，迁移时必须移除，或改成只清理明确标记的动态内容容器，例如列表行、临时提示和运行时生成的数据项。
+
+长期存在的面板、按钮、输入框、文字、背景和装饰图片都归 Prefab 或场景所有，不能由重建流程删除。
+
+### 缺失引用必须显式失败
+
+每个绑定脚本必须提供 `ValidateReferences()`。编辑器中通过 `OnValidate()` 做快速检查；运行时启动时再次检查。关键引用缺失时禁用对应功能并输出清楚错误，错误信息必须包含 Prefab 名、对象路径和字段名。
+
+生产模式禁止静默回退到 `UiFactory` 生成替代 UI。迁移期如果确实需要保留旧路径，必须挂在显式的 `allowRuntimeFallback` 开关下，并在日志中说明当前使用的是迁移回退路径。
+
+### 动态内容边界
+
+静态标题、标签、按钮文字、背景、面板、输入框外观和按钮外观由 Prefab 管理。实时数值、告警、进度、按钮可用状态和输入框当前值由脚本刷新。
+
+海流层、飞行腿、预测指标等重复内容使用 Prefab 提供的 `RowTemplate`。脚本只实例化数据行、写入数据和控制显示隐藏，不再临时拼整套 UI。弹窗和抽屉由 `ModalRoot` 或对应 Prefab 提供容器，脚本只控制 `SetActive`、内容刷新和事件绑定。
+
 ## 推荐架构
 
 采用“场景/Prefab 负责外观，脚本负责绑定”的结构。
@@ -38,10 +64,13 @@
    保留一个真实的 `WelcomeCanvas`，其中包含欢迎页背景、标题、说明、CSV 输入框、确认按钮、默认 CSV 按钮、仿真模式按钮和状态文字。`WelcomeBootstrap` 不再创建这些对象，而是绑定场景里已有的对象。
 
 4. `Main` 场景
-   保留一个真实的 `RuntimeCanvas`，其中挂载主界面 Prefab。`TwinBootstrap` 不再让各个视图从零创建 UI，而是实例化或绑定这些 Prefab。
+   保留一个真实的 `RuntimeUiRoot` 和 `RuntimeCanvas`，其中挂载主界面 Prefab。`TwinBootstrap` 不再让各个视图从零创建 UI，而是通过序列化字段绑定这些 Prefab。`RuntimeUiRoot` 是主界面 UI 的唯一所有者。
 
 5. 绑定脚本
    每个 UI 区块拥有一个对应的绑定脚本，例如 `DashboardView`、`StatusPanelView`、`DataInputView`、`PlaybackControlsView`。这些脚本通过序列化字段引用已有的 `Text`、`Button`、`InputField`、`Slider`、`Image` 等组件。
+
+6. `UiReferenceValidator`
+   在 UI 根节点或主要 Prefab 根节点上增加统一引用验证器。验证器收集各绑定脚本的引用检查结果，并用“Prefab 名 + 对象路径 + 字段名”的格式输出问题，方便用户在 Unity Hierarchy 中定位。
 
 ## 主要组件
 
@@ -75,6 +104,29 @@
 
 这些对象的位置、大小、图片和颜色由场景或 Prefab 决定。
 
+### RuntimeUiRoot
+
+`RuntimeUiRoot` 是 `Main` 场景中所有长期 UI 的唯一父节点。它保存 `RuntimeCanvas`、`ModalRoot` 和各主面板 Prefab 的显式引用。`TwinBootstrap` 只绑定这个根节点，不再通过全局搜索猜测当前应该使用哪个 Canvas。
+
+`RuntimeUiRoot` 负责：
+
+- 保存主要 UI Prefab 引用
+- 暴露 `ValidateReferences()`
+- 检查重复 Canvas、重复 EventSystem 和重复长期 UI
+- 为弹窗、抽屉和动态列表提供固定容器
+
+### 分组引用
+
+`DataInputView` 的引用数量较多，不能把所有输入框、按钮和文字平铺在一个脚本字段列表里。迁移时按功能分组：
+
+- `MissionSectionRefs`
+- `SimulationSectionRefs`
+- `OceanSectionRefs`
+- `DynamicsSectionRefs`
+- `PredictionSectionRefs`
+
+每个分组只保存本区域的控件引用，并提供自己的验证方法。根绑定脚本聚合这些结果。
+
 ### UI Prefab
 
 拆分为：
@@ -91,6 +143,8 @@
 
 复杂面板可以先只提取外层容器和常用控件，避免一次性重写所有细节导致风险过大。后续可以逐步把剩余动态控件迁入 Prefab。
 
+弹窗和抽屉也必须进入 Prefab 边界。现有海流弹窗动态创建 Canvas、GraphicRaycaster 和遮罩的逻辑，需要迁入 `ModalRoot` 或 `OceanCurrentDrawer.prefab`。脚本只负责打开、关闭、填充数据和绑定按钮事件。
+
 ## 数据流
 
 启动流程保持不变：
@@ -99,7 +153,7 @@
 2. `WelcomeBootstrap` 读取命令行和上次 CSV 路径。
 3. 用户点击按钮后，`LaunchCoordinator` 设置数据源并进入 `Main` 场景。
 4. `TwinBootstrap` 加载 CSV 或仿真数据，创建可视化对象。
-5. `TwinBootstrap` 找到或实例化 `RuntimeCanvas` 和各 UI Prefab。
+5. `TwinBootstrap` 使用序列化字段绑定 `RuntimeUiRoot`、`RuntimeCanvas` 和各 UI Prefab。
 6. 各 UI 绑定脚本把运行时数据写入已有文字、按钮、输入框和滑条。
 
 这样 UI 外观和业务逻辑分离。用户改图片、位置和颜色时，不需要改数据加载和仿真逻辑。
@@ -113,27 +167,39 @@
 - 可选装饰图片缺失时不报错。
 - 如果 `EventSystem` 缺失，运行时自动补一个，保证按钮可点击。
 - 如果 `Canvas` 缺失，显示明确错误，不再静默创建一套不可编辑 UI。
+- 如果关键引用缺失，禁用对应功能入口，避免按钮点击后产生空引用异常。
+- 如果发现重复 Canvas、重复 EventSystem 或重复长期 UI，输出错误并阻止继续绑定。
 
 ## 测试策略
 
-保留现有 UI EditMode 测试中验证功能的部分，同时调整测试方式：
+测试分为 EditMode 和 PlayMode 两类。
 
-- 测试欢迎页按钮是否正确调用启动逻辑。
-- 测试主界面关键控件引用完整。
-- 测试播放、仿真、海流抽屉、飞行腿设置和预测面板仍可通过按钮触发。
-- 测试常见分辨率下关键面板不互相遮挡。
-- 测试缺失引用时错误信息清楚。
+EditMode 测试：
+
+- 验证 UI Prefab 引用完整。
+- 验证 `OnValidate()` 和 `ValidateReferences()` 能发现缺失关键引用。
+- 验证 `RuntimeUiRoot`、`WelcomeCanvas`、`RuntimeCanvas` 和 `ModalRoot` 结构存在。
+- 验证常见分辨率 1920×1080、1366×768 下关键面板不互相遮挡。
+
+PlayMode 测试：
+
+- 验证欢迎页按钮点击、CSV 加载、仿真启动、播放控制、抽屉、弹窗和数据刷新。
+- 验证海流层、飞行腿、预测指标等动态列表仍能刷新。
+- 使用 `LogAssert.Expect` 验证缺失引用时的错误日志。
+- 验证正常运行时没有重复 Canvas、重复 EventSystem 或重复长期 UI。
 
 旧测试中依赖 `GameObject.Find` 查找运行时生成对象的部分，需要改为加载 Prefab 或场景后验证绑定对象。
 
 ## 实施顺序
 
-为了降低风险，实施分四步：
+为了降低风险，实施分六步：
 
-1. 创建 UI 资源目录、基础 Canvas、欢迎页可编辑结构。
-2. 把欢迎页从代码生成改为场景绑定。
-3. 为主界面建立 `RuntimeCanvas` 和主要 UI Prefab，并让脚本优先绑定 Prefab。
-4. 逐步替换 `UiFactory` 生成控件的路径，只保留少量用于动态列表或临时弹窗的辅助方法。
+1. 创建 `RuntimeUiRoot`、`UiReferenceValidator` 和分组引用结构，先定义唯一 UI 根节点和引用验证机制。
+2. 处理结构性风险：移除或限制 `ClearRuntimeUi()`，替换 `EnsureCanvas()` 的长期 UI 入口，迁移动态弹窗 Canvas 创建逻辑到 `ModalRoot`。
+3. 创建 UI 资源目录、基础 Canvas、欢迎页可编辑结构。
+4. 把欢迎页从代码生成改为场景绑定。
+5. 为主界面建立 `RuntimeCanvas` 和主要 UI Prefab，并让脚本优先绑定 Prefab。
+6. 逐步替换 `UiFactory` 生成控件的路径，只保留少量用于动态列表数据行或临时内容的辅助方法。
 
 每一步都保留可运行状态，避免一次性大改后难以定位问题。
 
@@ -148,6 +214,18 @@
 5. 调整 `Rect Transform`、`Image`、`Text`、`Button` 等组件。
 6. 保存场景或 Prefab。
 7. 点击 Play 检查效果。
+
+## 验收标准
+
+改造完成后必须满足：
+
+- 不运行游戏时，`Welcome` 和 `Main` 场景的完整长期 UI 都能在 Hierarchy 中看到。
+- 修改 Prefab 的颜色、位置、文字或图片后，无需改代码即可生效。
+- 正常运行时 `UiFactory` 不再创建长期存在的 UI。
+- 正常运行时不存在重复 Canvas、重复 EventSystem 或重复按钮。
+- Prefab 缺少关键引用时能明确报错，且不会静默生成替代 UI。
+- 所有动态列表仍可正常刷新。
+- 海流弹窗、飞行腿抽屉、预测面板等复杂 UI 仍可打开、关闭和更新内容。
 
 ## 风险与取舍
 
