@@ -333,6 +333,169 @@ namespace UnderwaterGliderTwin.Tests
             }
         }
 
+        [Test]
+        public void MainScene_HasEditableRuntimeUiHierarchy()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            try
+            {
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+
+                Assert.That(GameObject.Find("RuntimeUiRoot"), Is.Not.Null);
+                Assert.That(GameObject.Find("RuntimeCanvas"), Is.Not.Null);
+                Assert.That(GameObject.Find("CommandCenterHeader"), Is.Not.Null);
+                Assert.That(GameObject.Find("DashboardPanel"), Is.Not.Null);
+                Assert.That(GameObject.Find("StatusPanel"), Is.Not.Null);
+                Assert.That(GameObject.Find("DataInputPanel"), Is.Not.Null);
+                Assert.That(GameObject.Find("PlaybackControlsPanel"), Is.Not.Null);
+                Assert.That(GameObject.Find("OceanCommandToolbar"), Is.Not.Null);
+                Assert.That(GameObject.Find("ModalRoot"), Is.Not.Null);
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    RestorePreviousScene(previous);
+                }
+            }
+        }
+
+        [Test]
+        public void MainScene_LongLivedPanelsArePrefabInstances()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            try
+            {
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+
+                Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("DashboardPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+                Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("StatusPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+                Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("DataInputPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+                Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("PlaybackControlsPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+                Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("OceanCommandToolbar")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    RestorePreviousScene(previous);
+                }
+            }
+        }
+
+        [Test]
+        public void MainScene_LongLivedPanelsAreUnderRuntimeCanvasWithExpectedPrefabSources()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            try
+            {
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+                var runtimeCanvas = GameObject.Find("RuntimeCanvas").transform;
+                AssertPanelUnderCanvasWithSource("DashboardPanel", runtimeCanvas, "Assets/UI/Prefabs/DashboardPanel.prefab");
+                AssertPanelUnderCanvasWithSource("StatusPanel", runtimeCanvas, "Assets/UI/Prefabs/StatusPanel.prefab");
+                AssertPanelUnderCanvasWithSource("DataInputPanel", runtimeCanvas, "Assets/UI/Prefabs/DataInputPanel.prefab");
+                AssertPanelUnderCanvasWithSource("PlaybackControlsPanel", runtimeCanvas, "Assets/UI/Prefabs/PlaybackControlsPanel.prefab");
+                AssertPanelUnderCanvasWithSource("OceanCommandToolbar", runtimeCanvas, "Assets/UI/Prefabs/OceanCommandToolbar.prefab");
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    RestorePreviousScene(previous);
+                }
+            }
+        }
+
+        [Test]
+        public void EditableUiSceneBuilder_BuildMainSceneRejectsSameNameNonPrefabPanel()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            GameObject nonPrefab = null;
+            try
+            {
+                EditableUiSceneBuilder.ResetMainUiDefaults();
+                EditableUiSceneBuilder.BuildMainScene();
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+                var canvas = GameObject.Find("RuntimeCanvas");
+                nonPrefab = new GameObject("DashboardPanel");
+                nonPrefab.transform.SetParent(canvas.transform, false);
+                LogAssert.Expect(LogType.Error, "Main.unity: RuntimeUiRoot -> DashboardPanel: Expected one long-lived UI object named DashboardPanel, found 2.");
+                UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+
+                var ex = Assert.Throws<System.InvalidOperationException>(() => EditableUiSceneBuilder.BuildMainScene());
+
+                Assert.That(ex.Message, Does.Contain("same-name non-Prefab"));
+            }
+            finally
+            {
+                if (SceneManager.GetActiveScene().path == "Assets/Scenes/Main.unity")
+                {
+                    foreach (var transform in Object.FindObjectsOfType<Transform>(true))
+                    {
+                        if (transform.name == "DashboardPanel"
+                            && UnityEditor.PrefabUtility.GetPrefabInstanceStatus(transform.gameObject) != UnityEditor.PrefabInstanceStatus.Connected)
+                        {
+                            Object.DestroyImmediate(transform.gameObject);
+                        }
+                    }
+
+                    UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+                }
+
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    RestorePreviousScene(previous);
+                }
+            }
+        }
+
+        [Test]
+        public void EditableUiSceneBuilder_BuildMainScenePreservesExistingPrefabInstanceOverrides()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            var originalPosition = Vector2.zero;
+            var originalSize = Vector2.zero;
+            try
+            {
+                EditableUiSceneBuilder.BuildMainScene();
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+                var panel = GameObject.Find("DashboardPanel").GetComponent<RectTransform>();
+                originalPosition = panel.anchoredPosition;
+                originalSize = panel.sizeDelta;
+                panel.anchoredPosition = new Vector2(123f, -456f);
+                panel.sizeDelta = new Vector2(777f, 333f);
+                UnityEditor.EditorUtility.SetDirty(panel);
+                UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+
+                EditableUiSceneBuilder.BuildMainScene();
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+                panel = GameObject.Find("DashboardPanel").GetComponent<RectTransform>();
+
+                Assert.That(panel.anchoredPosition, Is.EqualTo(new Vector2(123f, -456f)));
+                Assert.That(panel.sizeDelta, Is.EqualTo(new Vector2(777f, 333f)));
+                panel.anchoredPosition = originalPosition;
+                panel.sizeDelta = originalSize;
+                UnityEditor.EditorUtility.SetDirty(panel);
+                UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    RestorePreviousScene(previous);
+                }
+            }
+        }
+
+        private static void AssertPanelUnderCanvasWithSource(string panelName, Transform runtimeCanvas, string expectedPrefabPath)
+        {
+            var panel = GameObject.Find(panelName);
+            Assert.That(panel, Is.Not.Null);
+            Assert.That(panel.transform.parent, Is.EqualTo(runtimeCanvas));
+            var source = UnityEditor.PrefabUtility.GetCorrespondingObjectFromSource(panel);
+            Assert.That(UnityEditor.AssetDatabase.GetAssetPath(source), Is.EqualTo(expectedPrefabPath));
+        }
+
         private static void RestorePreviousScene(string previous)
         {
             if (previous == "Assets/Scenes/Welcome.unity")

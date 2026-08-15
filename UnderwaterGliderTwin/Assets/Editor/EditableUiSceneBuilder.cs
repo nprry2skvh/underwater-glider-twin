@@ -7,12 +7,15 @@ using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UnderwaterGliderTwin.Bootstrap;
+using UnderwaterGliderTwin.UI;
 
 namespace UnderwaterGliderTwin.Editor
 {
     public static class EditableUiSceneBuilder
     {
         private const string WelcomeScenePath = "Assets/Scenes/Welcome.unity";
+        private const string MainScenePath = "Assets/Scenes/Main.unity";
+        private const string PrefabFolderPath = "Assets/UI/Prefabs";
 
         [MenuItem("UnderwaterGliderTwin/UI/Rebuild Welcome UI")]
         public static void BuildWelcomeScene()
@@ -85,6 +88,251 @@ namespace UnderwaterGliderTwin.Editor
             ResetText(panel, "LaunchStatusText", string.Empty, 15, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.30f));
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
+        }
+
+        [MenuItem("UnderwaterGliderTwin/UI/Rebuild Main UI")]
+        public static void BuildMainScene()
+        {
+            EnsureNoUnsavedSceneChanges(MainScenePath, "Main UI rebuild");
+            EnsurePrefabFolder();
+            var scene = EditorSceneManager.OpenScene(MainScenePath);
+            var rootObject = FindSceneObject(scene, "RuntimeUiRoot");
+            var rootWasCreated = rootObject == null;
+            if (rootWasCreated)
+            {
+                rootObject = new GameObject("RuntimeUiRoot");
+                SceneManager.MoveGameObjectToScene(rootObject, scene);
+            }
+
+            var runtimeRoot = rootObject.GetComponent<RuntimeUiRoot>() ?? rootObject.AddComponent<RuntimeUiRoot>();
+            var canvasObject = FindDirectChild(rootObject.transform, "RuntimeCanvas");
+            var canvasWasCreated = canvasObject == null;
+            if (canvasWasCreated)
+            {
+                canvasObject = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+                canvasObject.transform.SetParent(rootObject.transform, false);
+            }
+
+            var canvas = canvasObject.GetComponent<Canvas>() ?? canvasObject.AddComponent<Canvas>();
+            if (canvasWasCreated)
+            {
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = 0;
+            }
+
+            var scaler = canvasObject.GetComponent<CanvasScaler>() ?? canvasObject.AddComponent<CanvasScaler>();
+            if (canvasWasCreated)
+            {
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.matchWidthOrHeight = 0.5f;
+            }
+
+            if (canvasObject.GetComponent<GraphicRaycaster>() == null)
+            {
+                canvasObject.AddComponent<GraphicRaycaster>();
+            }
+
+            EnsureSceneChild(canvas.transform, "CommandCenterHeader", typeof(RectTransform), typeof(Image), out var headerWasCreated);
+            if (headerWasCreated)
+            {
+                ConfigureRect(canvas.transform.Find("CommandCenterHeader") as RectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 48f));
+                canvas.transform.Find("CommandCenterHeader").GetComponent<Image>().color = new Color(0.015f, 0.09f, 0.14f, 0.98f);
+            }
+
+            var panelNames = new[]
+            {
+                "DashboardPanel",
+                "StatusPanel",
+                "DataInputPanel",
+                "PlaybackControlsPanel",
+                "OceanCommandToolbar"
+            };
+            foreach (var panelName in panelNames)
+            {
+                EnsurePanelPrefabInstance(scene, canvas.transform, panelName);
+            }
+
+            var modalRoot = FindDirectChild(canvas.transform, "ModalRoot");
+            if (modalRoot == null)
+            {
+                modalRoot = new GameObject("ModalRoot", typeof(RectTransform));
+                modalRoot.transform.SetParent(canvas.transform, false);
+                ConfigureRect(modalRoot.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            }
+
+            EnsureEventSystem(scene);
+            AssignMainReferences(runtimeRoot, canvas, modalRoot.GetComponent<RectTransform>(), rootWasCreated);
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            AssetDatabase.SaveAssets();
+        }
+
+        [MenuItem("UnderwaterGliderTwin/UI/Reset Main UI Defaults")]
+        public static void ResetMainUiDefaults()
+        {
+            EnsureNoUnsavedSceneChanges(MainScenePath, "Main UI reset");
+            var scene = EditorSceneManager.OpenScene(MainScenePath);
+            var panelNames = new[]
+            {
+                "DashboardPanel",
+                "StatusPanel",
+                "DataInputPanel",
+                "PlaybackControlsPanel",
+                "OceanCommandToolbar"
+            };
+            foreach (var panelName in panelNames)
+            {
+                var keep = false;
+                foreach (var panel in FindSceneObjects(scene, panelName))
+                {
+                    if (!keep && PrefabUtility.GetPrefabInstanceStatus(panel) == PrefabInstanceStatus.Connected)
+                    {
+                        keep = true;
+                        continue;
+                    }
+
+                    UnityEngine.Object.DestroyImmediate(panel);
+                }
+            }
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+        }
+
+        private static void AssignMainReferences(RuntimeUiRoot runtimeRoot, Canvas canvas, RectTransform modalRoot, bool rootWasCreated)
+        {
+            var serialized = new SerializedObject(runtimeRoot);
+            serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
+            serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
+            if (rootWasCreated)
+            {
+                serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.None;
+            }
+
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(runtimeRoot);
+        }
+
+        private static void EnsurePanelPrefabInstance(Scene scene, Transform runtimeCanvas, string panelName)
+        {
+            var prefabPath = PrefabFolderPath + "/" + panelName + ".prefab";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null)
+            {
+                prefab = CreatePanelPrefab(prefabPath, panelName);
+            }
+
+            var existing = default(GameObject);
+            foreach (var candidate in FindSceneObjects(scene, panelName))
+            {
+                var status = PrefabUtility.GetPrefabInstanceStatus(candidate);
+                if (status != PrefabInstanceStatus.Connected)
+                {
+                    throw new InvalidOperationException(
+                        "Main UI contains a same-name non-Prefab panel: " +
+                        GetTransformPath(candidate.transform) + " (" + panelName + ")");
+                }
+
+                if (existing != null)
+                {
+                    throw new InvalidOperationException("Main UI contains duplicate connected Prefab panels: " + panelName);
+                }
+
+                existing = candidate;
+            }
+
+            if (existing != null)
+            {
+                if (existing.transform.parent != runtimeCanvas)
+                {
+                    existing.transform.SetParent(runtimeCanvas, false);
+                }
+
+                return;
+            }
+
+            var instance = PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+            if (instance == null)
+            {
+                throw new InvalidOperationException("Could not instantiate UI Prefab: " + prefabPath);
+            }
+
+            SceneManager.MoveGameObjectToScene(instance, scene);
+            instance.transform.SetParent(runtimeCanvas, false);
+            ConfigureNewPanelLayout(instance.transform as RectTransform, panelName);
+        }
+
+        private static GameObject CreatePanelPrefab(string prefabPath, string panelName)
+        {
+            var temporary = new GameObject(panelName, typeof(RectTransform), typeof(Image));
+            var image = temporary.GetComponent<Image>();
+            image.color = panelName == "PlaybackControlsPanel"
+                ? new Color(0.015f, 0.09f, 0.14f, 0.98f)
+                : new Color(0.025f, 0.12f, 0.18f, 0.92f);
+            var prefab = PrefabUtility.SaveAsPrefabAsset(temporary, prefabPath);
+            UnityEngine.Object.DestroyImmediate(temporary);
+            return prefab;
+        }
+
+        private static void EnsurePrefabFolder()
+        {
+            if (!AssetDatabase.IsValidFolder("Assets/UI"))
+            {
+                AssetDatabase.CreateFolder("Assets", "UI");
+            }
+
+            if (!AssetDatabase.IsValidFolder(PrefabFolderPath))
+            {
+                AssetDatabase.CreateFolder("Assets/UI", "Prefabs");
+            }
+        }
+
+        private static void ConfigureNewPanelLayout(RectTransform rect, string panelName)
+        {
+            if (rect == null)
+            {
+                return;
+            }
+
+            switch (panelName)
+            {
+                case "DashboardPanel":
+                    ConfigureRect(rect, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-48f, -208f));
+                    break;
+                case "StatusPanel":
+                    ConfigureRect(rect, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(-48f, 96f));
+                    break;
+                case "DataInputPanel":
+                    ConfigureRect(rect, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 158f), new Vector2(-48f, 48f));
+                    break;
+                case "PlaybackControlsPanel":
+                    ConfigureRect(rect, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 18f), new Vector2(-48f, 124f));
+                    break;
+                case "OceanCommandToolbar":
+                    ConfigureRect(rect, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-24f, -112f), new Vector2(360f, 48f));
+                    break;
+            }
+        }
+
+        private static GameObject EnsureSceneChild(Transform parent, string name, Type firstComponent, Type secondComponent, out bool wasCreated)
+        {
+            var existing = FindDirectChild(parent, name);
+            if (existing != null)
+            {
+                wasCreated = false;
+                return existing;
+            }
+
+            wasCreated = true;
+            var created = new GameObject(name, firstComponent, secondComponent);
+            created.transform.SetParent(parent, false);
+            return created;
+        }
+
+        private static GameObject FindDirectChild(Transform parent, string name)
+        {
+            return parent == null ? null : parent.Find(name)?.gameObject;
         }
 
         private static void EnsureNoUnsavedSceneChanges(string targetScenePath, string operationName)
@@ -295,6 +543,37 @@ namespace UnderwaterGliderTwin.Editor
             rect.offsetMax = Vector2.zero;
         }
 
+        private static void ConfigureRect(RectTransform rect, Vector2 min, Vector2 max, Vector2 pivot, Vector2 anchoredPosition, Vector2 size)
+        {
+            if (rect == null)
+            {
+                return;
+            }
+
+            rect.anchorMin = min;
+            rect.anchorMax = max;
+            rect.pivot = pivot;
+            rect.anchoredPosition = anchoredPosition;
+            rect.sizeDelta = size;
+        }
+
+        private static string GetTransformPath(Transform transform)
+        {
+            if (transform == null)
+            {
+                return "<missing>";
+            }
+
+            var path = transform.name;
+            while (transform.parent != null)
+            {
+                transform = transform.parent;
+                path = transform.name + "/" + path;
+            }
+
+            return path;
+        }
+
         private static GameObject FindSceneObject(Scene scene, string name)
         {
             foreach (var root in scene.GetRootGameObjects())
@@ -309,6 +588,23 @@ namespace UnderwaterGliderTwin.Editor
             }
 
             return null;
+        }
+
+        private static List<GameObject> FindSceneObjects(Scene scene, string name)
+        {
+            var matches = new List<GameObject>();
+            foreach (var root in scene.GetRootGameObjects())
+            {
+                foreach (var transform in root.GetComponentsInChildren<Transform>(true))
+                {
+                    if (transform.name == name)
+                    {
+                        matches.Add(transform.gameObject);
+                    }
+                }
+            }
+
+            return matches;
         }
 
         private static void ResetImage(Transform target, Vector2 min, Vector2 max, Color color)
