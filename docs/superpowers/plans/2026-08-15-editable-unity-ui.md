@@ -24,11 +24,16 @@
 - `UiFactory.EnsureCanvas(...)` cannot call `Object.FindObjectOfType<Canvas>()`. Fallback may use only an explicitly supplied fallback Canvas or a Canvas found on the provided parent/ancestor chain.
 - Tests must not destroy every `GameObject` in the loaded scene. Each test creates a private root container and only destroys that root.
 - `RuntimeUiRoot.ValidateReferences()` must report duplicate Canvas, duplicate EventSystem, and duplicate long-lived UI objects.
+- Reference validation is staged. Tasks 2-9 run with `RuntimeUiValidationProfile.BootstrapOnly` or `EnabledPanels`; Task 10 switches production to `Strict` after all Prefab references exist.
+- When `allowRuntimeFallback` is enabled, missing UI references are logged and the bootstrap continues through the fallback path; when fallback is disabled, blocking reference errors stop binding.
+- Required and optional UI references must be explicit. Missing required controls block strict binding; missing optional/decorative controls are marked with `[OptionalUiReference]`, skipped by blocking validation, and cannot disable the whole UI.
 - `RuntimeUiFallback.AllowRuntimeFallback` must be explicitly set during each bootstrap and restored to false on scene destroy or bootstrap cleanup.
 - `EditableUiSceneBuilder` must be idempotent: repeated execution cannot create duplicate Canvas, EventSystem, Prefab instances, or root panels.
 - Acceptance includes runtime screenshots at 1920x1080 and 1366x768, plus proof that a manual Prefab visual edit appears at runtime without code changes.
 - `EditableUiSceneBuilder` must check for unsaved scene changes before overwriting `Welcome.unity` or `Main.unity`; in batchmode it fails with a clear error instead of silently discarding user edits.
 - Dynamic row templates use binding components such as `OceanCurrentLayerRowView`; production code must not depend on long chains of string-based child `Find(...)` calls for row internals.
+- `Welcome` builder methods must be idempotent and must backfill `WelcomeBootstrap` serialized references before saving the scene.
+- RowTemplate components such as `OceanCurrentLayerRowView` must be included in root validation, not only validated when a row is instantiated at runtime.
 
 ---
 
@@ -37,6 +42,8 @@
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceIssue.cs`: value type describing a missing or duplicate UI reference.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/IUiReferenceProvider.cs`: interface for reference validation providers.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceValidator.cs`: shared validation and object-path formatting.
+- Create `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiValidationProfile.cs`: staged validation profile for migration-safe binding.
+- Create `UnderwaterGliderTwin/Assets/Scripts/UI/OptionalUiReferenceAttribute.cs`: marker for non-blocking optional UI fields.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiRoot.cs`: serialized owner for `RuntimeCanvas`, long-lived panels, `ModalRoot`, drawer roots, and row templates.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiReferences.cs`: grouped references used by view `Bind(...)` methods.
 - Create `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiFallback.cs`: single explicit switch for migration-only runtime generation.
@@ -81,6 +88,8 @@ Use this command for PlayMode verification:
 - Create: `UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceIssue.cs`
 - Create: `UnderwaterGliderTwin/Assets/Scripts/UI/IUiReferenceProvider.cs`
 - Create: `UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceValidator.cs`
+- Create: `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiValidationProfile.cs`
+- Create: `UnderwaterGliderTwin/Assets/Scripts/UI/OptionalUiReferenceAttribute.cs`
 - Create: `UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiFallback.cs`
 - Create: `UnderwaterGliderTwin/Assets/Tests/EditMode/UiTestObjectScope.cs`
 - Test: `UnderwaterGliderTwin/Assets/Tests/EditMode/EditableUiReferenceTests.cs`
@@ -92,6 +101,8 @@ Use this command for PlayMode verification:
 - Produces: `UiReferenceValidator.Require(Object value, Component owner, string prefabName, string fieldName, List<UiReferenceIssue> issues)`
 - Produces: `UiReferenceValidator.RequireFields(object references, Component owner, string prefabName, string groupPath, List<UiReferenceIssue> issues)`
 - Produces: `UiReferenceValidator.GetPath(Transform transform)`
+- Produces: `RuntimeUiValidationProfile.BootstrapOnly`, `.EnabledPanels`, `.Strict`
+- Produces: `[OptionalUiReference]` for decorative or migration-only fields that should not block binding
 - Produces: `RuntimeUiFallback.AllowRuntimeFallback`
 - Produces: `RuntimeUiFallback.LogFallback(string panelName)`
 - Produces: `RuntimeUiFallback.Reset()`
@@ -148,6 +159,19 @@ namespace UnderwaterGliderTwin.Tests
         public void RuntimeUiFallback_DefaultsToDisabled()
         {
             Assert.That(RuntimeUiFallback.AllowRuntimeFallback, Is.False);
+        }
+
+        [Test]
+        public void Validator_HandlesMissingOwnerAndPrefabName()
+        {
+            var issues = new List<UiReferenceIssue>();
+
+            UiReferenceValidator.Require(null, null, null, null, issues);
+
+            Assert.That(issues, Has.Count.EqualTo(1));
+            Assert.That(issues[0].PrefabName, Is.EqualTo("<unknown ui>"));
+            Assert.That(issues[0].ObjectPath, Is.EqualTo("<missing owner>"));
+            Assert.That(issues[0].FieldName, Is.EqualTo("<unnamed field>"));
         }
     }
 }
@@ -207,11 +231,40 @@ namespace UnderwaterGliderTwin.UI
 }
 ```
 
+Create `RuntimeUiValidationProfile.cs`:
+
+```csharp
+namespace UnderwaterGliderTwin.UI
+{
+    public enum RuntimeUiValidationProfile
+    {
+        BootstrapOnly,
+        EnabledPanels,
+        Strict
+    }
+}
+```
+
+Create `OptionalUiReferenceAttribute.cs`:
+
+```csharp
+using System;
+
+namespace UnderwaterGliderTwin.UI
+{
+    [AttributeUsage(AttributeTargets.Field)]
+    public sealed class OptionalUiReferenceAttribute : Attribute
+    {
+    }
+}
+```
+
 Create `UiReferenceValidator.cs`:
 
 ```csharp
 using System.Collections.Generic;
 using System.Reflection;
+using System;
 using UnityEngine;
 
 namespace UnderwaterGliderTwin.UI
@@ -225,10 +278,15 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            var safePrefabName = string.IsNullOrWhiteSpace(prefabName)
+                ? (owner != null ? owner.gameObject.name : "<unknown ui>")
+                : prefabName;
+            var safeFieldName = string.IsNullOrWhiteSpace(fieldName) ? "<unnamed field>" : fieldName;
+
             issues.Add(new UiReferenceIssue(
-                string.IsNullOrWhiteSpace(prefabName) ? owner.gameObject.name : prefabName,
+                safePrefabName,
                 owner != null ? GetPath(owner.transform) : "<missing owner>",
-                fieldName,
+                safeFieldName,
                 "Required UI reference is missing."));
         }
 
@@ -236,13 +294,18 @@ namespace UnderwaterGliderTwin.UI
         {
             if (references == null)
             {
-                issues.Add(new UiReferenceIssue(prefabName, owner != null ? GetPath(owner.transform) : "<missing owner>", groupPath, "Required UI reference group is missing."));
+                issues.Add(new UiReferenceIssue(string.IsNullOrWhiteSpace(prefabName) ? "<unknown ui>" : prefabName, owner != null ? GetPath(owner.transform) : "<missing owner>", string.IsNullOrWhiteSpace(groupPath) ? "<unnamed group>" : groupPath, "Required UI reference group is missing."));
                 return;
             }
 
             var flags = BindingFlags.Instance | BindingFlags.Public;
             foreach (var field in references.GetType().GetFields(flags))
             {
+                if (field.GetCustomAttribute<OptionalUiReferenceAttribute>() != null)
+                {
+                    continue;
+                }
+
                 var fieldPath = string.IsNullOrEmpty(groupPath) ? field.Name : groupPath + "." + field.Name;
                 var value = field.GetValue(references);
                 if (typeof(Object).IsAssignableFrom(field.FieldType))
@@ -256,7 +319,7 @@ namespace UnderwaterGliderTwin.UI
                     var group = value as IUiReferenceGroup;
                     if (group == null)
                     {
-                        issues.Add(new UiReferenceIssue(prefabName, owner != null ? GetPath(owner.transform) : "<missing owner>", fieldPath, "Required UI reference group is missing."));
+                        issues.Add(new UiReferenceIssue(string.IsNullOrWhiteSpace(prefabName) ? "<unknown ui>" : prefabName, owner != null ? GetPath(owner.transform) : "<missing owner>", fieldPath, "Required UI reference group is missing."));
                     }
                     else
                     {
@@ -356,7 +419,7 @@ Run the EditMode command above. Expected: new tests pass; existing UI tests stil
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceIssue.cs UnderwaterGliderTwin/Assets/Scripts/UI/IUiReferenceProvider.cs UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceValidator.cs UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiFallback.cs UnderwaterGliderTwin/Assets/Tests/EditMode/UiTestObjectScope.cs UnderwaterGliderTwin/Assets/Tests/EditMode/EditableUiReferenceTests.cs
+git add UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceIssue.cs UnderwaterGliderTwin/Assets/Scripts/UI/IUiReferenceProvider.cs UnderwaterGliderTwin/Assets/Scripts/UI/UiReferenceValidator.cs UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiValidationProfile.cs UnderwaterGliderTwin/Assets/Scripts/UI/OptionalUiReferenceAttribute.cs UnderwaterGliderTwin/Assets/Scripts/UI/RuntimeUiFallback.cs UnderwaterGliderTwin/Assets/Tests/EditMode/UiTestObjectScope.cs UnderwaterGliderTwin/Assets/Tests/EditMode/EditableUiReferenceTests.cs
 git commit -m "feat: add UI reference validation infrastructure"
 ```
 
@@ -373,7 +436,7 @@ git commit -m "feat: add UI reference validation infrastructure"
 **Interfaces:**
 - Consumes: `IUiReferenceProvider`, `UiReferenceValidator`, `UiReferenceIssue`
 - Produces: `RuntimeUiRoot.RuntimeCanvas`, `RuntimeUiRoot.ModalRoot`, `RuntimeUiRoot.References`
-- Produces: `RuntimeUiRoot.ValidateReferences()`
+- Produces: `RuntimeUiRoot.ValidateReferences(RuntimeUiValidationProfile profile = RuntimeUiValidationProfile.EnabledPanels)`
 - Produces: `RuntimeUiReferences` grouped UI references for subsequent panel binding tasks
 
 - [ ] **Step 1: Write failing test for root ownership**
@@ -385,7 +448,7 @@ Add to `EditableUiReferenceTests.cs`:
 public void RuntimeUiRoot_RequiresCanvasAndModalRoot()
 {
     var root = scope.CreateRoot("RuntimeUiRoot").AddComponent<RuntimeUiRoot>();
-    var issues = root.ValidateReferences();
+    var issues = root.ValidateReferences(RuntimeUiValidationProfile.BootstrapOnly);
 
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("runtimeCanvas"));
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("modalRoot"));
@@ -400,7 +463,7 @@ public void RuntimeUiRoot_ReportsDuplicateEventSystemsAndLongLivedUi()
     scope.CreateRoot("DashboardPanel");
     var root = scope.CreateRoot("RuntimeUiRoot").AddComponent<RuntimeUiRoot>();
 
-    var issues = root.ValidateReferences();
+    var issues = root.ValidateReferences(RuntimeUiValidationProfile.BootstrapOnly);
 
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("EventSystem"));
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("DashboardPanel"));
@@ -420,11 +483,31 @@ public void RuntimeUiRoot_ReportsMissingGroupedReferences()
     serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
     serialized.ApplyModifiedPropertiesWithoutUndo();
 
-    var issues = root.ValidateReferences();
+    var issues = root.ValidateReferences(RuntimeUiValidationProfile.Strict);
 
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("references.dashboard.depthValue"));
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("references.playback.playPauseButton"));
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("references.dataInput.mission.csvPathInput"));
+}
+
+[Test]
+public void RuntimeUiRoot_EnabledPanelsDoesNotValidateUncreatedPanelGroups()
+{
+    var rootObject = scope.CreateRoot("RuntimeUiRoot");
+    var canvas = new GameObject("RuntimeCanvas", typeof(Canvas)).GetComponent<Canvas>();
+    canvas.transform.SetParent(rootObject.transform, false);
+    var modalRoot = new GameObject("ModalRoot").AddComponent<RectTransform>();
+    modalRoot.transform.SetParent(canvas.transform, false);
+    var root = rootObject.AddComponent<RuntimeUiRoot>();
+    var serialized = new UnityEditor.SerializedObject(root);
+    serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
+    serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
+    serialized.ApplyModifiedPropertiesWithoutUndo();
+
+    var issues = root.ValidateReferences(RuntimeUiValidationProfile.EnabledPanels);
+
+    Assert.That(issues, Has.None.Property("FieldName").EqualTo("references.dashboard.depthValue"));
+    Assert.That(issues, Has.None.Property("FieldName").EqualTo("references.dataInput.mission.csvPathInput"));
 }
 ```
 
@@ -485,7 +568,7 @@ namespace UnderwaterGliderTwin.UI
         public Text horizontalSpeedValue;
         public Text missionTimeValue;
         public Text distanceValue;
-        public Text predictionErrorValue;
+        [OptionalUiReference] public Text predictionErrorValue;
         public Text oceanCurrentValue;
         public Text waterSpeedValue;
         public Text groundSpeedValue;
@@ -522,7 +605,7 @@ namespace UnderwaterGliderTwin.UI
         public Text driftValue;
         public Text rmseValue;
         public Text maeValue;
-        public Text confidenceValue;
+        [OptionalUiReference] public Text confidenceValue;
         public Text predictionTimeValue;
         public Text engineeringValidationValue;
         public Text alarmValue;
@@ -600,18 +683,23 @@ namespace UnderwaterGliderTwin.UI
         public RectTransform ModalRoot => modalRoot;
         public RuntimeUiReferences References => references;
 
-        public List<UiReferenceIssue> ValidateReferences()
+        public List<UiReferenceIssue> ValidateReferences(RuntimeUiValidationProfile profile = RuntimeUiValidationProfile.EnabledPanels)
         {
             var issues = new List<UiReferenceIssue>();
-            CollectReferenceIssues(issues);
+            CollectReferenceIssues(profile, issues);
             return issues;
         }
 
         public void CollectReferenceIssues(List<UiReferenceIssue> issues)
         {
+            CollectReferenceIssues(RuntimeUiValidationProfile.Strict, issues);
+        }
+
+        private void CollectReferenceIssues(RuntimeUiValidationProfile profile, List<UiReferenceIssue> issues)
+        {
             UiReferenceValidator.Require(runtimeCanvas, this, "Main.unity", "runtimeCanvas", issues);
             UiReferenceValidator.Require(modalRoot, this, "Main.unity", "modalRoot", issues);
-            references.CollectReferenceIssues(this, "Main.unity", "references", issues);
+            CollectGroupedReferenceIssues(profile, issues);
             ReportDuplicateComponentsInOwnerScene<Canvas>("Canvas", issues);
             ReportDuplicateComponentsInOwnerScene<EventSystem>("EventSystem", issues);
             ReportDuplicateChildren("DashboardPanel", issues);
@@ -623,10 +711,86 @@ namespace UnderwaterGliderTwin.UI
 
         private void OnValidate()
         {
-            var issues = ValidateReferences();
+            var issues = ValidateReferences(RuntimeUiValidationProfile.EnabledPanels);
             foreach (var issue in issues)
             {
                 Debug.LogError(issue.ToString(), this);
+            }
+        }
+
+        private void CollectGroupedReferenceIssues(RuntimeUiValidationProfile profile, List<UiReferenceIssue> issues)
+        {
+            if (references == null)
+            {
+                UiReferenceValidator.Require(null, this, "Main.unity", "references", issues);
+                return;
+            }
+
+            if (profile == RuntimeUiValidationProfile.BootstrapOnly)
+            {
+                return;
+            }
+
+            if (profile == RuntimeUiValidationProfile.Strict)
+            {
+                references.CollectReferenceIssues(this, "Main.unity", "references", issues);
+                CollectRowTemplateIssues(GetOceanLayerRowTemplate(), "references.dataInput.ocean.oceanLayerRowTemplate", issues);
+                return;
+            }
+
+            CollectGroupIfEnabled(references.dashboard != null ? references.dashboard.panel : null, references.dashboard, "references.dashboard", issues);
+            CollectGroupIfEnabled(references.status != null ? references.status.panel : null, references.status, "references.status", issues);
+            CollectGroupIfEnabled(references.dataInput != null ? references.dataInput.panel : null, references.dataInput, "references.dataInput", issues);
+            CollectGroupIfEnabled(references.playback != null ? references.playback.panel : null, references.playback, "references.playback", issues);
+            CollectGroupIfEnabled(references.oceanToolbar != null ? references.oceanToolbar.panel : null, references.oceanToolbar, "references.oceanToolbar", issues);
+            var rowTemplate = GetOceanLayerRowTemplate();
+            if (rowTemplate != null)
+            {
+                CollectRowTemplateIssues(rowTemplate, "references.dataInput.ocean.oceanLayerRowTemplate", issues);
+            }
+        }
+
+        private void CollectGroupIfEnabled(RectTransform panel, IUiReferenceGroup group, string groupPath, List<UiReferenceIssue> issues)
+        {
+            if (panel == null || !panel.gameObject.activeInHierarchy)
+            {
+                return;
+            }
+
+            if (group == null)
+            {
+                UiReferenceValidator.Require(null, this, "Main.unity", groupPath, issues);
+                return;
+            }
+
+            group.CollectReferenceIssues(this, "Main.unity", groupPath, issues);
+        }
+
+        private RectTransform GetOceanLayerRowTemplate()
+        {
+            return references != null && references.dataInput != null && references.dataInput.ocean != null
+                ? references.dataInput.ocean.oceanLayerRowTemplate
+                : null;
+        }
+
+        private void CollectRowTemplateIssues(RectTransform template, string fieldName, List<UiReferenceIssue> issues)
+        {
+            UiReferenceValidator.Require(template, this, "OceanCurrentLayerRow.prefab", fieldName, issues);
+            if (template == null)
+            {
+                return;
+            }
+
+            var providers = template.GetComponents<IUiReferenceProvider>();
+            if (providers.Length == 0)
+            {
+                issues.Add(new UiReferenceIssue("OceanCurrentLayerRow.prefab", UiReferenceValidator.GetPath(template), fieldName, "RowTemplate must include an IUiReferenceProvider such as OceanCurrentLayerRowView."));
+                return;
+            }
+
+            foreach (var provider in providers)
+            {
+                provider.CollectReferenceIssues(issues);
             }
         }
 
@@ -703,33 +867,62 @@ Add fields:
 ```csharp
 [SerializeField] private RuntimeUiRoot runtimeUiRoot;
 [SerializeField] private bool allowRuntimeFallback;
+[SerializeField] private bool strictUiValidation;
 ```
 
 Before UI initialization, add:
 
 ```csharp
 RuntimeUiFallback.AllowRuntimeFallback = allowRuntimeFallback;
+var usePrefabUi = runtimeUiRoot != null;
 if (runtimeUiRoot == null && !allowRuntimeFallback)
 {
     throw new InvalidOperationException("RuntimeUiRoot is required. Assign Main/RuntimeUiRoot on TwinBootstrap.");
 }
 if (runtimeUiRoot != null)
 {
-    var uiIssues = runtimeUiRoot.ValidateReferences();
+    var validationProfile = strictUiValidation
+        ? RuntimeUiValidationProfile.Strict
+        : RuntimeUiValidationProfile.EnabledPanels;
+    var uiIssues = runtimeUiRoot.ValidateReferences(validationProfile);
     if (uiIssues.Count > 0)
     {
         foreach (var issue in uiIssues)
         {
             Debug.LogError(issue.ToString(), runtimeUiRoot);
         }
-        enabled = false;
-        return;
+        if (allowRuntimeFallback)
+        {
+            RuntimeUiFallback.LogFallback("RuntimeUiRoot validation failed; using runtime-created UI");
+            usePrefabUi = false;
+        }
+        else
+        {
+            enabled = false;
+            return;
+        }
     }
 }
-if (runtimeUiRoot != null && !runtimeUiRoot.TryEnsureSingleEventSystem())
+if (usePrefabUi && !runtimeUiRoot.TryEnsureSingleEventSystem())
 {
     enabled = false;
     return;
+}
+```
+
+Do not set `strictUiValidation` to true until Task 10. During Tasks 2-9, the project remains runnable because missing references for panels that have not been migrated yet do not disable `TwinBootstrap`. If `allowRuntimeFallback` is true, reference errors must always be visible in the Console but must not block the fallback path.
+
+Remove the older stop-on-any-issue shape:
+
+```csharp
+if (runtimeUiRoot != null)
+{
+    var uiIssues = runtimeUiRoot.ValidateReferences();
+    if (uiIssues.Count > 0)
+    {
+        enabled = false;
+        return;
+    }
 }
 ```
 
@@ -938,12 +1131,55 @@ Add:
 [Test]
 public void WelcomeBootstrap_ReportsMissingSerializedUi()
 {
-    var bootstrap = new GameObject("WelcomeBootstrap").AddComponent<WelcomeBootstrap>();
+    var bootstrap = scope.CreateRoot("WelcomeBootstrap").AddComponent<WelcomeBootstrap>();
 
     var issues = bootstrap.ValidateReferences();
 
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("welcomeCanvas"));
     Assert.That(issues, Has.Some.Property("FieldName").EqualTo("csvInput"));
+}
+
+[Test]
+public void EditableUiSceneBuilder_BuildWelcomeSceneIsIdempotentAndBackfillsReferences()
+{
+    var previous = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path;
+    try
+    {
+        EditableUiSceneBuilder.BuildWelcomeScene();
+        EditableUiSceneBuilder.BuildWelcomeScene();
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Welcome.unity");
+
+        Assert.That(FindObjectsNamed("WelcomeCanvas"), Is.EqualTo(1));
+        Assert.That(FindObjectsNamed("BackgroundImage"), Is.EqualTo(1));
+        Assert.That(FindObjectsNamed("LaunchPanel"), Is.EqualTo(1));
+        Assert.That(FindObjectsNamed("CsvPathInput"), Is.EqualTo(1));
+        Assert.That(FindObjectsNamed("ConfirmCsvButton"), Is.EqualTo(1));
+        Assert.That(FindObjectsNamed("StartCsvButton"), Is.EqualTo(1));
+        Assert.That(FindObjectsNamed("SimulationButton"), Is.EqualTo(1));
+        var bootstrap = Object.FindObjectOfType<WelcomeBootstrap>();
+        Assert.That(bootstrap, Is.Not.Null);
+        Assert.That(bootstrap.ValidateReferences(), Is.Empty);
+    }
+    finally
+    {
+        if (!string.IsNullOrEmpty(previous))
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+        }
+    }
+}
+
+private static int FindObjectsNamed(string objectName)
+{
+    var count = 0;
+    foreach (var transform in Object.FindObjectsOfType<Transform>(true))
+    {
+        if (transform.name == objectName)
+        {
+            count++;
+        }
+    }
+    return count;
 }
 ```
 
@@ -1045,46 +1281,92 @@ namespace UnderwaterGliderTwin.Editor
             var scaler = canvasObject.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1280f, 720f);
-            EnsureEventSystem();
-            CreateWelcomeChildren(canvasObject.transform);
-            EditorUtility.SetDirty(bootstrap);
+            EnsureEventSystem(scene);
+            var refs = CreateWelcomeChildren(canvasObject.transform);
+            AssignWelcomeReferences(bootstrap, canvas, refs);
             EditorSceneManager.SaveScene(scene);
         }
 
         private static void EnsureNoUnsavedSceneChanges(string operationName)
         {
+            if (Application.isBatchMode && EditorSceneManager.GetActiveScene().isDirty)
+            {
+                throw new InvalidOperationException(operationName + " cancelled because the active scene has unsaved changes. Save or revert the scene before running the batch builder.");
+            }
+            if (Application.isBatchMode)
+            {
+                return;
+            }
+
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
             {
                 throw new InvalidOperationException(operationName + " cancelled because there are unsaved scene changes.");
             }
         }
 
-        private static void EnsureEventSystem()
+        private static void EnsureEventSystem(UnityEngine.SceneManagement.Scene scene)
         {
-            if (Object.FindObjectOfType<EventSystem>() != null)
+            foreach (var eventSystem in Object.FindObjectsOfType<EventSystem>(true))
             {
-                return;
+                if (eventSystem.gameObject.scene == scene)
+                {
+                    return;
+                }
             }
-            new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+
+            var created = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(created, scene);
         }
 
-        private static void CreateWelcomeChildren(Transform canvas)
+        private readonly struct WelcomeUiBuildRefs
         {
-            CreateImage(canvas, "BackgroundImage", Vector2.zero, Vector2.one, new Color(0.025f, 0.12f, 0.18f));
-            var panel = CreateImage(canvas, "LaunchPanel", new Vector2(0.10f, 0.08f), new Vector2(0.90f, 0.92f), new Color(0.03f, 0.12f, 0.22f, 0.98f));
-            CreateText(panel.transform, "TitleText", "水下滑翔机数字孪生", 34, new Vector2(0.08f, 0.83f), new Vector2(0.92f, 0.96f));
-            CreateText(panel.transform, "DescriptionText", "CSV 遥测回放、参数化任务仿真与实验性短时预测", 18, new Vector2(0.08f, 0.73f), new Vector2(0.92f, 0.83f));
-            CreateInput(panel.transform, "CsvPathInput", new Vector2(0.08f, 0.58f), new Vector2(0.72f, 0.67f));
-            CreateButton(panel.transform, "ConfirmCsvButton", "确认 CSV 路径", new Vector2(0.74f, 0.58f), new Vector2(0.92f, 0.67f));
-            CreateButton(panel.transform, "StartCsvButton", "开始上次 / 默认 CSV", new Vector2(0.08f, 0.43f), new Vector2(0.48f, 0.53f));
-            CreateButton(panel.transform, "SimulationButton", "进入仿真模式", new Vector2(0.52f, 0.43f), new Vector2(0.92f, 0.53f));
-            CreateText(panel.transform, "LaunchStatusText", string.Empty, 15, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.30f));
+            public WelcomeUiBuildRefs(InputField csvInput, Text status, Button confirmCsvButton, Button startCsvButton, Button simulationButton)
+            {
+                CsvInput = csvInput;
+                Status = status;
+                ConfirmCsvButton = confirmCsvButton;
+                StartCsvButton = startCsvButton;
+                SimulationButton = simulationButton;
+            }
+
+            public InputField CsvInput { get; }
+            public Text Status { get; }
+            public Button ConfirmCsvButton { get; }
+            public Button StartCsvButton { get; }
+            public Button SimulationButton { get; }
+        }
+
+        private static WelcomeUiBuildRefs CreateWelcomeChildren(Transform canvas)
+        {
+            GetOrCreateImage(canvas, "BackgroundImage", Vector2.zero, Vector2.one, new Color(0.025f, 0.12f, 0.18f));
+            var panel = GetOrCreateImage(canvas, "LaunchPanel", new Vector2(0.10f, 0.08f), new Vector2(0.90f, 0.92f), new Color(0.03f, 0.12f, 0.22f, 0.98f));
+            GetOrCreateText(panel.transform, "TitleText", "水下滑翔机数字孪生", 34, new Vector2(0.08f, 0.83f), new Vector2(0.92f, 0.96f));
+            GetOrCreateText(panel.transform, "DescriptionText", "CSV 遥测回放、参数化任务仿真与实验性短时预测", 18, new Vector2(0.08f, 0.73f), new Vector2(0.92f, 0.83f));
+            var csvInput = GetOrCreateInput(panel.transform, "CsvPathInput", new Vector2(0.08f, 0.58f), new Vector2(0.72f, 0.67f));
+            var confirm = GetOrCreateButton(panel.transform, "ConfirmCsvButton", "确认 CSV 路径", new Vector2(0.74f, 0.58f), new Vector2(0.92f, 0.67f));
+            var start = GetOrCreateButton(panel.transform, "StartCsvButton", "开始上次 / 默认 CSV", new Vector2(0.08f, 0.43f), new Vector2(0.48f, 0.53f));
+            var simulation = GetOrCreateButton(panel.transform, "SimulationButton", "进入仿真模式", new Vector2(0.52f, 0.43f), new Vector2(0.92f, 0.53f));
+            var status = GetOrCreateText(panel.transform, "LaunchStatusText", string.Empty, 15, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.30f));
+            return new WelcomeUiBuildRefs(csvInput, status, confirm, start, simulation);
+        }
+
+        private static void AssignWelcomeReferences(WelcomeBootstrap bootstrap, Canvas canvas, WelcomeUiBuildRefs refs)
+        {
+            var serialized = new SerializedObject(bootstrap);
+            serialized.FindProperty("welcomeCanvas").objectReferenceValue = canvas;
+            serialized.FindProperty("csvInput").objectReferenceValue = refs.CsvInput;
+            serialized.FindProperty("status").objectReferenceValue = refs.Status;
+            serialized.FindProperty("confirmCsvButton").objectReferenceValue = refs.ConfirmCsvButton;
+            serialized.FindProperty("startCsvButton").objectReferenceValue = refs.StartCsvButton;
+            serialized.FindProperty("simulationButton").objectReferenceValue = refs.SimulationButton;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(bootstrap);
         }
     }
 }
 ```
 
-Use helper methods equivalent to the current welcome `CreateImage`, `CreateText`, `CreateButton`, and `CreateInput`, with stable object names above.
+Use helper methods equivalent to the current welcome `CreateImage`, `CreateText`, `CreateButton`, and `CreateInput`, but name them `GetOrCreateImage`, `GetOrCreateText`, `GetOrCreateButton`, and `GetOrCreateInput`. Each helper first searches only direct children of the supplied parent for the stable object name, reuses the existing object if present, ensures required components exist, then reapplies anchors, color, text, and size.
 
 - [ ] **Step 5: Run builder in Unity batchmode**
 
@@ -1489,6 +1771,36 @@ namespace UnderwaterGliderTwin.UI
 }
 ```
 
+Add this root-validation test after the component exists:
+
+```csharp
+[Test]
+public void RuntimeUiRoot_ValidatesOceanRowTemplateProvider()
+{
+    var rootObject = scope.CreateRoot("RuntimeUiRoot");
+    var canvas = new GameObject("RuntimeCanvas", typeof(Canvas)).GetComponent<Canvas>();
+    canvas.transform.SetParent(rootObject.transform, false);
+    var modalRoot = new GameObject("ModalRoot").AddComponent<RectTransform>();
+    modalRoot.transform.SetParent(canvas.transform, false);
+    var template = new GameObject("OceanCurrentLayerRowTemplate").AddComponent<RectTransform>();
+    template.transform.SetParent(modalRoot.transform, false);
+    template.gameObject.AddComponent<OceanCurrentLayerRowView>();
+    var root = rootObject.AddComponent<RuntimeUiRoot>();
+    var serialized = new UnityEditor.SerializedObject(root);
+    serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
+    serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
+    serialized.FindProperty("references.dataInput.ocean.oceanLayerRowTemplate").objectReferenceValue = template;
+    serialized.ApplyModifiedPropertiesWithoutUndo();
+
+    var issues = root.ValidateReferences(RuntimeUiValidationProfile.EnabledPanels);
+
+    Assert.That(issues, Has.Some.Property("FieldName").EqualTo("titleText"));
+    Assert.That(issues, Has.Some.Property("FieldName").EqualTo("editButton"));
+}
+```
+
+This test proves `RuntimeUiRoot` calls `IUiReferenceProvider.CollectReferenceIssues(...)` on the row template itself; template internals cannot be left unchecked until row instantiation.
+
 - [ ] **Step 7: Convert repeated rows to RowTemplate**
 
 For ocean layers, instantiate:
@@ -1547,12 +1859,15 @@ Add:
 public void OceanDrawer_UsesModalRootWithoutCreatingExtraCanvas()
 {
     RuntimeUiFallback.AllowRuntimeFallback = false;
+    var root = scope.CreateRoot("ModalTestRoot");
     var modalRoot = new GameObject("ModalRoot").AddComponent<RectTransform>();
+    modalRoot.SetParent(root.transform, false);
     var drawer = new GameObject("OceanCurrentDrawerPanel").AddComponent<RectTransform>();
     drawer.SetParent(modalRoot, false);
     var refs = new DataInputPanelRefs();
     refs.ocean.oceanCurrentDrawer = drawer;
     var view = new GameObject("DataInput").AddComponent<DataInputView>();
+    view.transform.SetParent(root.transform, false);
 
     view.Bind(refs, string.Empty, SimulationProfile.Default, null, _ => { }, _ => { }, null);
 
@@ -1782,7 +2097,38 @@ public void RuntimeFallback_ProductionDefaultRemainsDisabled()
 
 Add PlayMode assertion that no object named `RuntimeUI` exists after loading `Main`.
 
-- [ ] **Step 2: Remove fallback from TwinBootstrap production flow**
+- [ ] **Step 2: Enable strict production validation**
+
+Set `TwinBootstrap.strictUiValidation` to true in `Assets/Scenes/Main.unity` after all long-lived panel, drawer, modal, and RowTemplate references have been assigned.
+
+Add an EditMode scene test:
+
+```csharp
+[Test]
+public void MainScene_PassesStrictRuntimeUiValidation()
+{
+    var previous = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path;
+    try
+    {
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+        var root = Object.FindObjectOfType<RuntimeUiRoot>();
+
+        Assert.That(root, Is.Not.Null);
+        Assert.That(root.ValidateReferences(RuntimeUiValidationProfile.Strict), Is.Empty);
+    }
+    finally
+    {
+        if (!string.IsNullOrEmpty(previous))
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+        }
+    }
+}
+```
+
+Expected: the test fails until every required serialized reference, including RowTemplate internals, is assigned. Optional fields marked with `[OptionalUiReference]` do not fail strict validation.
+
+- [ ] **Step 3: Remove fallback from TwinBootstrap production flow**
 
 Leave `allowRuntimeFallback` serialized for development, default false. Production branch requires `runtimeUiRoot != null`. Runtime-generated `canvasRoot = new GameObject("RuntimeUI")` is only executed inside:
 
@@ -1794,17 +2140,17 @@ if (allowRuntimeFallback)
 }
 ```
 
-- [ ] **Step 3: Mark old Initialize paths as migration-only**
+- [ ] **Step 4: Mark old Initialize paths as migration-only**
 
 Add `[System.Obsolete("Use Bind(...) with editable UI references.")]` to old `Initialize(...)` methods that create long-lived UI. Keep them compiled because tests and development fallback still use them.
 
-- [ ] **Step 4: Run all tests**
+- [ ] **Step 5: Run all tests**
 
 Run EditMode command. Expected: pass.
 
 Run PlayMode command. Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```powershell
 git add UnderwaterGliderTwin/Assets/Scripts/UI/*.cs UnderwaterGliderTwin/Assets/Scripts/Bootstrap/TwinBootstrap.cs UnderwaterGliderTwin/Assets/Tests/EditMode/EditableUiReferenceTests.cs UnderwaterGliderTwin/Assets/Tests/PlayMode/EditableUiPlayModeTests.cs
@@ -1835,13 +2181,18 @@ Spec coverage:
 - Static fallback state isolation is covered by Task 1, Task 2, Task 3, and Task 4.
 - `DashboardView` refresh uses the real existing `OnFrameChanged(...)` path through `RefreshFromCurrentFrame()`, covered by Task 6.
 - Builder idempotency and dual-resolution screenshots are covered by Task 9.
-- Full grouped reference validation is covered by Task 1 and Task 2 through `UiReferenceGroupBase`, `UiReferenceValidator.RequireFields(...)`, and `references.CollectReferenceIssues(...)`.
+- Staged reference validation is covered by Tasks 1, 2, and 10 through `RuntimeUiValidationProfile.BootstrapOnly`, `EnabledPanels`, and `Strict`.
+- Full grouped reference validation is covered by Task 1 and Task 2 through `UiReferenceGroupBase`, `UiReferenceValidator.RequireFields(...)`, and `references.CollectReferenceIssues(...)`, but is only enforced as a production blocker in Task 10.
 - Duplicate detection scope is limited to the owner scene for Canvas/EventSystem and to the `RuntimeUiRoot` subtree for long-lived panels, covered by Task 2.
 - `DataInputPanel.prefab` is included in Task 5 file creation, Prefab instance tests, and stable Prefab name list.
 - `UiTestObjectScope` is consistently located under `UnderwaterGliderTwin/Assets/Tests/EditMode`, covered by Task 1.
-- `EditableUiSceneBuilder` protects unsaved scene changes before rebuilding scenes, covered by Tasks 4 and 5.
+- Welcome builder idempotency, `GetOrCreate` helpers, serialized reference backfill, and `bootstrap.ValidateReferences()` verification are covered by Task 4.
+- `EditableUiSceneBuilder` protects unsaved scene changes before rebuilding scenes, including explicit batchmode dirty-scene failure, covered by Tasks 4 and 5.
 - PlayMode tests prepare `RuntimeDataSourceState.UseSimulation(SimulationProfile.Default)` before loading `Main`, covered by Task 9.
-- Dynamic ocean current rows use `OceanCurrentLayerRowView`, covered by Task 7.
+- Dynamic ocean current rows use `OceanCurrentLayerRowView`, and RowTemplate internals are validated from `RuntimeUiRoot`, covered by Tasks 2 and 7.
+- Modal/drawer tests use `UiTestObjectScope`, covered by Task 8.
+- `UiReferenceValidator.Require(...)` handles null owner, null prefab name, and null field name, covered by Task 1.
+- Optional UI references use `[OptionalUiReference]` and do not block strict validation, covered by Tasks 1 and 2.
 
 Placeholder scan:
 
