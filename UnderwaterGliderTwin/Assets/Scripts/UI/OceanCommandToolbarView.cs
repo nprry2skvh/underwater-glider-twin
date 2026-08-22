@@ -77,6 +77,7 @@ namespace UnderwaterGliderTwin.UI
             boundRefs = refs;
             boundToolbarParent = null;
             visibleArrowCountText = refs.visibleArrowCount;
+            ConfigureBoundLayout(refs);
             BindCameraButton(refs.cameraFollowCommand, cameraController, trajectoryView, CameraMode.Follow);
             BindCameraButton(refs.cameraGlobalCommand, cameraController, trajectoryView, CameraMode.Global);
             BindCameraButton(refs.cameraTopCommand, cameraController, trajectoryView, CameraMode.Top);
@@ -168,6 +169,97 @@ namespace UnderwaterGliderTwin.UI
 
                 UiFactory.SetButtonSelected(button, button == selected);
             }
+        }
+
+        private static void ConfigureBoundLayout(OceanToolbarRefs refs)
+        {
+            if (refs == null || refs.panel == null)
+            {
+                return;
+            }
+
+            var row = refs.panel.Find("OceanToolbarCommandsRow") as RectTransform;
+            if (row == null)
+            {
+                row = new GameObject("OceanToolbarCommandsRow", typeof(RectTransform)).GetComponent<RectTransform>();
+                row.SetParent(refs.panel, false);
+            }
+
+            row.anchorMin = new Vector2(0f, 1f);
+            row.anchorMax = new Vector2(1f, 1f);
+            row.pivot = new Vector2(0.5f, 1f);
+            row.offsetMin = new Vector2(12f, -46f);
+            row.offsetMax = new Vector2(-12f, -8f);
+            var layout = row.GetComponent<HorizontalLayoutGroup>() ?? row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(0, 0, 0, 0);
+            layout.spacing = 8f;
+            layout.childAlignment = TextAnchor.MiddleLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+
+            MoveToolbarChild(refs.panel, row, "TitleText", 150f);
+            MoveToolbarChild(refs.panel, row, "VisibleArrowCount", 120f);
+            MoveToolbarChild(refs.panel, row, "CameraFollowCommand", 60f);
+            MoveToolbarChild(refs.panel, row, "CameraGlobalCommand", 60f);
+            MoveToolbarChild(refs.panel, row, "CameraTopCommand", 60f);
+            MoveToolbarChild(refs.panel, row, "CameraSideCommand", 60f);
+            MoveToolbarChild(refs.panel, row, "CameraOrbitCommand", 60f);
+            MoveToolbarChild(refs.panel, row, "CameraResetCommand", 96f);
+        }
+
+        private static void MoveToolbarChild(Transform panel, Transform row, string name, float preferredWidth)
+        {
+            var child = FindDescendant(panel, name);
+            if (child == null || child == row)
+            {
+                return;
+            }
+
+            child.SetParent(row, false);
+            child.anchorMin = Vector2.zero;
+            child.anchorMax = Vector2.one;
+            child.offsetMin = Vector2.zero;
+            child.offsetMax = Vector2.zero;
+            var element = child.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
+            element.minWidth = preferredWidth;
+            element.preferredWidth = preferredWidth;
+            element.flexibleWidth = 0f;
+            element.minHeight = 28f;
+            element.preferredHeight = 28f;
+            foreach (var text in child.GetComponentsInChildren<Text>(true))
+            {
+                if (text.transform.parent != child)
+                {
+                    continue;
+                }
+
+                text.rectTransform.anchorMin = Vector2.zero;
+                text.rectTransform.anchorMax = Vector2.one;
+                text.rectTransform.offsetMin = new Vector2(4f, 0f);
+                text.rectTransform.offsetMax = new Vector2(-4f, 0f);
+                text.alignment = TextAnchor.MiddleCenter;
+                text.fontSize = Mathf.Max(text.fontSize, 14);
+            }
+        }
+
+        private static RectTransform FindDescendant(Transform root, string name)
+        {
+            if (root == null || string.IsNullOrWhiteSpace(name))
+            {
+                return null;
+            }
+
+            foreach (var child in root.GetComponentsInChildren<RectTransform>(true))
+            {
+                if (child.name == name)
+                {
+                    return child;
+                }
+            }
+
+            return null;
         }
 
         private static void SetCameraSelection(Transform parent, CameraMode mode)

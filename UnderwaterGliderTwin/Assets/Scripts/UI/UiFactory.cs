@@ -205,6 +205,7 @@ namespace UnderwaterGliderTwin.UI
             if (existing != null)
             {
                 EnsureHeaderExit(existing);
+                NormalizeCommandCenterHeader(existing);
                 return existing;
             }
 
@@ -231,7 +232,45 @@ namespace UnderwaterGliderTwin.UI
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-24f, 0f), new Vector2(142f, 28f));
             Text("CommandCenterExit", header, "退出", 14, TextAnchor.MiddleRight, CommandMutedText,
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-188f, -18f), new Vector2(52f, 20f));
+            NormalizeCommandCenterHeader(header);
             return header;
+        }
+
+        private static void NormalizeCommandCenterHeader(RectTransform header)
+        {
+            if (header == null)
+            {
+                return;
+            }
+
+            var product = header.Find("CommandCenterProductName") as RectTransform;
+            if (product != null)
+            {
+                ConfigureRect(product, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(22f, 0f), new Vector2(320f, 32f));
+                var productText = product.GetComponent<Text>();
+                if (productText != null)
+                {
+                    productText.alignment = TextAnchor.MiddleLeft;
+                }
+            }
+            NormalizeHeaderText(header.Find("CommandCenterSystemHealth") as RectTransform, new Vector2(-234f, 0f), new Vector2(120f, 28f), TextAnchor.MiddleRight);
+            NormalizeHeaderText(header.Find("CommandCenterRuntime") as RectTransform, new Vector2(-80f, 0f), new Vector2(142f, 28f), TextAnchor.MiddleRight);
+            NormalizeHeaderText(header.Find("CommandCenterExit") as RectTransform, new Vector2(-16f, 0f), new Vector2(52f, 28f), TextAnchor.MiddleRight);
+        }
+
+        private static void NormalizeHeaderText(RectTransform rect, Vector2 anchoredPosition, Vector2 size, TextAnchor alignment)
+        {
+            if (rect == null)
+            {
+                return;
+            }
+
+            ConfigureRect(rect, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), anchoredPosition, size);
+            var text = rect.GetComponent<Text>();
+            if (text != null)
+            {
+                text.alignment = alignment;
+            }
         }
 
         private static void EnsureHeaderExit(RectTransform header)
@@ -878,7 +917,8 @@ namespace UnderwaterGliderTwin.UI
                     continue;
                 }
 
-                ConfigureRect(panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-24f, -24f));
+                var verticalInset = panelName == "PlaybackControlsPanel" ? 0f : -24f;
+                ConfigureRect(panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-24f, verticalInset));
                 var layout = panel.GetComponent<LayoutElement>() ?? panel.gameObject.AddComponent<LayoutElement>();
                 layout.minWidth = 0f;
                 layout.preferredWidth = 0f;

@@ -123,6 +123,14 @@ namespace UnderwaterGliderTwin.UI
             alarmValue = refs.alarmValue;
             missionHealthValue = refs.missionHealthValue;
             EnsureHealthBadge(missionHealthValue != null ? missionHealthValue.transform.parent as RectTransform : null);
+            if (alarmValue != null)
+            {
+                alarmValue.gameObject.SetActive(false);
+            }
+            if (alarmBackground != null)
+            {
+                alarmBackground.gameObject.SetActive(false);
+            }
             predictionMetricRows.Clear();
             ConfigureBoundRows();
             RegisterPredictionMetric(refs.panel, "漂移Label", driftValue);
@@ -238,9 +246,28 @@ namespace UnderwaterGliderTwin.UI
             }
             else
             {
-                UiFactory.ConfigureFixedValueColumn(value);
-                EnsureUnitColumn(value);
+                label = CreateBoundLabel(row, labelName);
+                ConfigureKeyValueChildren(label, value);
             }
+        }
+
+        private static Text CreateBoundLabel(Transform row, string labelName)
+        {
+            var display = labelName != null && labelName.EndsWith("Label", System.StringComparison.Ordinal)
+                ? labelName.Substring(0, labelName.Length - "Label".Length)
+                : labelName;
+            return UiFactory.Text(
+                row.name + "Label",
+                row,
+                display,
+                13,
+                TextAnchor.MiddleLeft,
+                UiFactory.CommandText,
+                Vector2.zero,
+                Vector2.one,
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                Vector2.zero);
         }
 
         private static RectTransform CreateRow(Transform parent, string name, float topOffset)
@@ -268,9 +295,25 @@ namespace UnderwaterGliderTwin.UI
             row.anchorMin = new Vector2(0f, 1f);
             row.anchorMax = new Vector2(1f, 1f);
             row.pivot = new Vector2(0.5f, 1f);
-            row.anchoredPosition = Vector2.zero;
             row.sizeDelta = new Vector2(0f, 26f);
+            PositionNewBoundRow(row, parent);
             return ConfigureRow(row);
+        }
+
+        private static void PositionNewBoundRow(RectTransform row, Transform parent)
+        {
+            var rowIndex = 0;
+            foreach (Transform child in parent)
+            {
+                if (child == row.transform || !child.name.EndsWith("Row", System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                rowIndex++;
+            }
+
+            row.anchoredPosition = new Vector2(0f, -62f - rowIndex * 28f);
         }
 
         private static RectTransform ConfigureRow(RectTransform row)
@@ -418,7 +461,7 @@ namespace UnderwaterGliderTwin.UI
 
             foreach (var text in root.GetComponentsInChildren<Text>(true))
             {
-                if (text.name == name)
+                if (text.name == name || text.text == name)
                 {
                     return text;
                 }

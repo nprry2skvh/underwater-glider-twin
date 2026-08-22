@@ -90,6 +90,13 @@ namespace UnderwaterGliderTwin.UI
             playPauseButton = refs.playPauseButton;
             progressSlider = refs.progressSlider;
             statusText = refs.statusText;
+            if (statusText != null)
+            {
+                // Keep the configured Prefab reference, while normalizing its runtime name
+                // to the generated-ui contract used by the responsive row binder.
+                statusText.gameObject.name = "PlaybackStatus";
+                statusText.text = "回放已就绪";
+            }
             UiFactory.ConfigureWrappedStatusText(statusText);
             BindButton(refs.playPauseButton, OnPlayPauseClicked);
             BindButton(refs.reverseButton, OnReverseClicked);
@@ -176,7 +183,7 @@ namespace UnderwaterGliderTwin.UI
             var timeline = EnsureLayoutRow(panel, "PlaybackTimelineRow", new Vector2(0f, 0.34f), new Vector2(1f, 0.66f));
             var options = EnsureLayoutRow(panel, "PlaybackOptionsRow", Vector2.zero, new Vector2(1f, 0.34f));
 
-            MoveToRow(panel, operations, "PlaybackGroupLabel", 86f);
+            MoveToRow(panel, operations, "PlaybackGroupLabel", 86f, false, "TitleText");
             MoveToRow(panel, operations, "PlayPauseButton", 82f);
             MoveToRow(panel, operations, "ReverseButton", 82f);
             MoveToRow(panel, operations, "ReplayButton", 82f);
@@ -214,8 +221,8 @@ namespace UnderwaterGliderTwin.UI
 
             row.anchorMin = anchorMin;
             row.anchorMax = anchorMax;
-            row.offsetMin = new Vector2(12f, 4f);
-            row.offsetMax = new Vector2(-12f, -4f);
+            row.offsetMin = new Vector2(12f, 0f);
+            row.offsetMax = new Vector2(-12f, 0f);
             row.pivot = new Vector2(0.5f, 0.5f);
             var layout = row.GetComponent<HorizontalLayoutGroup>() ?? row.gameObject.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = 8f;
@@ -227,9 +234,13 @@ namespace UnderwaterGliderTwin.UI
             return row;
         }
 
-        private static void MoveToRow(Transform panel, Transform row, string name, float preferredWidth, bool flexible = false)
+        private static void MoveToRow(Transform panel, Transform row, string name, float preferredWidth, bool flexible = false, string alias = null)
         {
             var control = FindDescendant(panel, name);
+            if (control == null && !string.IsNullOrWhiteSpace(alias))
+            {
+                control = FindDescendant(panel, alias);
+            }
             if (control == null || row == null)
             {
                 return;
@@ -243,8 +254,42 @@ namespace UnderwaterGliderTwin.UI
             var element = control.GetComponent<LayoutElement>() ?? control.gameObject.AddComponent<LayoutElement>();
             element.minHeight = 30f;
             element.preferredWidth = preferredWidth;
+            if (name == "PlaybackStatus")
+            {
+                var status = control.GetComponent<Text>();
+                if (status != null)
+                {
+                    status.fontSize = Mathf.Max(status.fontSize, 14);
+                    status.verticalOverflow = VerticalWrapMode.Truncate;
+                }
+
+                element.minHeight = 24f;
+                element.preferredHeight = 24f;
+            }
             element.minWidth = flexible ? 80f : preferredWidth;
             element.flexibleWidth = flexible ? 1f : 0f;
+            ConfigureControlText(control);
+        }
+
+        private static void ConfigureControlText(RectTransform control)
+        {
+            foreach (var text in control.GetComponentsInChildren<Text>(true))
+            {
+                if (text.transform != control && text.transform.parent != control)
+                {
+                    continue;
+                }
+
+                text.rectTransform.anchorMin = Vector2.zero;
+                text.rectTransform.anchorMax = Vector2.one;
+                text.rectTransform.offsetMin = new Vector2(4f, 0f);
+                text.rectTransform.offsetMax = new Vector2(-4f, 0f);
+                text.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+                text.alignment = TextAnchor.MiddleCenter;
+                text.horizontalOverflow = HorizontalWrapMode.Wrap;
+                text.verticalOverflow = VerticalWrapMode.Truncate;
+                text.fontSize = Mathf.Max(text.fontSize, 14);
+            }
         }
 
         private static RectTransform FindDescendant(Transform root, string name)

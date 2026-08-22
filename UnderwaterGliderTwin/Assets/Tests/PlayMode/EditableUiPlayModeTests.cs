@@ -352,6 +352,131 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [UnityTest]
+        public IEnumerator MainScene_BoundTelemetryAndStatusRowsHaveDistinctVerticalPositions()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var root = Object.FindObjectOfType<RuntimeUiRoot>(true).transform;
+            AssertRowsHaveDistinctVerticalPositions(FindDescendant(root, "DashboardPanel").transform);
+            AssertRowsHaveDistinctVerticalPositions(FindDescendant(root, "StatusPanel").transform);
+        }
+
+        [UnityTest]
+        public IEnumerator MainScene_CollapsedConfigurationDoesNotRenderUnmovedLegacyInputFields()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var dataInputPanel = FindSceneObject(SceneManager.GetActiveScene(), "DataInputPanel");
+            var expandedContent = FindDescendant(dataInputPanel.transform, "ConfigurationExpandedContent");
+            var activeLegacyInputs = new System.Collections.Generic.List<string>();
+            foreach (var input in dataInputPanel.GetComponentsInChildren<InputField>(true))
+            {
+                if (input.gameObject.activeInHierarchy && !IsDescendantOf(input.transform, expandedContent.transform))
+                {
+                    activeLegacyInputs.Add(input.name);
+                }
+            }
+
+            Assert.That(activeLegacyInputs, Is.Empty,
+                "Collapsed DataInputPanel must not leave active legacy InputField/Image controls outside ConfigurationExpandedContent.");
+        }
+
+        [UnityTest]
+        public IEnumerator MainScene_BoundPlaybackStatusIsPlacedInTimelineRowWithReadableHeight()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var playback = FindSceneObject(SceneManager.GetActiveScene(), "PlaybackControlsPanel");
+            var statusText = FindSceneComponent<Text>(SceneManager.GetActiveScene(), "PlaybackStatus");
+            var timeline = FindDescendant(playback.transform, "PlaybackTimelineRow").GetComponent<RectTransform>();
+
+            Assert.That(statusText.transform.parent.name, Is.EqualTo("PlaybackTimelineRow"));
+            Assert.That(statusText.rectTransform.rect.height, Is.GreaterThanOrEqualTo(24f));
+            Assert.That(statusText.fontSize, Is.GreaterThanOrEqualTo(14));
+            Assert.That(timeline.rect.height, Is.GreaterThanOrEqualTo(statusText.rectTransform.rect.height));
+        }
+
+        [UnityTest]
+        public IEnumerator MainScene_BoundPrefabLegacyGraphicsAreHiddenOrReflowed()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var scene = SceneManager.GetActiveScene();
+            var root = Object.FindObjectOfType<RuntimeUiRoot>(true).transform;
+            var dashboard = FindDescendant(root, "DashboardPanel").transform;
+            foreach (var unit in dashboard.GetComponentsInChildren<Text>(true))
+            {
+                if (unit.name.EndsWith("Unit", System.StringComparison.Ordinal))
+                {
+                    Assert.That(unit.gameObject.activeInHierarchy, Is.False,
+                        $"Collapsed Dashboard advanced unit {unit.name} must not remain visible outside its detail state.");
+                }
+            }
+
+            var alarm = FindSceneObject(scene, "AlarmValue");
+            Assert.That(alarm == null || !alarm.activeInHierarchy, Is.True);
+            var dataPanel = FindSceneObject(scene, "DataInputPanel");
+            var dataBackground = dataPanel != null ? dataPanel.GetComponent<Image>() : null;
+            Assert.That(dataBackground == null || !dataBackground.enabled, Is.True);
+
+            var oceanRow = FindDescendant(root, "OceanToolbarCommandsRow").transform;
+            foreach (var name in new[] { "CameraFollowCommand", "CameraGlobalCommand", "CameraTopCommand", "CameraSideCommand", "CameraOrbitCommand", "CameraResetCommand" })
+            {
+                Assert.That(FindDescendant(oceanRow, name), Is.Not.Null);
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator MainScene_SystemBarHeaderUsesNonOverlappingAbsoluteSlots()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var scene = SceneManager.GetActiveScene();
+            var systemBar = FindSceneObject(scene, "SystemBar");
+            var header = FindDescendant(systemBar != null ? systemBar.transform : null, "CommandCenterHeader");
+            Assert.That(header, Is.Not.Null, "SystemBar must own the runtime command header.");
+            Assert.That(header.transform.parent.name, Is.EqualTo("SystemBar"));
+            var headerRect = header.GetComponent<RectTransform>();
+
+            var headerLayout = header.GetComponent<HorizontalLayoutGroup>();
+            Assert.That(headerLayout == null || !headerLayout.enabled, Is.True,
+                "SystemBar header uses fixed RectTransform slots; a legacy HorizontalLayoutGroup must not rewrite them.");
+
+            var product = FindDescendant(header.transform, "CommandCenterProductName").GetComponent<RectTransform>();
+            var health = FindDescendant(header.transform, "CommandCenterSystemHealth").GetComponent<RectTransform>();
+            var runtime = FindDescendant(header.transform, "CommandCenterRuntime").GetComponent<RectTransform>();
+            var exit = FindDescendant(header.transform, "CommandCenterExit").GetComponent<RectTransform>();
+
+            Assert.That(product.anchorMin, Is.EqualTo(Vector2.zero));
+            Assert.That(product.anchorMax, Is.EqualTo(Vector2.zero));
+            Assert.That(product.pivot, Is.EqualTo(Vector2.zero));
+            Assert.That(product.rect.width, Is.GreaterThan(0f));
+            var productBounds = GetHorizontalBoundsInParent(product, headerRect);
+            var healthBounds = GetHorizontalBoundsInParent(health, headerRect);
+            var runtimeBounds = GetHorizontalBoundsInParent(runtime, headerRect);
+            var exitBounds = GetHorizontalBoundsInParent(exit, headerRect);
+            Assert.That(productBounds.y, Is.LessThan(healthBounds.x));
+            Assert.That(healthBounds.y, Is.LessThan(runtimeBounds.x));
+            Assert.That(runtimeBounds.y, Is.LessThan(exitBounds.x));
+            Assert.That(exitBounds.y, Is.LessThanOrEqualTo(headerRect.rect.width));
+        }
+
+        [UnityTest]
         public IEnumerator MainScene_CommandToolbarSelectionFollowsGlobalInitialization()
         {
             RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
@@ -459,6 +584,59 @@ namespace UnderwaterGliderTwin.Tests
             }
 
             return null;
+        }
+
+        private static void AssertRowsHaveDistinctVerticalPositions(Transform root)
+        {
+            var rowPositions = new System.Collections.Generic.List<float>();
+            foreach (var row in root.GetComponentsInChildren<RectTransform>(true))
+            {
+                if (!row.name.EndsWith("Row", System.StringComparison.Ordinal)
+                    || row.GetComponentsInChildren<Text>(true).Length == 0)
+                {
+                    continue;
+                }
+
+                foreach (var existingPosition in rowPositions)
+                {
+                    Assert.That(Mathf.Abs(existingPosition - row.position.y), Is.GreaterThan(0.1f),
+                        $"{root.name}/{row.name} must not share a vertical position with another active row.");
+                }
+
+                rowPositions.Add(row.position.y);
+            }
+
+            Assert.That(rowPositions.Count, Is.GreaterThan(1), $"{root.name} must expose multiple active rows for the diagnostic.");
+        }
+
+        private static bool IsDescendantOf(Transform child, Transform ancestor)
+        {
+            if (child == null || ancestor == null)
+            {
+                return false;
+            }
+
+            var current = child;
+            while (current != null)
+            {
+                if (current == ancestor)
+                {
+                    return true;
+                }
+
+                current = current.parent;
+            }
+
+            return false;
+        }
+
+        private static Vector2 GetHorizontalBoundsInParent(RectTransform rect, RectTransform parent)
+        {
+            var corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            var left = parent.InverseTransformPoint(corners[0]).x;
+            var right = parent.InverseTransformPoint(corners[3]).x;
+            return new Vector2(Mathf.Min(left, right), Mathf.Max(left, right));
         }
 
         private static int CountNamedChildren(Transform parent, string objectName)

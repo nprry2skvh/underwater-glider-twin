@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System;
 using System.Collections.Generic;
 using UnderwaterGliderTwin.Playback;
 using UnderwaterGliderTwin.Prediction;
@@ -305,10 +306,10 @@ namespace UnderwaterGliderTwin.UI
 
             UiFactory.ConfigureFixedValueColumn(value);
 
-            var label = panel.Find(labelName)?.GetComponent<Text>();
+            var label = FindTextByNameOrValue(panel, labelName);
             if (label == null)
             {
-                label = value.transform.parent?.Find(labelName)?.GetComponent<Text>();
+                label = FindTextByNameOrValue(value.transform.parent, labelName);
             }
 
             var parent = advanced && refsAdvancedRowsRoot != null ? refsAdvancedRowsRoot : panel;
@@ -321,8 +322,8 @@ namespace UnderwaterGliderTwin.UI
             }
             else
             {
-                UiFactory.ConfigureFixedValueColumn(value);
-                EnsureUnitColumn(value);
+                label = CreateBoundLabel(row, labelName);
+                ConfigureKeyValueChildren(label, value);
             }
             if (advanced)
             {
@@ -331,12 +332,54 @@ namespace UnderwaterGliderTwin.UI
                     advancedRows.Add(label.gameObject);
                 }
                 advancedRows.Add(value.gameObject);
+                var unit = row.Find(value.name + "Unit")?.GetComponent<Text>();
+                if (unit != null)
+                {
+                    advancedRows.Add(unit.gameObject);
+                }
                 if (label != null)
                 {
                     label.gameObject.SetActive(showingDetails);
                 }
                 value.gameObject.SetActive(showingDetails);
             }
+        }
+
+        private static Text CreateBoundLabel(Transform row, string labelName)
+        {
+            var display = labelName != null && labelName.EndsWith("Label", StringComparison.Ordinal)
+                ? labelName.Substring(0, labelName.Length - "Label".Length)
+                : labelName;
+            return UiFactory.Text(
+                row.name + "Label",
+                row,
+                display,
+                13,
+                TextAnchor.MiddleLeft,
+                UiFactory.CommandText,
+                Vector2.zero,
+                Vector2.one,
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                Vector2.zero);
+        }
+
+        private static Text FindTextByNameOrValue(Transform root, string expected)
+        {
+            if (root == null || string.IsNullOrWhiteSpace(expected))
+            {
+                return null;
+            }
+
+            foreach (var text in root.GetComponentsInChildren<Text>(true))
+            {
+                if (text.name == expected || text.text == expected)
+                {
+                    return text;
+                }
+            }
+
+            return null;
         }
 
         private RectTransform refsAdvancedRowsRoot;
@@ -356,7 +399,31 @@ namespace UnderwaterGliderTwin.UI
         private static RectTransform EnsureRow(Transform parent, string name)
         {
             var existing = parent.Find(name) as RectTransform;
-            return existing != null ? ConfigureRow(existing) : ConfigureRow(new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>(), parent);
+            if (existing != null)
+            {
+                return ConfigureRow(existing);
+            }
+
+            var row = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
+            ConfigureRow(row, parent);
+            PositionNewBoundRow(row, parent);
+            return row;
+        }
+
+        private static void PositionNewBoundRow(RectTransform row, Transform parent)
+        {
+            var rowIndex = 0;
+            foreach (Transform child in parent)
+            {
+                if (child == row.transform || !child.name.EndsWith("Row", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                rowIndex++;
+            }
+
+            row.anchoredPosition = new Vector2(0f, -62f - rowIndex * 28f);
         }
 
         private static RectTransform ConfigureRow(RectTransform row, Transform parent = null)

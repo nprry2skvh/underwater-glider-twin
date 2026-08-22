@@ -251,6 +251,11 @@ namespace UnderwaterGliderTwin.UI
             {
                 configurationPanel.gameObject.SetActive(true);
             }
+            var legacyPanelBackground = refs.panel != null ? refs.panel.GetComponent<Image>() : null;
+            if (legacyPanelBackground != null)
+            {
+                legacyPanelBackground.enabled = false;
+            }
             dynamicRowsRoot = refs.ocean.dynamicRowsRoot;
             oceanLayerRowTemplate = refs.ocean.oceanLayerRowTemplate;
             oceanCurrentDrawerLookupButton = refs.ocean.drawerLookupButton;

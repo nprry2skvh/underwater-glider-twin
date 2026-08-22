@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 using UnderwaterGliderTwin.Telemetry;
@@ -454,9 +455,57 @@ namespace UnderwaterGliderTwin.UI
 
         private RectTransform FindDirectChild(string childName)
         {
-            return string.IsNullOrWhiteSpace(childName) || configurationPanel == null
-                ? null
-                : configurationPanel.Find(childName) as RectTransform;
+            if (string.IsNullOrWhiteSpace(childName) || configurationPanel == null)
+            {
+                return null;
+            }
+
+            var directChild = configurationPanel.Find(childName) as RectTransform;
+            if (directChild != null)
+            {
+                return directChild;
+            }
+
+            foreach (var alias in GetPrefabChildAliases(childName))
+            {
+                directChild = configurationPanel.Find(alias) as RectTransform;
+                if (directChild != null)
+                {
+                    return directChild;
+                }
+            }
+
+            return null;
+        }
+
+        private static string[] GetPrefabChildAliases(string childName)
+        {
+            switch (childName)
+            {
+                case "SimulationCyclesInputField": return new[] { "SimulationCyclesInput" };
+                case "SimulationDurationInputField": return new[] { "SimulationDurationInput" };
+                case "SimulationDepthInputField": return new[] { "SimulationDepthInput", "TargetDepthInput" };
+                case "SimulationWaterColumnInputField": return new[] { "SimulationWaterColumnInput", "WaterColumnDepthInput" };
+                case "SimulationHeadingInputField": return new[] { "SimulationHeadingInput", "HeadingInput" };
+                case "SimulationHeadingDeltaInputField": return new[] { "SimulationHeadingDeltaInput", "HeadingDeltaInput" };
+                case "SimulationPitchInputField": return new[] { "SimulationPitchInput", "PitchInput" };
+                case "SimulationRollInputField": return new[] { "SimulationRollInput", "RollInput" };
+                case "OceanCurrentMinDepthInputField": return new[] { "MinDepthInput" };
+                case "OceanCurrentMaxDepthInputField": return new[] { "MaxDepthInput" };
+                case "OceanCurrentEastwardInputField": return new[] { "EastwardInput" };
+                case "OceanCurrentNorthwardInputField": return new[] { "NorthwardInput" };
+                case "MissionLongitudeInputField": return new[] { "MissionLongitudeInput" };
+                case "MissionLatitudeInputField": return new[] { "MissionLatitudeInput" };
+                case "OceanCurrentPreviousLayerButton": return new[] { "PreviousLayerButton" };
+                case "OceanCurrentNextLayerButton": return new[] { "NextLayerButton" };
+                case "OceanCurrentAddLayerButton": return new[] { "AddLayerButton" };
+                case "OceanCurrentSaveLayerButton": return new[] { "SaveLayerButton" };
+                case "OceanCurrentDeleteLayerButton": return new[] { "DeleteLayerButton", "RemoveButton" };
+                case "OceanCurrentLookupButton": return new[] { "LookupButton" };
+                case "OceanCurrentLayerSummary": return new[] { "LayerSummaryText" };
+                case "OceanCurrentDrawerButton": return new[] { "DrawerButton" };
+                default: return Array.Empty<string>();
+            }
         }
 
         private static void NormalizeLayoutChild(RectTransform child, float preferredHeight = 54f)
