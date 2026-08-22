@@ -65,6 +65,7 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.Text("LegendPredicted", panel, "预测历史", 12, TextAnchor.MiddleLeft, new Color(1f, 0.84f, 0.2f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1122f, -94f), new Vector2(96f, 20f));
             UiFactory.Text("LegendPlanned", panel, "计划", 12, TextAnchor.MiddleLeft, new Color(0.3f, 0.92f, 0.52f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1210f, -94f), new Vector2(66f, 20f));
             statusText = UiFactory.Text("PlaybackStatus", panel, "回放已就绪", 12, TextAnchor.MiddleRight, new Color(0.78f, 0.96f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -94f), new Vector2(490f, 20f));
+            UiFactory.ConfigureWrappedStatusText(statusText);
 
             trajectoryView.SetCameraMode(CameraMode.Follow);
             trajectoryView.SetVisible(true);
@@ -89,6 +90,7 @@ namespace UnderwaterGliderTwin.UI
             playPauseButton = refs.playPauseButton;
             progressSlider = refs.progressSlider;
             statusText = refs.statusText;
+            UiFactory.ConfigureWrappedStatusText(statusText);
             BindButton(refs.playPauseButton, OnPlayPauseClicked);
             BindButton(refs.reverseButton, OnReverseClicked);
             BindButton(refs.replayButton, OnReplayClicked);
@@ -414,6 +416,7 @@ namespace UnderwaterGliderTwin.UI
             if (statusText != null)
             {
                 statusText.text = message;
+                UiFactory.ConfigureWrappedStatusText(statusText);
             }
         }
 

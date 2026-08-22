@@ -52,12 +52,18 @@ namespace UnderwaterGliderTwin.UI
         private RectTransform panel;
         private Button detailsButton;
         private GameObject navigationReferenceCard;
+        private GameObject telemetryEmptyState;
+        private Text telemetryEmptyStateTitle;
+        private Text telemetryEmptyStateHint;
+        private bool telemetryEmptyStateForced;
+        private bool useIndependentUnits;
         private bool showingDetails;
         private bool minimalBoundReferences;
 
         [System.Obsolete("Use Bind(...) with editable UI references.")]
         public void Initialize(PlaybackController playbackController, PredictionController predictionController)
         {
+            useIndependentUnits = false;
             playback = playbackController;
             prediction = predictionController;
             cumulativeDistanceMeters = BuildDistanceCache(playback.Model);
@@ -104,6 +110,7 @@ namespace UnderwaterGliderTwin.UI
             actuatorPowerValue = AddAdvancedRow(panel, "\u6267\u884c\u673a\u6784\u529f\u7387", "ActuatorPowerValue", 588f, 1);
 
             dynamicsSummaryValue = UiFactory.Text("DynamicsSummaryValue", panel, "6DOF", 10, TextAnchor.MiddleRight, new Color(0.96f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(150f, -252f), new Vector2(162f, 22f));
+            EnsureTelemetryEmptyState();
 
             playback.FrameChangedWithReason += OnFrameChanged;
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
@@ -113,6 +120,7 @@ namespace UnderwaterGliderTwin.UI
 
         public void Bind(DashboardPanelRefs refs, PlaybackController playbackController, PredictionController predictionController)
         {
+            useIndependentUnits = true;
             playback = playbackController;
             prediction = predictionController;
             if (refs == null || playback == null || playback.Model == null)
@@ -158,6 +166,8 @@ namespace UnderwaterGliderTwin.UI
             actuatorPowerValue = refs.actuatorPowerValue;
             dynamicsSummaryValue = refs.dynamicsSummaryValue;
             minimalBoundReferences = headingValue == null || pitchValue == null || rollValue == null;
+            useIndependentUnits = !minimalBoundReferences;
+            EnsureTelemetryEmptyState();
             cumulativeDistanceMeters = BuildDistanceCache(playback.Model);
             if (detailsButton != null)
             {
@@ -179,16 +189,27 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            if (playback.Model.Frames == null || playback.Model.Frames.Count == 0)
+            {
+                SetTelemetryEmptyState(true);
+                return;
+            }
+
+            if (!telemetryEmptyStateForced)
+            {
+                SetTelemetryEmptyState(false);
+            }
+
             if (minimalBoundReferences)
             {
                 if (depthValue != null)
                 {
-                    depthValue.text = $"{playback.Model.CurrentFrame.DepthM:0.0} m";
+                    SetValue(depthValue, $"{playback.Model.CurrentFrame.DepthM:0.0}", "m");
                 }
 
                 if (batteryValue != null)
                 {
-                    batteryValue.text = $"{playback.Model.CurrentFrame.BatteryPercent:0} %";
+                    SetValue(batteryValue, $"{playback.Model.CurrentFrame.BatteryPercent:0}", "%");
                 }
 
                 return;
@@ -290,6 +311,9 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            UiFactory.ConfigureFixedValueColumn(value);
+            EnsureUnitColumn(value);
+
             var label = panel.Find(labelName)?.GetComponent<Text>();
             if (label == null)
             {
@@ -364,13 +388,13 @@ namespace UnderwaterGliderTwin.UI
         private static void ConfigureKeyValueChildren(Text label, Text value)
         {
             ConfigureKeyText(label, 116f);
-            ConfigureKeyText(value, 0f);
+            ConfigureKeyText(value, UiFactory.FixedValueColumnWidth);
             value.rectTransform.anchorMin = Vector2.one;
             value.rectTransform.anchorMax = Vector2.one;
             value.rectTransform.pivot = Vector2.one;
-            var valueLayout = value.GetComponent<LayoutElement>() ?? value.gameObject.AddComponent<LayoutElement>();
-            valueLayout.minWidth = 64f;
-            valueLayout.flexibleWidth = 1f;
+            UiFactory.ConfigureFixedLabelColumn(label);
+            UiFactory.ConfigureFixedValueColumn(value);
+            EnsureUnitColumn(value);
         }
 
         private static void ConfigureKeyText(Text text, float preferredWidth)
@@ -387,6 +411,98 @@ namespace UnderwaterGliderTwin.UI
             element.minWidth = preferredWidth > 0f ? preferredWidth : 0f;
             element.preferredWidth = preferredWidth;
             element.flexibleWidth = preferredWidth > 0f ? 0f : 1f;
+        }
+
+        private static Text EnsureUnitColumn(Text value)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            var unitName = value.name + "Unit";
+            var unit = value.transform.parent.Find(unitName)?.GetComponent<Text>();
+            if (unit == null)
+            {
+                unit = UiFactory.Text(unitName, value.transform.parent, GetUnitLabel(value.name), 10,
+                    TextAnchor.MiddleLeft, UiFactory.CommandMutedText, Vector2.zero, Vector2.zero);
+            }
+
+            unit.text = GetUnitLabel(value.name);
+            UiFactory.ConfigureFixedUnitColumn(unit);
+            unit.gameObject.SetActive(!string.IsNullOrEmpty(unit.text));
+            return unit;
+        }
+
+        private static string GetUnitLabel(string valueName)
+        {
+            if (string.IsNullOrEmpty(valueName))
+            {
+                return string.Empty;
+            }
+
+            if (valueName.IndexOf("Latitude", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("Longitude", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("Heading", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("Pitch", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("Roll", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("Yaw", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("SideSlip", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "°";
+            }
+
+            if (valueName.IndexOf("Battery", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "%";
+            }
+
+            if (valueName.IndexOf("Depth", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "m";
+            }
+
+            if (valueName.IndexOf("Distance", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "km";
+            }
+
+            if (valueName.IndexOf("Time", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "s";
+            }
+
+            if (valueName.IndexOf("Value", System.StringComparison.OrdinalIgnoreCase) >= 0
+                && (valueName.IndexOf("Speed", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || valueName.IndexOf("Velocity", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || valueName.IndexOf("Current", System.StringComparison.OrdinalIgnoreCase) >= 0))
+            {
+                return "m/s";
+            }
+
+            if (valueName.IndexOf("Force", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("Buoyancy", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "N";
+            }
+
+            if (valueName.IndexOf("Energy", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("Power", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "W";
+            }
+
+            if (valueName.IndexOf("Position", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "mm";
+            }
+
+            if (valueName.IndexOf("Inertia", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "kg*m2";
+            }
+
+            return string.Empty;
         }
 
         private void ToggleDetails()
@@ -437,8 +553,71 @@ namespace UnderwaterGliderTwin.UI
             return card.gameObject;
         }
 
+        public void SetTelemetryEmptyState(bool visible)
+        {
+            telemetryEmptyStateForced = visible;
+            EnsureTelemetryEmptyState();
+            if (telemetryEmptyState != null)
+            {
+                telemetryEmptyState.SetActive(visible);
+            }
+        }
+
+        private void EnsureTelemetryEmptyState()
+        {
+            if (panel == null)
+            {
+                return;
+            }
+
+            telemetryEmptyState = panel.Find("TelemetryEmptyState")?.gameObject;
+            if (telemetryEmptyState == null)
+            {
+                var card = UiFactory.Panel("TelemetryEmptyState", panel,
+                    new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, -132f), new Vector2(286f, 82f), UiFactory.CommandCardFill);
+                card.GetComponent<Image>().raycastTarget = false;
+                telemetryEmptyState = card.gameObject;
+            }
+
+            telemetryEmptyStateTitle = telemetryEmptyState.transform.Find("TelemetryEmptyStateTitle")?.GetComponent<Text>();
+            if (telemetryEmptyStateTitle == null)
+            {
+                telemetryEmptyStateTitle = UiFactory.Text("TelemetryEmptyStateTitle", telemetryEmptyState.transform,
+                    "尚未加载有效轨迹", 14, TextAnchor.MiddleCenter, UiFactory.CommandText,
+                    new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, 12f), new Vector2(-20f, 24f));
+            }
+
+            telemetryEmptyStateHint = telemetryEmptyState.transform.Find("TelemetryEmptyStateHint")?.GetComponent<Text>();
+            if (telemetryEmptyStateHint == null)
+            {
+                telemetryEmptyStateHint = UiFactory.Text("TelemetryEmptyStateHint", telemetryEmptyState.transform,
+                    "请加载 CSV 或运行参数仿真", 12, TextAnchor.MiddleCenter, UiFactory.CommandMutedText,
+                    new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, -16f), new Vector2(-20f, 22f));
+            }
+
+            UiFactory.ApplyTextRole(telemetryEmptyStateTitle, UiTextRole.Value, RuntimeUiLayoutMode.CompressedThreeColumn);
+            UiFactory.ApplyTextRole(telemetryEmptyStateHint, UiTextRole.Auxiliary, RuntimeUiLayoutMode.CompressedThreeColumn);
+            telemetryEmptyStateTitle.horizontalOverflow = HorizontalWrapMode.Wrap;
+            telemetryEmptyStateHint.horizontalOverflow = HorizontalWrapMode.Wrap;
+            telemetryEmptyStateTitle.verticalOverflow = VerticalWrapMode.Truncate;
+            telemetryEmptyStateHint.verticalOverflow = VerticalWrapMode.Truncate;
+        }
+
         private void OnFrameChanged(TelemetryFrame frame, int index, float progress01, FrameUpdateReason reason)
         {
+            if (playback == null || playback.Model == null || playback.Model.Frames == null || playback.Model.Frames.Count == 0)
+            {
+                SetTelemetryEmptyState(true);
+                return;
+            }
+
+            if (!telemetryEmptyStateForced)
+            {
+                SetTelemetryEmptyState(false);
+            }
             if (!ShouldUpdateForFrame(Time.unscaledTime, reason))
             {
                 return;
@@ -451,26 +630,26 @@ namespace UnderwaterGliderTwin.UI
                 velocity = TelemetryVelocityEstimator.ClampHorizontalSpeed(velocity);
             }
 
-            depthValue.text = $"{frame.DepthM:0.0} m";
-            headingValue.text = $"{frame.HeadingDeg:0.0}°";
-            pitchValue.text = $"{frame.PitchDeg:0.0}°";
-            rollValue.text = $"{frame.RollDeg:0.0}°";
-            yawValue.text = $"{frame.HeadingDeg:0.0}°";
-            latitudeValue.text = $"{frame.LatitudeDeg:0.000000}°";
-            longitudeValue.text = $"{frame.LongitudeDeg:0.000000}°";
-            velocityXValue.text = $"{velocity.x:0.00} m/s";
-            velocityYValue.text = $"{velocity.y:0.00} m/s";
-            velocityZValue.text = $"{velocity.z:0.00} m/s";
-            speedValue.text = TelemetryKinematicsUtility.TryGetHorizontalDisplacementMeters(
+            SetValue(depthValue, $"{frame.DepthM:0.0}", "m");
+            SetValue(headingValue, $"{frame.HeadingDeg:0.0}", "°");
+            SetValue(pitchValue, $"{frame.PitchDeg:0.0}", "°");
+            SetValue(rollValue, $"{frame.RollDeg:0.0}", "°");
+            SetValue(yawValue, $"{frame.HeadingDeg:0.0}", "°");
+            SetValue(latitudeValue, $"{frame.LatitudeDeg:0.000000}", "°");
+            SetValue(longitudeValue, $"{frame.LongitudeDeg:0.000000}", "°");
+            SetValue(velocityXValue, $"{velocity.x:0.00}", "m/s");
+            SetValue(velocityYValue, $"{velocity.y:0.00}", "m/s");
+            SetValue(velocityZValue, $"{velocity.z:0.00}", "m/s");
+            SetValue(speedValue, TelemetryKinematicsUtility.TryGetHorizontalDisplacementMeters(
                 playback.Model.GetFrame(0), frame, out var horizontalDisplacement)
                 ? FormatHorizontalDisplacement(horizontalDisplacement)
-                : "-";
-            verticalSpeedValue.text = $"{velocity.y:0.00} m/s";
-            horizontalSpeedValue.text = $"{new Vector2(velocity.x, velocity.z).magnitude:0.00} m/s";
-            missionTimeValue.text = FormatDuration(playback.Model.CurrentElapsedSeconds - playback.Model.StartElapsedSeconds);
-            distanceValue.text = $"{cumulativeDistanceMeters[Mathf.Clamp(index, 0, cumulativeDistanceMeters.Length - 1)] / 1000f:0.00} km";
-            predictionErrorValue.text = prediction != null ? $"{prediction.CurrentSnapshot.CurrentErrorMeters:0.00} m" : "-";
-            batteryValue.text = $"{frame.BatteryPercent:0} %";
+                : "-", string.Empty);
+            SetValue(verticalSpeedValue, $"{velocity.y:0.00}", "m/s");
+            SetValue(horizontalSpeedValue, $"{new Vector2(velocity.x, velocity.z).magnitude:0.00}", "m/s");
+            SetValue(missionTimeValue, FormatDuration(playback.Model.CurrentElapsedSeconds - playback.Model.StartElapsedSeconds), "s");
+            SetValue(distanceValue, $"{cumulativeDistanceMeters[Mathf.Clamp(index, 0, cumulativeDistanceMeters.Length - 1)] / 1000f:0.00}", "km");
+            SetValue(predictionErrorValue, prediction != null ? $"{prediction.CurrentSnapshot.CurrentErrorMeters:0.00}" : "-", "m");
+            SetValue(batteryValue, $"{frame.BatteryPercent:0}", "%");
             var oceanCurrent = frame.Diagnostics.HasValue
                 ? new Vector2(
                     frame.Diagnostics.Value.CurrentVelocityEndMps.x,
@@ -478,52 +657,73 @@ namespace UnderwaterGliderTwin.UI
                 : RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation
                     ? RuntimeDataSourceState.SimulationProfile.OceanCurrentProfile?.GetVelocity(frame.DepthM) ?? Vector2.zero
                     : Vector2.zero;
-            oceanCurrentValue.text = RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation
-                ? $"东 {oceanCurrent.x:0.00} m/s 北 {oceanCurrent.y:0.00} m/s"
+            var oceanCurrentText = RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation
+                ? useIndependentUnits
+                    ? $"东 {oceanCurrent.x:0.00} 北 {oceanCurrent.y:0.00}"
+                    : $"东 {oceanCurrent.x:0.00} m/s 北 {oceanCurrent.y:0.00} m/s"
                 : "-";
+            SetValue(oceanCurrentValue, oceanCurrentText, useIndependentUnits ? "m/s" : string.Empty);
             if (frame.Diagnostics.HasValue)
             {
                 var diagnostics = frame.Diagnostics.Value;
-                waterSpeedValue.text = $"{diagnostics.WaterVelocityEndMps.magnitude:0.00} m/s";
-                groundSpeedValue.text = $"{(diagnostics.WaterVelocityEndMps + diagnostics.CurrentVelocityEndMps).magnitude:0.00} m/s";
-                sideSlipValue.text = $"{diagnostics.SideSlipDeg:0.0}°";
-                netBuoyancyValue.text = $"{diagnostics.NetBuoyancyForceN:0.0} N";
-                energyValue.text = $"{diagnostics.EnergyWatts:0.0} W";
-                angleOfAttackValue.text = $"{diagnostics.AngleOfAttackDeg:0.0} deg";
-                liftForceValue.text = $"{diagnostics.LiftForceN:0.0} N";
-                dragForceValue.text = $"{diagnostics.DragForceN:0.0} N";
-                angularRateValue.text = $"{diagnostics.AngularVelocityRadPerSecond.magnitude * Mathf.Rad2Deg:0.00} deg/s";
-                hydrodynamicMomentValue.text = $"{diagnostics.HydrodynamicMomentNm.magnitude:0.00} N*m";
-                pistonPositionValue.text = $"{diagnostics.PistonPositionMm:0.0} mm";
+                SetValue(waterSpeedValue, $"{diagnostics.WaterVelocityEndMps.magnitude:0.00}", "m/s");
+                SetValue(groundSpeedValue, $"{(diagnostics.WaterVelocityEndMps + diagnostics.CurrentVelocityEndMps).magnitude:0.00}", "m/s");
+                SetValue(sideSlipValue, $"{diagnostics.SideSlipDeg:0.0}", "°");
+                SetValue(netBuoyancyValue, $"{diagnostics.NetBuoyancyForceN:0.0}", "N");
+                SetValue(energyValue, $"{diagnostics.EnergyWatts:0.0}", "W");
+                SetValue(angleOfAttackValue, $"{diagnostics.AngleOfAttackDeg:0.0}", "deg");
+                SetValue(liftForceValue, $"{diagnostics.LiftForceN:0.0}", "N");
+                SetValue(dragForceValue, $"{diagnostics.DragForceN:0.0}", "N");
+                SetValue(angularRateValue, $"{diagnostics.AngularVelocityRadPerSecond.magnitude * Mathf.Rad2Deg:0.00}", "deg/s");
+                SetValue(hydrodynamicMomentValue, $"{diagnostics.HydrodynamicMomentNm.magnitude:0.00}", "N*m");
+                SetValue(pistonPositionValue, $"{diagnostics.PistonPositionMm:0.0}", "mm");
                 var deflection = diagnostics.ControlSurfaceDeflectionDeg;
-                controlSurfaceValue.text = $"R {deflection.x:0.0} / P {deflection.y:0.0} / Y {deflection.z:0.0} deg";
-                actuatorPowerValue.text = $"{diagnostics.ActuatorPowerWatts:0.0} W";
-                dynamicsSummaryValue.text = $"AoA {diagnostics.AngleOfAttackDeg:0.0}\u00b0  L {diagnostics.LiftForceN:0.0}N  D {diagnostics.DragForceN:0.0}N";
+                SetValue(controlSurfaceValue, $"R {deflection.x:0.0} / P {deflection.y:0.0} / Y {deflection.z:0.0}", "deg");
+                SetValue(actuatorPowerValue, $"{diagnostics.ActuatorPowerWatts:0.0}", "W");
+                SetValue(dynamicsSummaryValue, $"AoA {diagnostics.AngleOfAttackDeg:0.0}\u00b0  L {diagnostics.LiftForceN:0.0}N  D {diagnostics.DragForceN:0.0}N", string.Empty);
             }
             else
             {
-                waterSpeedValue.text = "-";
-                groundSpeedValue.text = "-";
-                sideSlipValue.text = "-";
-                netBuoyancyValue.text = "-";
-                energyValue.text = "-";
-                angleOfAttackValue.text = "-";
-                liftForceValue.text = "-";
-                dragForceValue.text = "-";
-                angularRateValue.text = "-";
-                hydrodynamicMomentValue.text = "-";
-                pistonPositionValue.text = "-";
-                controlSurfaceValue.text = "-";
-                actuatorPowerValue.text = "-";
-                dynamicsSummaryValue.text = "-";
+                SetValue(waterSpeedValue, "-", "m/s");
+                SetValue(groundSpeedValue, "-", "m/s");
+                SetValue(sideSlipValue, "-", "°");
+                SetValue(netBuoyancyValue, "-", "N");
+                SetValue(energyValue, "-", "W");
+                SetValue(angleOfAttackValue, "-", "deg");
+                SetValue(liftForceValue, "-", "N");
+                SetValue(dragForceValue, "-", "N");
+                SetValue(angularRateValue, "-", "deg/s");
+                SetValue(hydrodynamicMomentValue, "-", "N*m");
+                SetValue(pistonPositionValue, "-", "mm");
+                SetValue(controlSurfaceValue, "-", "deg");
+                SetValue(actuatorPowerValue, "-", "W");
+                SetValue(dynamicsSummaryValue, "-", string.Empty);
             }
 
             var dynamics = RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation
                 ? RuntimeDataSourceState.SimulationProfile?.Dynamics
                 : null;
-            inertiaValue.text = dynamics == null
+            SetValue(inertiaValue, dynamics == null
                 ? "-"
-                : $"{dynamics.RollInertiaKgM2:0.#}/{dynamics.PitchInertiaKgM2:0.#}/{dynamics.YawInertiaKgM2:0.#} kg*m2";
+                : $"{dynamics.RollInertiaKgM2:0.#}/{dynamics.PitchInertiaKgM2:0.#}/{dynamics.YawInertiaKgM2:0.#}", "kg*m2");
+        }
+
+        private void SetValue(Text value, string text, string unit)
+        {
+            if (value == null)
+            {
+                return;
+            }
+
+            value.text = useIndependentUnits || string.IsNullOrEmpty(unit)
+                ? text
+                : unit == "°" ? text + unit : text + " " + unit;
+            var unitText = value.transform.parent.Find(value.name + "Unit")?.GetComponent<Text>();
+            if (unitText != null)
+            {
+                unitText.text = unit ?? string.Empty;
+                unitText.gameObject.SetActive(!string.IsNullOrEmpty(unitText.text));
+            }
         }
 
         private static float[] BuildDistanceCache(PlaybackModel model)

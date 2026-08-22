@@ -179,6 +179,110 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [UnityTest]
+        public IEnumerator MainScene_TelemetryEmptyStateShowsGuidanceInsteadOfBlankDarkBar()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var dashboard = Object.FindObjectOfType<DashboardView>(true);
+            Assert.That(dashboard, Is.Not.Null);
+            dashboard.gameObject.SendMessage("SetTelemetryEmptyState", true, SendMessageOptions.DontRequireReceiver);
+
+            var emptyState = FindDescendant(dashboard.transform, "TelemetryEmptyState");
+            Assert.That(emptyState, Is.Not.Null);
+            Assert.That(emptyState.activeSelf, Is.True);
+
+            var title = emptyState.transform.Find("TelemetryEmptyStateTitle")?.GetComponent<Text>();
+            var hint = emptyState.transform.Find("TelemetryEmptyStateHint")?.GetComponent<Text>();
+            Assert.That(title, Is.Not.Null);
+            Assert.That(title.text, Is.EqualTo("尚未加载有效轨迹"));
+            Assert.That(hint, Is.Not.Null);
+            Assert.That(hint.text, Is.Not.Empty);
+        }
+
+        [UnityTest]
+        public IEnumerator MainScene_NumericRowsKeepFixedValueColumnAndStableWidthAcrossRefresh()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var depthValue = FindSceneComponent<Text>(SceneManager.GetActiveScene(), "DepthValue");
+            Assert.That(depthValue, Is.Not.Null);
+            var row = depthValue.transform.parent as RectTransform;
+            Assert.That(row, Is.Not.Null);
+            var unit = FindDescendant(row, "DepthValueUnit");
+            Assert.That(unit, Is.Not.Null);
+
+            var valueLayout = depthValue.GetComponent<LayoutElement>();
+            Assert.That(valueLayout, Is.Not.Null);
+            Assert.That(valueLayout.flexibleWidth, Is.EqualTo(0f));
+            Assert.That(valueLayout.preferredWidth, Is.GreaterThan(0f));
+
+            Canvas.ForceUpdateCanvases();
+            var widthBefore = row.rect.width;
+            depthValue.text = "1.0";
+            LayoutRebuilder.ForceRebuildLayoutImmediate(row);
+            depthValue.text = "123456789.0";
+            LayoutRebuilder.ForceRebuildLayoutImmediate(row);
+            yield return null;
+            Assert.That(row.rect.width, Is.EqualTo(widthBefore).Within(0.1f));
+        }
+
+        [UnityTest]
+        public IEnumerator MainScene_StatusBadgeKeepsPredictionAndWarningTextVisibleTogether()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var scene = SceneManager.GetActiveScene();
+            var badgeObject = FindSceneObject(scene, "MissionHealthBadge");
+            Assert.That(badgeObject, Is.Not.Null);
+            var badge = badgeObject.GetComponent<UiStateBadge>();
+            Assert.That(badge, Is.Not.Null);
+            Assert.That(badge.StateText, Is.Not.Null);
+            Assert.That(badge.Label, Is.Not.Empty);
+
+            var predictionStatus = FindSceneComponent<Text>(scene, "PredictionStatusValue");
+            Assert.That(predictionStatus, Is.Not.Null);
+            Assert.That(predictionStatus.text, Is.Not.Empty);
+        }
+
+        [UnityTest]
+        public IEnumerator MainScene_LongCsvPathUsesBoundedDisplayAndKeepsFullTooltip()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var scene = SceneManager.GetActiveScene();
+            var csvInput = FindSceneComponent<InputField>(scene, "CsvPathInput");
+            Assert.That(csvInput, Is.Not.Null);
+            var inputRect = csvInput.transform as RectTransform;
+            var widthBefore = inputRect.rect.width;
+            var longPath = @"E:\mission-data\2026\august\north-pacific\deep-water\very-long-telemetry-export-file-name-with-diagnostics.csv";
+            csvInput.text = longPath;
+            csvInput.onValueChanged.Invoke(longPath);
+            yield return null;
+
+            var display = FindSceneComponent<Text>(scene, "CsvPathDisplay");
+            Assert.That(display, Is.Not.Null);
+            Assert.That(display.text, Does.Contain("…"));
+            Assert.That(display.text, Is.Not.EqualTo(longPath));
+            Assert.That(inputRect.rect.width, Is.EqualTo(widthBefore).Within(0.1f));
+
+            var tooltip = csvInput.GetComponent<UiTooltip>();
+            Assert.That(tooltip, Is.Not.Null);
+            Assert.That(tooltip.Message, Is.EqualTo(longPath));
+        }
+
+        [UnityTest]
         public IEnumerator MainScene_HasSingleVisibleCameraCommandOwner()
         {
             RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);

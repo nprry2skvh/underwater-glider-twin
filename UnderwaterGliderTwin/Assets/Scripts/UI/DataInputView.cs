@@ -15,6 +15,7 @@ namespace UnderwaterGliderTwin.UI
     {
         private readonly System.Collections.Generic.Dictionary<PredictionModelKind, Button> modelButtons = new System.Collections.Generic.Dictionary<PredictionModelKind, Button>();
         private InputField csvPathInput;
+        private Text csvPathDisplay;
         private InputField predictionHorizonInput;
         private InputField simulationCyclesInput;
         private InputField simulationDurationInput;
@@ -208,6 +209,7 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.Button("OceanCurrentDrawerButton", panel, "海流配置", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1484f, -211f), new Vector2(116f, 28f)).onClick.AddListener(ToggleOceanCurrentDrawer);
 
             statusText = UiFactory.Text("MissionConfigurationStatus", panel, string.IsNullOrEmpty(initialPredictionStatus) ? "CSV 回放和参数仿真均可用" : initialPredictionStatus, 12, TextAnchor.MiddleLeft, string.IsNullOrEmpty(initialPredictionStatus) ? new Color(0.8f, 0.96f, 1f) : new Color(1f, 0.76f, 0.3f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -24f), new Vector2(560f, 18f));
+            UiFactory.ConfigureWrappedStatusText(statusText);
             ConfigureCycleDurationAutoCorrection();
             RefreshReferenceCycleDuration();
             BuildOceanCurrentDrawer(canvas.transform);
@@ -215,6 +217,7 @@ namespace UnderwaterGliderTwin.UI
             RefreshPredictionSelection();
             RefreshOceanCurrentLayerEditor();
             ConfigureResponsiveBottomDrawer(panel);
+            EnsureCsvPathDisplay();
             ConfigureOceanCurrentModalDrawer(oceanCurrentDrawer);
             ConfigureInlineDrawer(flightLegDrawer);
             AttachRuntimeSession(SimulationRuntimeRegistry.Active);
@@ -256,6 +259,7 @@ namespace UnderwaterGliderTwin.UI
             if (statusText != null)
             {
                 statusText.gameObject.name = "MissionConfigurationStatus";
+                UiFactory.ConfigureWrappedStatusText(statusText);
             }
             missionLongitudeInput = refs.mission.missionLongitudeInput;
             missionLatitudeInput = refs.mission.missionLatitudeInput;
@@ -381,6 +385,7 @@ namespace UnderwaterGliderTwin.UI
             BindButton(refs.dynamics.calmWaterPresetButton, ApplyCalmWaterDynamicsPreset);
             BindButton(refs.dynamics.calibrateFromCsvButton, CalibrateDynamicsFromCsv);
             ConfigureResponsiveBottomDrawer(configurationPanel);
+            EnsureCsvPathDisplay();
             ConfigureBoundParameterDrawerScrolling();
             if (oceanCurrentMinDepthInput != null)
             {
@@ -547,6 +552,81 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.SetButtonText(predictionToggleButton, RuntimePredictionState.PredictionEnabled ? "停止预测" : "开始预测");
         }
 
+        public static string FormatDisplayPath(string path, int maxCharacters)
+        {
+            if (string.IsNullOrEmpty(path) || maxCharacters <= 0)
+            {
+                return string.Empty;
+            }
+
+            if (path.Length <= maxCharacters)
+            {
+                return path;
+            }
+
+            if (maxCharacters <= 3)
+            {
+                return path.Substring(0, maxCharacters);
+            }
+
+            var tailLength = Mathf.Clamp(maxCharacters / 3, 8, maxCharacters - 2);
+            var headLength = maxCharacters - tailLength - 1;
+            return path.Substring(0, headLength) + "…" + path.Substring(path.Length - tailLength, tailLength);
+        }
+
+        private void EnsureCsvPathDisplay()
+        {
+            if (configurationSummaryBar == null)
+            {
+                return;
+            }
+
+            csvPathDisplay = configurationSummaryBar.Find("CsvPathDisplay")?.GetComponent<Text>();
+            if (csvPathDisplay == null)
+            {
+                csvPathDisplay = UiFactory.Text("CsvPathDisplay", configurationSummaryBar, string.Empty, 12,
+                    TextAnchor.MiddleLeft, UiFactory.CommandMutedText,
+                    new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f),
+                    new Vector2(196f, 0f), new Vector2(-330f, -8f));
+            }
+
+            UiFactory.ApplyTextRole(csvPathDisplay, UiTextRole.Auxiliary, RuntimeUiLayoutMode.CompressedThreeColumn);
+            csvPathDisplay.horizontalOverflow = HorizontalWrapMode.Wrap;
+            csvPathDisplay.verticalOverflow = VerticalWrapMode.Truncate;
+            csvPathDisplay.raycastTarget = false;
+
+            if (csvPathInput != null)
+            {
+                csvPathInput.onValueChanged.RemoveListener(OnCsvPathChanged);
+                csvPathInput.onValueChanged.AddListener(OnCsvPathChanged);
+                OnCsvPathChanged(csvPathInput.text);
+            }
+        }
+
+        private void OnCsvPathChanged(string path)
+        {
+            var fullPath = path ?? string.Empty;
+            if (csvPathDisplay != null)
+            {
+                csvPathDisplay.text = string.IsNullOrWhiteSpace(fullPath)
+                    ? "CSV 路径未设置"
+                    : FormatDisplayPath(fullPath, 72);
+            }
+
+            if (csvPathInput != null)
+            {
+                var controller = csvPathInput.GetComponentInParent<UiTooltipController>(true)
+                    ?? FindObjectOfType<UiTooltipController>(true);
+                UiFactory.EnsureTooltip(csvPathInput, controller, fullPath);
+                var text = csvPathInput.textComponent;
+                if (text != null)
+                {
+                    text.horizontalOverflow = HorizontalWrapMode.Wrap;
+                    text.verticalOverflow = VerticalWrapMode.Truncate;
+                }
+            }
+        }
+
         private void SetStatus(string message, Color color)
         {
             if (statusText == null)
@@ -556,6 +636,7 @@ namespace UnderwaterGliderTwin.UI
 
             statusText.text = message;
             statusText.color = color;
+            UiFactory.ConfigureWrappedStatusText(statusText);
         }
 
         private bool TryParseFloat(InputField inputField, string label, float minValue, float maxValue, out float value)

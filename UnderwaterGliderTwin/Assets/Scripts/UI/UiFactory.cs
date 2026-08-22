@@ -50,6 +50,8 @@ namespace UnderwaterGliderTwin.UI
         public const float CommandCenterOperationsTopOffset = 142f;
         public const float MinimumControlHeight = 32f;
         public const float MinimumDrawerToggleHeight = 36f;
+        public const float FixedValueColumnWidth = 112f;
+        public const float FixedUnitColumnWidth = 52f;
         private static Font font;
 
         public static Canvas EnsureCanvas(Transform parent)
@@ -988,6 +990,79 @@ namespace UnderwaterGliderTwin.UI
             var profile = ResponsiveUiTypography.ForMode(mode, 0f, 0f);
             text.fontSize = Mathf.Max(text.fontSize, ResponsiveUiTypography.GetLogicalSize(profile, role));
             ApplyTextRoleColor(text, role);
+        }
+
+        public static void ConfigureFixedLabelColumn(Text text, float width = 116f)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            text.alignment = TextAnchor.MiddleLeft;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+            text.supportRichText = false;
+            var layout = text.GetComponent<LayoutElement>() ?? text.gameObject.AddComponent<LayoutElement>();
+            layout.minWidth = width;
+            layout.preferredWidth = width;
+            layout.flexibleWidth = 0f;
+            ApplyTextRole(text, UiTextRole.Label, RuntimeUiLayoutMode.CompressedThreeColumn);
+        }
+
+        public static void ConfigureFixedValueColumn(Text text, float width = FixedValueColumnWidth)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            text.alignment = TextAnchor.MiddleRight;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+            text.supportRichText = false;
+            var layout = text.GetComponent<LayoutElement>() ?? text.gameObject.AddComponent<LayoutElement>();
+            layout.minWidth = width;
+            layout.preferredWidth = width;
+            layout.flexibleWidth = 0f;
+            ApplyTextRole(text, UiTextRole.Value, RuntimeUiLayoutMode.CompressedThreeColumn);
+        }
+
+        public static void ConfigureFixedUnitColumn(Text text, float width = FixedUnitColumnWidth)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            text.alignment = TextAnchor.MiddleLeft;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+            text.supportRichText = false;
+            var layout = text.GetComponent<LayoutElement>() ?? text.gameObject.AddComponent<LayoutElement>();
+            layout.minWidth = width;
+            layout.preferredWidth = width;
+            layout.flexibleWidth = 0f;
+            ApplyTextRole(text, UiTextRole.Auxiliary, RuntimeUiLayoutMode.CompressedThreeColumn);
+        }
+
+        public static void ConfigureWrappedStatusText(Text text)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            text.alignment = TextAnchor.MiddleLeft;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.supportRichText = false;
+            text.raycastTarget = false;
+            ApplyTextRole(text, UiTextRole.Auxiliary, RuntimeUiLayoutMode.CompressedThreeColumn);
+            var layout = text.GetComponent<LayoutElement>() ?? text.gameObject.AddComponent<LayoutElement>();
+            layout.minHeight = 18f;
+            layout.preferredHeight = 36f;
+            layout.flexibleHeight = 0f;
         }
 
         public static UiTextRole ResolveTextRole(Text text)

@@ -36,6 +36,7 @@ namespace UnderwaterGliderTwin.UI
         private Text engineeringValidationValue;
         private Text alarmValue;
         private Text missionHealthValue;
+        private UiStateBadge missionHealthBadge;
         private string lastAlarmMessage;
         private readonly List<GameObject> predictionMetricRows = new List<GameObject>();
         private bool minimalBoundReferences;
@@ -58,6 +59,7 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.Text("MissionStatusTitle", panel, "任务状态", 18, TextAnchor.MiddleLeft, new Color(0.92f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -20f), new Vector2(220f, 28f));
             var healthBadge = UiFactory.Panel("MissionHealthBadge", panel, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-16f, -20f), new Vector2(118f, 28f), new Color(0.02f, 0.28f, 0.22f, 0.96f));
             missionHealthValue = UiFactory.Text("MissionHealthBadgeValue", healthBadge, "正常", 12, TextAnchor.MiddleCenter, Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(106f, 22f));
+            EnsureHealthBadge(healthBadge);
 
             missionValue = AddRow(panel, "任务来源", "MissionValue", 62f);
             modeValue = AddRow(panel, "工作模式", "ModeValue", 94f);
@@ -101,6 +103,7 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            panel = refs.panel;
             alarmBackground = refs.alarmBackground;
             progressFill = refs.progressFill;
             missionValue = refs.missionValue;
@@ -119,6 +122,7 @@ namespace UnderwaterGliderTwin.UI
             engineeringValidationValue = refs.engineeringValidationValue;
             alarmValue = refs.alarmValue;
             missionHealthValue = refs.missionHealthValue;
+            EnsureHealthBadge(missionHealthValue != null ? missionHealthValue.transform.parent as RectTransform : null);
             predictionMetricRows.Clear();
             ConfigureBoundRows();
             RegisterPredictionMetric(refs.panel, "漂移Label", driftValue);
@@ -278,10 +282,10 @@ namespace UnderwaterGliderTwin.UI
         private static void ConfigureKeyValueChildren(Text label, Text value)
         {
             ConfigureKeyText(label, 116f);
-            ConfigureKeyText(value, 0f);
-            var valueLayout = value.GetComponent<LayoutElement>() ?? value.gameObject.AddComponent<LayoutElement>();
-            valueLayout.minWidth = 72f;
-            valueLayout.flexibleWidth = 1f;
+            ConfigureKeyText(value, UiFactory.FixedValueColumnWidth);
+            UiFactory.ConfigureFixedLabelColumn(label);
+            UiFactory.ConfigureFixedValueColumn(value);
+            EnsureUnitColumn(value);
         }
 
         private static void ConfigureKeyText(Text text, float preferredWidth)
@@ -298,6 +302,96 @@ namespace UnderwaterGliderTwin.UI
             element.minWidth = preferredWidth > 0f ? preferredWidth : 0f;
             element.preferredWidth = preferredWidth;
             element.flexibleWidth = preferredWidth > 0f ? 0f : 1f;
+        }
+
+        private static Text EnsureUnitColumn(Text value)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            var unitName = value.name + "Unit";
+            var unit = value.transform.parent.Find(unitName)?.GetComponent<Text>();
+            if (unit == null)
+            {
+                unit = UiFactory.Text(unitName, value.transform.parent, string.Empty, 10,
+                    TextAnchor.MiddleLeft, UiFactory.CommandMutedText, Vector2.zero, Vector2.zero);
+            }
+
+            unit.text = GetUnitLabel(value.name);
+            UiFactory.ConfigureFixedUnitColumn(unit);
+            unit.gameObject.SetActive(!string.IsNullOrEmpty(unit.text));
+            return unit;
+        }
+
+        private static string GetUnitLabel(string valueName)
+        {
+            if (string.IsNullOrEmpty(valueName))
+            {
+                return string.Empty;
+            }
+
+            if (valueName.IndexOf("Distance", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "km";
+            }
+
+            if (valueName.IndexOf("Battery", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("Confidence", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "%";
+            }
+
+            if (valueName.IndexOf("Time", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("Eta", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "s";
+            }
+
+            if (valueName.IndexOf("Drift", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("Rmse", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || valueName.IndexOf("Mae", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "m";
+            }
+
+            return string.Empty;
+        }
+
+        private void EnsureHealthBadge(RectTransform badgeRoot)
+        {
+            if (badgeRoot == null || badgeRoot.name != "MissionHealthBadge")
+            {
+                badgeRoot = panel != null ? panel.Find("MissionHealthBadge") as RectTransform : null;
+                if (badgeRoot == null && panel != null)
+                {
+                    badgeRoot = UiFactory.Panel("MissionHealthBadge", panel,
+                        new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
+                        new Vector2(-16f, -20f), new Vector2(118f, 28f), UiFactory.CommandPanelFill);
+                    if (missionHealthValue != null)
+                    {
+                        missionHealthValue.transform.SetParent(badgeRoot, false);
+                    }
+                }
+            }
+
+            if (badgeRoot == null)
+            {
+                return;
+            }
+
+            missionHealthBadge = badgeRoot.GetComponent<UiStateBadge>() ?? badgeRoot.gameObject.AddComponent<UiStateBadge>();
+            if (missionHealthBadge.StateText != null && missionHealthBadge.StateText != missionHealthValue)
+            {
+                UiFactory.ApplyTextRole(missionHealthBadge.StateText, UiTextRole.Value, RuntimeUiLayoutMode.CompressedThreeColumn);
+                if (missionHealthValue != null)
+                {
+                    var legacyColor = missionHealthValue.color;
+                    legacyColor.a = 0f;
+                    missionHealthValue.color = legacyColor;
+                }
+            }
         }
 
         private static Text FindText(Transform root, string name)
@@ -366,7 +460,15 @@ namespace UnderwaterGliderTwin.UI
             var attentionMessage = alarm.HasAny ? alarm.Message : FormatEngineeringValidation(validation);
             alarmValue.text = needsAttention ? attentionMessage : "运行正常";
             alarmBackground.color = needsAttention ? new Color(0.75f, 0.18f, 0.05f, 0.88f) : new Color(0.02f, 0.16f, 0.15f, 0.8f);
-            missionHealthValue.text = needsAttention ? (alarm.HasAny ? "告警" : "注意") : "正常";
+            var healthLabel = needsAttention ? (alarm.HasAny ? "告警" : "注意") : snapshot.SampleCount > 1 ? "预测" : "正常";
+            if (missionHealthValue != null)
+            {
+                missionHealthValue.text = healthLabel;
+            }
+            if (missionHealthBadge != null)
+            {
+                missionHealthBadge.SetState(needsAttention ? UiStateKind.Warning : snapshot.SampleCount > 1 ? UiStateKind.Prediction : UiStateKind.Normal, healthLabel);
+            }
             missionHealthValue.transform.parent.GetComponent<Image>().color = needsAttention ? new Color(0.78f, 0.22f, 0.08f, 0.96f) : new Color(0.02f, 0.28f, 0.22f, 0.96f);
             if (alarm.HasAny && alarm.Message != lastAlarmMessage)
             {
