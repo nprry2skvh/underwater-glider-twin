@@ -140,11 +140,13 @@ namespace UnderwaterGliderTwin.Editor
             ConfigureRect(systemBar, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 48f));
             MoveLegacyChildToContainer(canvas.transform, "CommandCenterHeader", systemBar);
             var configurationArea = EnsureLayoutContainer(uiRoot, "ConfigurationArea");
-            ConfigureRect(configurationArea, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, 320f));
+            ConfigureRect(configurationArea, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, UiFactory.CommandCenterPlaybackBarHeight), new Vector2(0f, UiFactory.CommandCenterConfigurationAreaHeight));
             var playbackBar = EnsureLayoutContainer(uiRoot, "PlaybackBar");
-            ConfigureRect(playbackBar, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 320f), new Vector2(0f, 124f));
+            ConfigureRect(playbackBar, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, UiFactory.CommandCenterPlaybackBarHeight));
             var mainBody = EnsureLayoutContainer(uiRoot, "MainBody");
-            ConfigureRect(mainBody, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -22f), new Vector2(0f, -492f));
+            ConfigureRect(mainBody, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            mainBody.offsetMin = new Vector2(0f, UiFactory.CommandCenterMainBodyBottomOffset);
+            mainBody.offsetMax = new Vector2(0f, -UiFactory.CommandCenterHeaderHeight);
             var telemetryColumn = EnsureLayoutContainer(mainBody, "TelemetryColumn");
             ConfigureRect(telemetryColumn, new Vector2(0f, 0f), new Vector2(0.25f, 1f), new Vector2(0f, 0.5f), Vector2.zero, Vector2.zero);
             var viewportColumn = EnsureLayoutContainer(mainBody, "ViewportColumn");

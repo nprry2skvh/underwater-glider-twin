@@ -19,17 +19,21 @@ namespace UnderwaterGliderTwin.UI
 
     public static class UiFactory
     {
-        public static readonly Color CommandPanelFill = new Color(0.055f, 0.118f, 0.176f, 0.96f);
-        public static readonly Color CommandPanelEdge = new Color(0.164f, 0.290f, 0.380f, 0.90f);
+        public static readonly Color CommandPanelFill = new Color(0.055f, 0.145f, 0.205f, 0.98f);
+        public static readonly Color CommandPanelEdge = new Color(0.180f, 0.360f, 0.445f, 0.96f);
         public static readonly Color CommandAccent = new Color(0.3647059f, 0.84313726f, 0.9098039f, 1f);
         public static readonly Color CommandText = new Color(0.8784314f, 0.9490196f, 0.96862745f, 1f);
-        public static readonly Color CommandButtonFill = new Color(0.082f, 0.184f, 0.259f, 0.96f);
-        public static readonly Color CommandInputFill = new Color(0.043f, 0.106f, 0.157f, 0.98f);
-        public static readonly Color CommandMutedText = new Color(0.682f, 0.800f, 0.839f, 0.92f);
+        public static readonly Color CommandButtonFill = new Color(0.100f, 0.240f, 0.330f, 0.98f);
+        public static readonly Color CommandInputFill = new Color(0.025f, 0.078f, 0.120f, 0.98f);
+        public static readonly Color CommandViewportOverlay = new Color(0.055f, 0.145f, 0.205f, 0.34f);
+        public static readonly Color CommandMutedText = new Color(0.720f, 0.850f, 0.885f, 0.96f);
         public static readonly Color CommandWarning = new Color(0.905f, 0.788f, 0.419f, 1f);
         public static readonly Color CommandDarkText = new Color(0.031f, 0.090f, 0.129f, 1f);
         public const float CommandCenterHeaderHeight = 48f;
         public const float CommandCenterParameterBarHeight = 48f;
+        public const float CommandCenterConfigurationAreaHeight = 176f;
+        public const float CommandCenterPlaybackBarHeight = 92f;
+        public const float CommandCenterMainBodyBottomOffset = CommandCenterConfigurationAreaHeight + CommandCenterPlaybackBarHeight;
         public const float CommandCenterContentTopOffset = CommandCenterHeaderHeight + CommandCenterParameterBarHeight + 16f;
         public const float CommandCenterOperationsTopOffset = 142f;
         public const float MinimumControlHeight = 32f;
@@ -109,15 +113,16 @@ namespace UnderwaterGliderTwin.UI
             ConfigureRect(systemBar, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, CommandCenterHeaderHeight));
             ConfigureZoneHeight(systemBar, CommandCenterHeaderHeight);
             var configurationArea = EnsureRectTransformChild(uiRoot, "ConfigurationArea");
-            ConfigureRect(configurationArea, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, 320f));
+            ConfigureRect(configurationArea, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, CommandCenterPlaybackBarHeight), new Vector2(0f, CommandCenterConfigurationAreaHeight));
             ConfigureVerticalContent(configurationArea, 12f);
-            ConfigureZoneHeight(configurationArea, 320f);
+            ConfigureZoneHeight(configurationArea, CommandCenterConfigurationAreaHeight);
             var playbackBar = EnsureRectTransformChild(uiRoot, "PlaybackBar");
-            ConfigureRect(playbackBar, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 320f), new Vector2(0f, 124f));
+            ConfigureRect(playbackBar, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, CommandCenterPlaybackBarHeight));
             ConfigureVerticalContent(playbackBar, 12f);
-            ConfigureZoneHeight(playbackBar, 124f);
+            ConfigureZoneHeight(playbackBar, CommandCenterPlaybackBarHeight);
             var mainBody = EnsureRectTransformChild(uiRoot, "MainBody");
-            mainBody.offsetMin = new Vector2(0f, 444f);
+            ConfigureRect(mainBody, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            mainBody.offsetMin = new Vector2(0f, CommandCenterMainBodyBottomOffset);
             mainBody.offsetMax = new Vector2(0f, -48f);
             ConfigureMainBody(mainBody);
 
@@ -587,6 +592,7 @@ namespace UnderwaterGliderTwin.UI
             layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
+            layout.enabled = false;
         }
 
         private static void ConfigureZoneHeight(RectTransform zone, float height)
@@ -669,6 +675,63 @@ namespace UnderwaterGliderTwin.UI
                 layout.minHeight = 0f;
                 layout.preferredHeight = 0f;
                 layout.flexibleHeight = 1f;
+            }
+        }
+
+        public static void ApplyRuntimePalette(Transform root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            var panelNames = new[]
+            {
+                "DashboardPanel",
+                "StatusPanel",
+                "DataInputPanel",
+                "PlaybackControlsPanel",
+                "OceanCommandToolbar"
+            };
+
+            foreach (var panelName in panelNames)
+            {
+                var panel = FindDescendant(root, panelName);
+                if (panel == null)
+                {
+                    continue;
+                }
+
+                var panelImage = panel.GetComponent<Image>();
+                ApplyCommandPalette(panelImage, UiVisualRole.PanelFill);
+                if (panelName == "OceanCommandToolbar" && panelImage != null)
+                {
+                    panelImage.color = CommandViewportOverlay;
+                    panelImage.raycastTarget = false;
+                }
+                foreach (var outline in panel.GetComponents<Outline>())
+                {
+                    outline.effectColor = CommandPanelEdge;
+                }
+
+                foreach (var button in panel.GetComponentsInChildren<Button>(true))
+                {
+                    ApplyCommandPalette(button.image, UiVisualRole.ButtonFill);
+                    button.colors = CreateButtonStates();
+                    foreach (var outline in button.GetComponents<Outline>())
+                    {
+                        outline.effectColor = CommandPanelEdge;
+                    }
+                }
+
+                foreach (var input in panel.GetComponentsInChildren<InputField>(true))
+                {
+                    ApplyCommandPalette(input.GetComponent<Image>(), UiVisualRole.InputFill);
+                    foreach (var outline in input.GetComponents<Outline>())
+                    {
+                        outline.effectColor = CommandPanelEdge;
+                    }
+                }
             }
         }
 

@@ -1674,18 +1674,27 @@ namespace UnderwaterGliderTwin.Tests
 
             var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
             var rootLayout = uiRoot.GetComponent<VerticalLayoutGroup>();
-            var mainBody = uiRoot.Find("MainBody");
+            var mainBody = uiRoot.Find("MainBody").GetComponent<RectTransform>();
             var bodyLayout = mainBody.GetComponent<HorizontalLayoutGroup>();
             var viewportColumn = mainBody.Find("ViewportColumn");
             var viewportElement = viewportColumn.GetComponent<LayoutElement>();
+            var configurationArea = uiRoot.Find("ConfigurationArea").GetComponent<RectTransform>();
+            var playbackBar = uiRoot.Find("PlaybackBar").GetComponent<RectTransform>();
             var drawerEntryLayer = uiRoot.Find("DrawerEntryLayer");
             var drawerLayout = drawerEntryLayer.GetComponent<LayoutElement>();
             var telemetryToggle = drawerEntryLayer.Find("TelemetryDrawerToggle").GetComponent<RectTransform>();
             var statusToggle = drawerEntryLayer.Find("StatusDrawerToggle").GetComponent<RectTransform>();
 
             Assert.That(rootLayout, Is.Not.Null);
+            Assert.That(rootLayout.enabled, Is.False);
             Assert.That(uiRoot.GetComponent<ScrollRect>(), Is.Null);
             Assert.That(bodyLayout, Is.Not.Null);
+            Assert.That(configurationArea.anchoredPosition.y, Is.EqualTo(92f));
+            Assert.That(configurationArea.sizeDelta.y, Is.EqualTo(176f));
+            Assert.That(playbackBar.anchoredPosition.y, Is.EqualTo(0f));
+            Assert.That(playbackBar.sizeDelta.y, Is.EqualTo(92f));
+            Assert.That(mainBody.offsetMin.y, Is.EqualTo(268f));
+            Assert.That(mainBody.offsetMax.y, Is.EqualTo(-48f));
             Assert.That(viewportElement, Is.Not.Null);
             Assert.That(viewportElement.minWidth, Is.EqualTo(640f));
             Assert.That(viewportElement.flexibleWidth, Is.EqualTo(1f));
@@ -1693,6 +1702,39 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(drawerLayout.ignoreLayout, Is.True);
             Assert.That(telemetryToggle.sizeDelta.y, Is.GreaterThanOrEqualTo(36f));
             Assert.That(statusToggle.sizeDelta.y, Is.GreaterThanOrEqualTo(36f));
+        }
+
+        [Test]
+        public void UiFactory_CommandPaletteSeparatesPanelAndInputSurfaces()
+        {
+            Assert.That(UiFactory.CommandPanelFill.grayscale - UiFactory.CommandInputFill.grayscale, Is.GreaterThan(0.04f));
+            Assert.That(UiFactory.CommandButtonFill.grayscale - UiFactory.CommandInputFill.grayscale, Is.GreaterThan(0.06f));
+            Assert.That(UiFactory.CommandPanelEdge.grayscale, Is.GreaterThan(UiFactory.CommandPanelFill.grayscale));
+        }
+
+        [Test]
+        public void UiFactory_ApplyRuntimePaletteUpdatesExistingPanelControls()
+        {
+            var canvasObject = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas));
+            var uiRoot = new GameObject("UiRoot", typeof(RectTransform));
+            uiRoot.transform.SetParent(canvasObject.transform, false);
+
+            var panel = new GameObject("DashboardPanel", typeof(RectTransform), typeof(Image));
+            panel.transform.SetParent(uiRoot.transform, false);
+            var viewport = new GameObject("OceanCommandToolbar", typeof(RectTransform), typeof(Image));
+            viewport.transform.SetParent(uiRoot.transform, false);
+            var button = new GameObject("LoadCsvButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            button.transform.SetParent(panel.transform, false);
+            var input = new GameObject("CsvPathInput", typeof(RectTransform), typeof(Image), typeof(InputField));
+            input.transform.SetParent(panel.transform, false);
+
+            UiFactory.ApplyRuntimePalette(canvasObject.transform);
+
+            Assert.That(panel.GetComponent<Image>().color, Is.EqualTo(UiFactory.CommandPanelFill));
+            Assert.That(viewport.GetComponent<Image>().color.a, Is.LessThan(UiFactory.CommandPanelFill.a));
+            Assert.That(viewport.GetComponent<Image>().raycastTarget, Is.False);
+            Assert.That(button.GetComponent<Image>().color, Is.EqualTo(UiFactory.CommandButtonFill));
+            Assert.That(input.GetComponent<Image>().color, Is.EqualTo(UiFactory.CommandInputFill));
         }
 
         [Test]

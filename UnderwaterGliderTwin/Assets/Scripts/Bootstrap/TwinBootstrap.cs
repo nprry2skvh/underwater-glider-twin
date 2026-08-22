@@ -302,6 +302,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             }
 
             UiFactory.ApplyResponsivePanelRoots(canvas);
+            UiFactory.ApplyRuntimePalette(canvas.transform);
             UiFactory.ApplyRuntimeLabels(canvas.transform);
 
             var modalRoot = canvas.transform.Find("ModalRoot") as RectTransform;
@@ -330,6 +331,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             }
 
             UiFactory.ApplyResponsivePanelRoots(root.RuntimeCanvas);
+            UiFactory.ApplyRuntimePalette(root.RuntimeCanvas.transform);
             UiFactory.ApplyRuntimeLabels(root.RuntimeCanvas.transform);
 
             var controller = uiRoot.GetComponent<ResponsiveUiLayoutController>() ?? uiRoot.gameObject.AddComponent<ResponsiveUiLayoutController>();
