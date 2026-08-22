@@ -390,6 +390,8 @@ namespace UnderwaterGliderTwin.UI
             BindButton(refs.dynamics.calmWaterPresetButton, ApplyCalmWaterDynamicsPreset);
             BindButton(refs.dynamics.calibrateFromCsvButton, CalibrateDynamicsFromCsv);
             ConfigureResponsiveBottomDrawer(configurationPanel);
+            ConfigureCycleDurationAutoCorrection();
+            RefreshReferenceCycleDuration();
             EnsureCsvPathDisplay();
             ConfigureBoundParameterDrawerScrolling();
             if (oceanCurrentMinDepthInput != null)

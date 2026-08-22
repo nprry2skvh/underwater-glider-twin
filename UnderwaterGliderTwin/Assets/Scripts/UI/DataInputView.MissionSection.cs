@@ -24,8 +24,14 @@ namespace UnderwaterGliderTwin.UI
 
         private void ConfigureCycleDurationAutoCorrection()
         {
-            simulationDurationInput.onEndEdit.AddListener(_ => AutoCorrectCycleDuration());
-            simulationDepthInput.onEndEdit.AddListener(_ => AutoCorrectCycleDuration());
+            if (simulationDurationInput != null)
+            {
+                simulationDurationInput.onEndEdit.AddListener(_ => AutoCorrectCycleDuration());
+            }
+            if (simulationDepthInput != null)
+            {
+                simulationDepthInput.onEndEdit.AddListener(_ => AutoCorrectCycleDuration());
+            }
         }
 
         private void AutoCorrectCycleDuration()

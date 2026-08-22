@@ -191,6 +191,87 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [UnityTest]
+        public IEnumerator MainScene_ExpandedConfiguration_RejectsUnlabeledLegacyInputFields()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var scene = SceneManager.GetActiveScene();
+            var dataInputPanel = FindSceneObject(scene, "DataInputPanel");
+            var expandedContent = FindDescendant(dataInputPanel != null ? dataInputPanel.transform : null, "ConfigurationExpandedContent");
+            var toggle = FindDescendant(dataInputPanel != null ? dataInputPanel.transform : null, "MissionConfigurationDrawerToggleButton")?.GetComponent<Button>();
+            Assert.That(expandedContent, Is.Not.Null);
+            Assert.That(toggle, Is.Not.Null);
+
+            toggle.onClick.Invoke();
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+
+            var activeLegacyInputs = new System.Collections.Generic.List<string>();
+            foreach (var input in expandedContent.GetComponentsInChildren<InputField>(true))
+            {
+                if (!input.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                Debug.Log($"[Task7-DIAG] active InputField path={GetTransformPath(input.transform)} parent={input.transform.parent?.name ?? "<root>"} sibling={input.transform.GetSiblingIndex()} rect={DescribeRect(input.transform as RectTransform)} text='{input.text}'");
+                if (input.transform.parent == null
+                    || !input.transform.parent.name.EndsWith("Field", System.StringComparison.Ordinal)
+                    || input.transform.parent.GetComponent<InputField>() != null)
+                {
+                    activeLegacyInputs.Add(GetTransformPath(input.transform));
+                }
+            }
+
+            foreach (var text in expandedContent.GetComponentsInChildren<Text>(true))
+            {
+                if (text.gameObject.activeInHierarchy)
+                {
+                    Debug.Log($"[Task7-DIAG] active Text path={GetTransformPath(text.transform)} parent={text.transform.parent?.name ?? "<root>"} sibling={text.transform.GetSiblingIndex()} rect={DescribeRect(text.transform as RectTransform)} text='{text.text}'");
+                }
+            }
+
+            foreach (var image in expandedContent.GetComponentsInChildren<Image>(true))
+            {
+                if (image.gameObject.activeInHierarchy)
+                {
+                    Debug.Log($"[Task7-DIAG] active Image path={GetTransformPath(image.transform)} parent={image.transform.parent?.name ?? "<root>"} sibling={image.transform.GetSiblingIndex()} rect={DescribeRect(image.transform as RectTransform)} enabled={image.enabled} color={image.color}");
+                }
+            }
+
+            var referenceValue = FindDescendant(expandedContent.transform, "ReferenceCycleDurationValue");
+            Assert.That(referenceValue, Is.Not.Null, "Expanded configuration must expose the reference duration value.");
+            Assert.That(referenceValue.transform.parent.name.EndsWith("Field", System.StringComparison.Ordinal), Is.True,
+                "ReferenceCycleDurationValue must be inside its labeled field row.");
+            Assert.That(referenceValue.transform.parent.GetComponent<InputField>(), Is.Null,
+                "ReferenceCycleDurationValue wrapper must be separate from the legacy Text/InputField object.");
+            Assert.That(referenceValue.GetComponent<Text>().text, Is.Not.EqualTo("ReferenceCycleDurationValue"),
+                "ReferenceCycleDurationValue must be bound to a formatted duration, not the prefab placeholder name.");
+            Assert.That(FindSceneObjects(scene, "ReferenceCycleDurationValue").Count, Is.EqualTo(1),
+                "ReferenceCycleDurationValue must not be duplicated as a stale legacy object.");
+            Assert.That(activeLegacyInputs, Is.Empty,
+                "Expanded configuration must not render active legacy InputField controls outside labeled *Field rows.");
+
+            var missionSection = FindDescendant(expandedContent.transform, "MissionSectionCard");
+            var configurationStatus = FindSceneComponent<Text>(scene, "MissionConfigurationStatus");
+            Assert.That(missionSection, Is.Not.Null);
+            Assert.That(configurationStatus, Is.Not.Null);
+            Assert.That(configurationStatus.transform.parent, Is.EqualTo(missionSection.transform),
+                "Configuration status must be an independent row inside MissionSectionCard.");
+            Assert.That(configurationStatus.transform.GetSiblingIndex(), Is.EqualTo(missionSection.transform.childCount - 1),
+                "Configuration status must be the final row in MissionSectionCard.");
+            var statusLayout = configurationStatus.GetComponent<LayoutElement>();
+            Assert.That(statusLayout, Is.Not.Null);
+            Assert.That(statusLayout.ignoreLayout, Is.False,
+                "Configuration status must participate in the mission section VerticalLayoutGroup.");
+            Assert.That(statusLayout.preferredHeight, Is.InRange(24f, 28f));
+            Assert.That(configurationStatus.rectTransform.rect.height, Is.InRange(24f, 28f));
+        }
+
+        [UnityTest]
         public IEnumerator MainScene_TelemetryEmptyStateShowsGuidanceInsteadOfBlankDarkBar()
         {
             RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
@@ -517,6 +598,27 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(global.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandAccent));
             Assert.That(follow.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandPanelEdge));
+        }
+
+        private static string GetTransformPath(Transform transform)
+        {
+            if (transform == null)
+            {
+                return "<null>";
+            }
+
+            var names = new System.Collections.Generic.List<string>();
+            for (var current = transform; current != null; current = current.parent)
+            {
+                names.Add(current.name);
+            }
+            names.Reverse();
+            return string.Join("/", names);
+        }
+
+        private static string DescribeRect(RectTransform rect)
+        {
+            return rect == null ? "<no-rect>" : $"pos={rect.anchoredPosition} size={rect.rect.size} delta={rect.sizeDelta}";
         }
 
         private static GameObject FindSceneObject(Scene scene, string objectName)

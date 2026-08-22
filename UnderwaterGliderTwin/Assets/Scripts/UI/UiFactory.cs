@@ -1103,6 +1103,12 @@ namespace UnderwaterGliderTwin.UI
             layout.minHeight = 18f;
             layout.preferredHeight = 44f;
             layout.flexibleHeight = 0f;
+            if (text.rectTransform != null)
+            {
+                var size = text.rectTransform.sizeDelta;
+                size.y = 44f;
+                text.rectTransform.sizeDelta = size;
+            }
         }
 
         public static UiTextRole ResolveTextRole(Text text)

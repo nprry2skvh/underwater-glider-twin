@@ -386,9 +386,101 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            if (RequiresLegacyFieldWrapper(child, childName))
+            {
+                var wrapper = EnsureLegacyFieldWrapper(fields, childName, GetLegacyFieldLabel(childName));
+                child.SetParent(wrapper, false);
+                NormalizeLayoutChild(child, 28f);
+                return;
+            }
+
             child.SetParent(fields, false);
             NormalizeLayoutChild(child);
             NormalizeFieldCard(child);
+            SetLegacyButtonLabel(child, childName);
+        }
+
+        private static bool RequiresLegacyFieldWrapper(RectTransform child, string childName)
+        {
+            return child != null
+                && (child.GetComponent<InputField>() != null
+                    || (childName == "ReferenceCycleDurationReadout" && child.GetComponent<Text>() != null));
+        }
+
+        private static RectTransform EnsureLegacyFieldWrapper(Transform fields, string childName, string labelText)
+        {
+            var wrapperName = childName + "Field";
+            var wrapper = fields.Find(wrapperName) as RectTransform;
+            if (wrapper != null && wrapper.GetComponent<InputField>() != null)
+            {
+                wrapper = null;
+            }
+            if (wrapper == null)
+            {
+                wrapper = UiFactory.Panel(wrapperName, fields, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.04f, 0.18f, 0.24f, 0.8f));
+            }
+
+            var layout = wrapper.GetComponent<VerticalLayoutGroup>() ?? wrapper.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(8, 8, 5, 5);
+            layout.spacing = 3f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+            var element = wrapper.GetComponent<LayoutElement>() ?? wrapper.gameObject.AddComponent<LayoutElement>();
+            element.minWidth = TaskParameterFieldWidth;
+            element.preferredHeight = 54f;
+
+            var labelName = wrapperName + "Label";
+            var label = wrapper.Find(labelName)?.GetComponent<Text>();
+            if (label == null)
+            {
+                label = UiFactory.Text(labelName, wrapper, labelText, 12, TextAnchor.MiddleLeft, UiFactory.CommandText,
+                    Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+                var labelElement = label.gameObject.AddComponent<LayoutElement>();
+                labelElement.preferredHeight = 18f;
+                labelElement.minHeight = 18f;
+                labelElement.flexibleWidth = 1f;
+            }
+
+            return wrapper;
+        }
+
+        private static string GetLegacyFieldLabel(string childName)
+        {
+            switch (childName)
+            {
+                case "SimulationCyclesInputField": return "循环次数";
+                case "SimulationDurationInputField": return "单航段安全上限 (s)";
+                case "SimulationDepthInputField": return "深度 (m)";
+                case "SimulationWaterColumnInputField": return "水柱 (m)";
+                case "SimulationHeadingInputField": return "航向 (°)";
+                case "SimulationHeadingDeltaInputField": return "转向 (°)";
+                case "SimulationPitchInputField": return "默认俯仰 (°)";
+                case "SimulationRollInputField": return "默认横滚 (°)";
+                case "ReferenceCycleDurationReadout": return "航段安全参考";
+                case "OceanCurrentMinDepthInputField": return "最小 (m)";
+                case "OceanCurrentMaxDepthInputField": return "最大 (m)";
+                case "OceanCurrentEastwardInputField": return "东流 (m/s)";
+                case "OceanCurrentNorthwardInputField": return "北流 (m/s)";
+                case "MissionLongitudeInputField": return "经度 (°)";
+                case "MissionLatitudeInputField": return "纬度 (°)";
+                default: return childName;
+            }
+        }
+
+        private static void SetLegacyButtonLabel(RectTransform child, string childName)
+        {
+            if (childName != "ApplyReferenceCycleButton")
+            {
+                return;
+            }
+
+            var button = child.GetComponent<Button>();
+            if (button != null)
+            {
+                UiFactory.SetButtonText(button, "采用参考");
+            }
         }
 
         private void MoveToSectionFooter(Transform section, string childName)
@@ -399,19 +491,14 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            // Keep the asynchronous status line on its own row inside the expanded
-            // content so collapsed state never leaves a legacy direct child behind.
-            child.SetParent(bottomDrawerContent, false);
+            // Keep the asynchronous status line in the mission card's own layout so
+            // it follows the mission fields instead of overlapping them at a fixed
+            // position in the expanded drawer.
+            child.SetParent(section, false);
             child.SetAsLastSibling();
-            child.anchorMin = new Vector2(0f, 1f);
-            child.anchorMax = new Vector2(0f, 1f);
-            child.pivot = new Vector2(0f, 0.5f);
-            child.anchoredPosition = new Vector2(18f, -250f);
-            child.sizeDelta = new Vector2(900f, 44f);
-            var layoutElement = child.gameObject.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
-            layoutElement.minHeight = 44f;
-            layoutElement.preferredHeight = 44f;
-            layoutElement.ignoreLayout = true;
+            NormalizeLayoutChild(child, 26f);
+            var layoutElement = child.gameObject.GetComponent<LayoutElement>();
+            layoutElement.ignoreLayout = false;
             var text = child.GetComponent<Text>();
             if (text != null)
             {
@@ -490,6 +577,7 @@ namespace UnderwaterGliderTwin.UI
                 case "SimulationHeadingDeltaInputField": return new[] { "SimulationHeadingDeltaInput", "HeadingDeltaInput" };
                 case "SimulationPitchInputField": return new[] { "SimulationPitchInput", "PitchInput" };
                 case "SimulationRollInputField": return new[] { "SimulationRollInput", "RollInput" };
+                case "ReferenceCycleDurationReadout": return new[] { "ReferenceCycleDurationValue" };
                 case "OceanCurrentMinDepthInputField": return new[] { "MinDepthInput" };
                 case "OceanCurrentMaxDepthInputField": return new[] { "MaxDepthInput" };
                 case "OceanCurrentEastwardInputField": return new[] { "EastwardInput" };
