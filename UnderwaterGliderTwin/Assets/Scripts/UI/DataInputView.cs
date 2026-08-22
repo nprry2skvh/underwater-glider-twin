@@ -243,12 +243,20 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            configurationPanel = refs.configurationPanel;
+            configurationPanel = refs.panel != null ? refs.panel : refs.configurationPanel;
+            if (configurationPanel != null)
+            {
+                configurationPanel.gameObject.SetActive(true);
+            }
             dynamicRowsRoot = refs.ocean.dynamicRowsRoot;
             oceanLayerRowTemplate = refs.ocean.oceanLayerRowTemplate;
             oceanCurrentDrawerLookupButton = refs.ocean.drawerLookupButton;
             csvPathInput = refs.mission.csvPathInput;
             statusText = refs.statusText;
+            if (statusText != null)
+            {
+                statusText.gameObject.name = "MissionConfigurationStatus";
+            }
             missionLongitudeInput = refs.mission.missionLongitudeInput;
             missionLatitudeInput = refs.mission.missionLatitudeInput;
             predictionHorizonInput = refs.prediction.predictionHorizonInput;
@@ -262,6 +270,18 @@ namespace UnderwaterGliderTwin.UI
             simulationHeadingDeltaInput = refs.simulation.headingDeltaInput;
             simulationPitchInput = refs.simulation.pitchInput;
             simulationRollInput = refs.simulation.rollInput;
+            RenameObject(simulationCyclesInput, "SimulationCyclesInput");
+            RenameObject(simulationDurationInput, "SimulationDurationInput");
+            RenameObject(simulationDepthInput, "SimulationDepthInput");
+            RenameObject(simulationWaterColumnInput, "SimulationWaterColumnInput");
+            RenameObject(simulationHeadingInput, "SimulationHeadingInput");
+            RenameObject(simulationHeadingDeltaInput, "SimulationHeadingDeltaInput");
+            RenameObject(simulationPitchInput, "SimulationPitchInput");
+            RenameObject(simulationRollInput, "SimulationRollInput");
+            if (refs.simulation.applyButton != null)
+            {
+                refs.simulation.applyButton.gameObject.name = "SimulationApplyButton";
+            }
             oceanCurrentMinDepthInput = refs.ocean.minDepthInput;
             oceanCurrentMaxDepthInput = refs.ocean.maxDepthInput;
             oceanCurrentEastwardInput = refs.ocean.eastwardInput;
@@ -307,12 +327,24 @@ namespace UnderwaterGliderTwin.UI
             dynamicsRollDeadbandInput = refs.dynamics.rollDeadbandInput;
             dynamicsRollRestoringGainInput = refs.dynamics.rollRestoringGainInput;
             dynamicsMaxRollMomentInput = refs.dynamics.maxRollMomentInput;
-            ConfigureBoundParameterDrawerScrolling();
+            ClearDynamicRuntimeUi();
 
             if (csvPathInput != null)
             {
                 csvPathInput.text = currentCsvPath ?? string.Empty;
             }
+
+            SetInputText(predictionHorizonInput, RuntimePredictionState.HorizonSeconds.ToString("0", CultureInfo.InvariantCulture));
+            SetInputText(simulationCyclesInput, simulationProfileTemplate.CycleCount.ToString(CultureInfo.InvariantCulture));
+            SetInputText(simulationDurationInput, simulationProfileTemplate.CycleDurationSeconds.ToString("0", CultureInfo.InvariantCulture));
+            SetInputText(simulationDepthInput, simulationProfileTemplate.TargetDepthM.ToString("0", CultureInfo.InvariantCulture));
+            SetInputText(simulationWaterColumnInput, simulationProfileTemplate.WaterColumnDepthM.ToString("0", CultureInfo.InvariantCulture));
+            SetInputText(simulationHeadingInput, simulationProfileTemplate.StartHeadingDeg.ToString("0", CultureInfo.InvariantCulture));
+            SetInputText(simulationHeadingDeltaInput, simulationProfileTemplate.HeadingDeltaPerCycleDeg.ToString("0", CultureInfo.InvariantCulture));
+            SetInputText(simulationPitchInput, simulationProfileTemplate.PitchAmplitudeDeg.ToString("0", CultureInfo.InvariantCulture));
+            SetInputText(simulationRollInput, simulationProfileTemplate.RollAmplitudeDeg.ToString("0", CultureInfo.InvariantCulture));
+            SetInputText(missionLongitudeInput, simulationProfileTemplate.OriginLongitudeDeg.ToString("0.######", CultureInfo.InvariantCulture));
+            SetInputText(missionLatitudeInput, simulationProfileTemplate.OriginLatitudeDeg.ToString("0.######", CultureInfo.InvariantCulture));
 
             modelButtons.Clear();
             if (refs.prediction.xgBoostModelButton != null)
@@ -348,7 +380,8 @@ namespace UnderwaterGliderTwin.UI
             BindButton(refs.dynamics.seaTrialPresetButton, ApplySeaTrialDynamicsPreset);
             BindButton(refs.dynamics.calmWaterPresetButton, ApplyCalmWaterDynamicsPreset);
             BindButton(refs.dynamics.calibrateFromCsvButton, CalibrateDynamicsFromCsv);
-            ClearDynamicRuntimeUi();
+            ConfigureResponsiveBottomDrawer(configurationPanel);
+            ConfigureBoundParameterDrawerScrolling();
             if (oceanCurrentMinDepthInput != null)
             {
                 RefreshOceanCurrentLayerEditor();
@@ -365,6 +398,22 @@ namespace UnderwaterGliderTwin.UI
 
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(action);
+        }
+
+        private static void SetInputText(InputField input, string value)
+        {
+            if (input != null)
+            {
+                input.text = value;
+            }
+        }
+
+        private static void RenameObject(Component component, string name)
+        {
+            if (component != null)
+            {
+                component.gameObject.name = name;
+            }
         }
 
         public void BringConfigurationToFront()

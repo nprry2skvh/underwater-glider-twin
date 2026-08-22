@@ -6,7 +6,9 @@ using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 using UnderwaterGliderTwin.Bootstrap;
+using UnderwaterGliderTwin.Prediction;
 using UnderwaterGliderTwin.Telemetry;
+using UnderwaterGliderTwin.UI;
 
 namespace UnderwaterGliderTwin.Tests
 {
@@ -95,6 +97,88 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [UnityTest]
+        public IEnumerator MainScene_ConfigurationSummaryAndExpandedContent_KeepDataInputViewAliveAcrossRepeatedToggles()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            RuntimePredictionState.SetEnabled(false);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var scene = SceneManager.GetActiveScene();
+            var dataInputView = Object.FindObjectOfType<DataInputView>(true);
+            var dataInputPanel = FindSceneObject(scene, "DataInputPanel");
+            Assert.That(dataInputView, Is.Not.Null);
+            Assert.That(dataInputPanel, Is.Not.Null);
+
+            var summaryBar = dataInputPanel.transform.Find("ConfigurationSummaryBar") as RectTransform;
+            var expandedContent = dataInputPanel.transform.Find("ConfigurationExpandedContent") as RectTransform;
+            Assert.That(summaryBar, Is.Not.Null);
+            Assert.That(expandedContent, Is.Not.Null);
+
+            var toggleButtonObject = FindDescendant(dataInputPanel.transform, "MissionConfigurationDrawerToggleButton");
+            Assert.That(toggleButtonObject, Is.Not.Null);
+            var toggleButton = toggleButtonObject.GetComponent<Button>();
+            Assert.That(toggleButton, Is.Not.Null);
+
+            var statusText = FindSceneComponent<Text>(scene, "MissionConfigurationStatus");
+            var csvPathInput = FindSceneComponent<InputField>(scene, "CsvPathInput");
+            var loadCsvButton = FindSceneComponent<Button>(scene, "LoadCsvButton");
+            var predictionToggleButton = FindSceneComponent<Button>(scene, "PredictionToggleButton");
+            var simulationCyclesInput = FindSceneComponent<InputField>(scene, "SimulationCyclesInput");
+            var simulationApplyButton = FindSceneComponent<Button>(scene, "SimulationApplyButton");
+            Assert.That(statusText, Is.Not.Null);
+            Assert.That(csvPathInput, Is.Not.Null);
+            Assert.That(loadCsvButton, Is.Not.Null);
+            Assert.That(predictionToggleButton, Is.Not.Null);
+            Assert.That(simulationCyclesInput, Is.Not.Null);
+            Assert.That(simulationApplyButton, Is.Not.Null);
+
+            csvPathInput.text = string.Empty;
+            loadCsvButton.onClick.Invoke();
+            yield return null;
+            Assert.That(statusText.text, Is.EqualTo("请输入 CSV 文件路径"));
+
+            RuntimePredictionState.SetEnabled(false);
+            predictionToggleButton.onClick.Invoke();
+            yield return null;
+            Assert.That(RuntimePredictionState.PredictionEnabled, Is.True);
+
+            simulationCyclesInput.text = string.Empty;
+            simulationApplyButton.onClick.Invoke();
+            yield return null;
+            Assert.That(statusText.text, Is.EqualTo("循环次数必须是整数"));
+
+            for (var toggleIndex = 0; toggleIndex < 4; toggleIndex++)
+            {
+                toggleButton.onClick.Invoke();
+                yield return null;
+            }
+
+            Assert.That(dataInputPanel.activeSelf, Is.True);
+            Assert.That(dataInputView.enabled, Is.True);
+            Assert.That(dataInputView.ConfigurationExpandedForTests, Is.False);
+            Assert.That(CountNamedChildren(dataInputPanel.transform, "ConfigurationSummaryBar"), Is.EqualTo(1));
+            Assert.That(CountNamedChildren(dataInputPanel.transform, "ConfigurationExpandedContent"), Is.EqualTo(1));
+            Assert.That(CountActiveSceneObjects(scene, "MissionConfigurationDrawerToggleButton"), Is.EqualTo(1));
+
+            csvPathInput.text = string.Empty;
+            loadCsvButton.onClick.Invoke();
+            yield return null;
+            Assert.That(statusText.text, Is.EqualTo("请输入 CSV 文件路径"));
+
+            RuntimePredictionState.SetEnabled(true);
+            predictionToggleButton.onClick.Invoke();
+            yield return null;
+            Assert.That(RuntimePredictionState.PredictionEnabled, Is.False);
+
+            simulationCyclesInput.text = string.Empty;
+            simulationApplyButton.onClick.Invoke();
+            yield return null;
+            Assert.That(statusText.text, Is.EqualTo("循环次数必须是整数"));
+        }
+
+        [UnityTest]
         public IEnumerator MainScene_HasSingleVisibleCameraCommandOwner()
         {
             RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
@@ -152,6 +236,49 @@ namespace UnderwaterGliderTwin.Tests
                 if (transform.gameObject.scene == scene
                     && transform.name == objectName
                     && transform.gameObject.activeInHierarchy)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static T FindSceneComponent<T>(Scene scene, string objectName) where T : Component
+        {
+            var gameObject = FindSceneObject(scene, objectName);
+            return gameObject != null ? gameObject.GetComponent<T>() : null;
+        }
+
+        private static GameObject FindDescendant(Transform root, string objectName)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            foreach (var transform in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (transform.name == objectName)
+                {
+                    return transform.gameObject;
+                }
+            }
+
+            return null;
+        }
+
+        private static int CountNamedChildren(Transform parent, string objectName)
+        {
+            if (parent == null)
+            {
+                return 0;
+            }
+
+            var count = 0;
+            for (var index = 0; index < parent.childCount; index++)
+            {
+                if (parent.GetChild(index).name == objectName)
                 {
                     count++;
                 }
