@@ -221,6 +221,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(unit, Is.Not.Null);
             Assert.That(depthValue.text, Does.Not.Contain("m"));
             Assert.That(unit.GetComponent<Text>().text, Is.EqualTo("m"));
+            AssertNoUnitColumnsOutsideRows(SceneManager.GetActiveScene());
 
             var valueLayout = depthValue.GetComponent<LayoutElement>();
             Assert.That(valueLayout, Is.Not.Null);
@@ -465,6 +466,21 @@ namespace UnderwaterGliderTwin.Tests
             }
 
             return count;
+        }
+
+        private static void AssertNoUnitColumnsOutsideRows(Scene scene)
+        {
+            foreach (var text in Object.FindObjectsOfType<Text>(true))
+            {
+                if (text.gameObject.scene != scene
+                    || !text.name.EndsWith("Unit", System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                Assert.That(text.transform.parent, Is.Not.Null);
+                Assert.That(text.transform.parent.name, Does.EndWith("Row"), text.name);
+            }
         }
     }
 }

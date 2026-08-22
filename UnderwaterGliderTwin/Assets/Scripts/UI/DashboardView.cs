@@ -304,7 +304,6 @@ namespace UnderwaterGliderTwin.UI
             }
 
             UiFactory.ConfigureFixedValueColumn(value);
-            EnsureUnitColumn(value);
 
             var label = panel.Find(labelName)?.GetComponent<Text>();
             if (label == null)
@@ -312,21 +311,30 @@ namespace UnderwaterGliderTwin.UI
                 label = value.transform.parent?.Find(labelName)?.GetComponent<Text>();
             }
 
-            if (label == null)
-            {
-                return;
-            }
-
             var parent = advanced && refsAdvancedRowsRoot != null ? refsAdvancedRowsRoot : panel;
             var row = EnsureRow(parent, rowName);
-            label.transform.SetParent(row, false);
             value.transform.SetParent(row, false);
-            ConfigureKeyValueChildren(label, value);
+            if (label != null)
+            {
+                label.transform.SetParent(row, false);
+                ConfigureKeyValueChildren(label, value);
+            }
+            else
+            {
+                UiFactory.ConfigureFixedValueColumn(value);
+                EnsureUnitColumn(value);
+            }
             if (advanced)
             {
-                advancedRows.Add(label.gameObject);
+                if (label != null)
+                {
+                    advancedRows.Add(label.gameObject);
+                }
                 advancedRows.Add(value.gameObject);
-                label.gameObject.SetActive(showingDetails);
+                if (label != null)
+                {
+                    label.gameObject.SetActive(showingDetails);
+                }
                 value.gameObject.SetActive(showingDetails);
             }
         }

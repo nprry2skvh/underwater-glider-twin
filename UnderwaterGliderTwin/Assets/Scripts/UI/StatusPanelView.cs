@@ -222,18 +222,25 @@ namespace UnderwaterGliderTwin.UI
             }
 
             UiFactory.ConfigureFixedValueColumn(value);
-            EnsureUnitColumn(value);
 
             var label = FindText(panel, labelName);
-            if (label == null)
+            if (panel == null)
             {
                 return;
             }
 
             var row = EnsureRow(panel, rowName);
-            label.transform.SetParent(row, false);
             value.transform.SetParent(row, false);
-            ConfigureKeyValueChildren(label, value);
+            if (label != null)
+            {
+                label.transform.SetParent(row, false);
+                ConfigureKeyValueChildren(label, value);
+            }
+            else
+            {
+                UiFactory.ConfigureFixedValueColumn(value);
+                EnsureUnitColumn(value);
+            }
         }
 
         private static RectTransform CreateRow(Transform parent, string name, float topOffset)

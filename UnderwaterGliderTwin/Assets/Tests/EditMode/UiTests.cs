@@ -82,6 +82,8 @@ namespace UnderwaterGliderTwin.Tests
             var playback = CreatePlayback(Frames(2));
             var prediction = CreatePrediction(playback, Frames(2));
             var root = new GameObject("DashboardPanel", typeof(RectTransform));
+            CreateText(root.transform, "深度Label");
+            CreateText(root.transform, "电量Label");
             var depth = CreateText(root.transform, "DepthValue");
             var battery = CreateText(root.transform, "BatteryValue");
             var refs = new DashboardPanelRefs { panel = root.GetComponent<RectTransform>(), depthValue = depth, batteryValue = battery };
@@ -91,6 +93,11 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(depth.text, Is.EqualTo("10.0"));
             Assert.That(battery.text, Is.EqualTo("15"));
+            Assert.That(root.transform.Find("DepthValueUnit"), Is.Null);
+            Assert.That(root.transform.Find("BatteryValueUnit"), Is.Null);
+            Assert.That(root.transform.Find("DepthRow/DepthValueUnit"), Is.Not.Null);
+            Assert.That(root.transform.Find("BatteryRow/BatteryValueUnit"), Is.Not.Null);
+            AssertNoUnitColumnsOutsideRows(root.transform);
         }
 
         [Test]
@@ -111,6 +118,8 @@ namespace UnderwaterGliderTwin.Tests
             var playback = CreatePlayback(Frames(2));
             var prediction = CreatePrediction(playback, Frames(2));
             var root = new GameObject("StatusPanel", typeof(RectTransform));
+            CreateText(root.transform, "任务来源Label");
+            CreateText(root.transform, "剩余电量Label");
             var mission = CreateText(root.transform, "MissionValue");
             var battery = CreateText(root.transform, "BatteryValue");
             var refs = new StatusPanelRefs { panel = root.GetComponent<RectTransform>(), missionValue = mission, batteryValue = battery };
@@ -120,7 +129,9 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(mission.text, Is.Not.Empty);
             Assert.That(battery.text, Is.EqualTo("15"));
-            Assert.That(root.transform.Find("BatteryValueUnit").GetComponent<Text>().text, Is.EqualTo("%"));
+            Assert.That(root.transform.Find("BatteryValueUnit"), Is.Null);
+            Assert.That(root.transform.Find("BatteryRow/BatteryValueUnit").GetComponent<Text>().text, Is.EqualTo("%"));
+            AssertNoUnitColumnsOutsideRows(root.transform);
         }
 
         [Test]
@@ -2364,6 +2375,20 @@ namespace UnderwaterGliderTwin.Tests
             var textObject = new GameObject(name, typeof(RectTransform), typeof(Text));
             textObject.transform.SetParent(parent, false);
             return textObject.GetComponent<Text>();
+        }
+
+        private static void AssertNoUnitColumnsOutsideRows(Transform panel)
+        {
+            foreach (var text in panel.GetComponentsInChildren<Text>(true))
+            {
+                if (!text.name.EndsWith("Unit", System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                Assert.That(text.transform.parent, Is.Not.Null);
+                Assert.That(text.transform.parent.name, Does.EndWith("Row"), text.name);
+            }
         }
 
         private static Button CreateNavigationButton(Transform parent, string name)
