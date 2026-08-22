@@ -70,11 +70,54 @@ namespace UnderwaterGliderTwin.UI
             scaler.matchWidthOrHeight = 0.5f;
             canvasObject.AddComponent<GraphicRaycaster>();
             RuntimeUiFallback.RememberLegacyCanvas(canvas);
+            EnsureResponsiveRuntimeLayout(canvas);
             return canvas;
+        }
+
+        public static RectTransform EnsureResponsiveRuntimeLayout(Canvas canvas)
+        {
+            if (canvas == null)
+            {
+                return null;
+            }
+
+            var uiRoot = EnsureRectTransformChild(canvas.transform, "UiRoot");
+            ConfigureRect(uiRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+
+            var systemBar = EnsureRectTransformChild(uiRoot, "SystemBar");
+            ConfigureRect(systemBar, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 48f));
+            var configurationArea = EnsureRectTransformChild(uiRoot, "ConfigurationArea");
+            ConfigureRect(configurationArea, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, 320f));
+            var playbackBar = EnsureRectTransformChild(uiRoot, "PlaybackBar");
+            ConfigureRect(playbackBar, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 320f), new Vector2(0f, 124f));
+            var mainBody = EnsureRectTransformChild(uiRoot, "MainBody");
+            mainBody.offsetMin = new Vector2(0f, 444f);
+            mainBody.offsetMax = new Vector2(0f, -48f);
+
+            var telemetryColumn = EnsureRectTransformChild(mainBody, "TelemetryColumn");
+            ConfigureRect(telemetryColumn, new Vector2(0f, 0f), new Vector2(0.25f, 1f), new Vector2(0f, 0.5f), Vector2.zero, Vector2.zero);
+            var viewportColumn = EnsureRectTransformChild(mainBody, "ViewportColumn");
+            ConfigureRect(viewportColumn, new Vector2(0.25f, 0f), new Vector2(0.75f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            var statusColumn = EnsureRectTransformChild(mainBody, "StatusColumn");
+            ConfigureRect(statusColumn, new Vector2(0.75f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), Vector2.zero, Vector2.zero);
+
+            var drawerEntryLayer = EnsureRectTransformChild(uiRoot, "DrawerEntryLayer");
+            ConfigureRect(drawerEntryLayer, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            EnsureRuntimeDrawerToggle(drawerEntryLayer, "TelemetryDrawerToggle", "遥测抽屉", new Vector2(0f, 1f));
+            EnsureRuntimeDrawerToggle(drawerEntryLayer, "StatusDrawerToggle", "状态抽屉", new Vector2(120f, 1f));
+
+            var modalRoot = EnsureRectTransformChild(canvas.transform, "ModalRoot");
+            ConfigureRect(modalRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            var scrim = EnsureImageChild(modalRoot, "DrawerScrim", new Color(0f, 0f, 0f, 0.6f));
+            scrim.raycastTarget = true;
+            EnsureRuntimeDrawerPlaceholder(modalRoot, "OceanCurrentDrawer");
+            EnsureRuntimeDrawerPlaceholder(modalRoot, "FlightLegDrawer");
+            return uiRoot;
         }
 
         public static RectTransform Panel(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 size, Color color)
         {
+            parent = ResolveRuntimePanelParent(parent, name);
             var panel = new GameObject(name);
             panel.transform.SetParent(parent, false);
             var rect = panel.AddComponent<RectTransform>();
@@ -99,7 +142,10 @@ namespace UnderwaterGliderTwin.UI
             var canvas = parent != null
                 ? (parent.GetComponent<Canvas>() ?? parent.GetComponentInParent<Canvas>())
                 : null;
-            var existing = canvas != null ? canvas.transform.Find("CommandCenterHeader") as RectTransform : null;
+            var existing = canvas != null
+                ? (canvas.transform.Find("UiRoot/SystemBar/CommandCenterHeader") as RectTransform
+                    ?? canvas.transform.Find("CommandCenterHeader") as RectTransform)
+                : null;
             if (existing != null)
             {
                 return existing;
@@ -317,6 +363,77 @@ namespace UnderwaterGliderTwin.UI
             var eventSystemObject = new GameObject("EventSystem");
             eventSystemObject.AddComponent<EventSystem>();
             eventSystemObject.AddComponent<StandaloneInputModule>();
+        }
+
+        private static Transform ResolveRuntimePanelParent(Transform parent, string name)
+        {
+            if (!RuntimeUiFallback.AllowRuntimeFallback || parent == null)
+            {
+                return parent;
+            }
+
+            var canvas = parent.GetComponent<Canvas>();
+            if (canvas == null)
+            {
+                return parent;
+            }
+
+            var uiRoot = EnsureResponsiveRuntimeLayout(canvas);
+            switch (name)
+            {
+                case "FlightLegDrawerPanel": return canvas.transform.Find("ModalRoot");
+                default: return parent;
+            }
+        }
+
+        private static RectTransform EnsureRectTransformChild(Transform parent, string name)
+        {
+            var existing = parent.Find(name);
+            if (existing != null)
+            {
+                return existing as RectTransform ?? existing.gameObject.AddComponent<RectTransform>();
+            }
+
+            var created = new GameObject(name, typeof(RectTransform));
+            created.transform.SetParent(parent, false);
+            return created.GetComponent<RectTransform>();
+        }
+
+        private static Image EnsureImageChild(Transform parent, string name, Color color)
+        {
+            var existing = parent.Find(name);
+            var image = existing != null ? existing.GetComponent<Image>() : null;
+            if (image != null)
+            {
+                return image;
+            }
+
+            var created = existing != null ? existing.gameObject : new GameObject(name, typeof(RectTransform));
+            created.transform.SetParent(parent, false);
+            var rect = created.GetComponent<RectTransform>();
+            ConfigureRect(rect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            image = created.GetComponent<Image>() ?? created.AddComponent<Image>();
+            image.color = color;
+            return image;
+        }
+
+        private static void EnsureRuntimeDrawerToggle(Transform parent, string name, string label, Vector2 position)
+        {
+            var existing = parent.Find(name);
+            var button = existing != null ? existing.GetComponent<Button>() : null;
+            if (button == null)
+            {
+                button = Button(name, parent, label, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), position, new Vector2(108f, 30f));
+            }
+
+            ConfigureRect(button.transform as RectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), position, new Vector2(108f, 30f));
+        }
+
+        private static void EnsureRuntimeDrawerPlaceholder(Transform parent, string name)
+        {
+            var placeholder = EnsureRectTransformChild(parent, name);
+            ConfigureRect(placeholder, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), Vector2.zero, new Vector2(420f, 0f));
+            placeholder.gameObject.SetActive(false);
         }
 
         private static void ConfigureRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 size)

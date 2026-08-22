@@ -17,11 +17,28 @@ namespace UnderwaterGliderTwin.UI
     [Serializable]
     public sealed class RuntimeUiReferences : UiReferenceGroupBase
     {
+        public ResponsiveLayoutRefs layout = new ResponsiveLayoutRefs();
         public DashboardPanelRefs dashboard = new DashboardPanelRefs();
         public StatusPanelRefs status = new StatusPanelRefs();
         public DataInputPanelRefs dataInput = new DataInputPanelRefs();
         public PlaybackControlsRefs playback = new PlaybackControlsRefs();
         public OceanToolbarRefs oceanToolbar = new OceanToolbarRefs();
+    }
+
+    [Serializable]
+    public sealed class ResponsiveLayoutRefs : UiReferenceGroupBase
+    {
+        public RectTransform drawerEntryLayer;
+        public Button telemetryDrawerToggle;
+        public Button statusDrawerToggle;
+        public RectTransform systemBar;
+        public RectTransform configurationArea;
+        public RectTransform mainBody;
+        public RectTransform telemetryColumn;
+        public RectTransform viewportColumn;
+        public RectTransform statusColumn;
+        public RectTransform playbackBar;
+        public Image drawerScrim;
     }
 
     [Serializable]

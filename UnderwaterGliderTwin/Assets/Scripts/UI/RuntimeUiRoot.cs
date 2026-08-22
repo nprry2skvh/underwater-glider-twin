@@ -14,6 +14,7 @@ namespace UnderwaterGliderTwin.UI
 
         public Canvas RuntimeCanvas => runtimeCanvas;
         public RectTransform ModalRoot => modalRoot;
+        public RectTransform DrawerLayer => modalRoot;
         public RuntimeUiPanelFlags EnabledPanelValidationMask => enabledPanelValidationMask;
         public RuntimeUiReferences References => references;
 
@@ -82,6 +83,7 @@ namespace UnderwaterGliderTwin.UI
             CollectGroupIfSelected(RuntimeUiPanelFlags.DataInput, references.dataInput, "references.dataInput", issues);
             CollectGroupIfSelected(RuntimeUiPanelFlags.Playback, references.playback, "references.playback", issues);
             CollectGroupIfSelected(RuntimeUiPanelFlags.OceanToolbar, references.oceanToolbar, "references.oceanToolbar", issues);
+            references.layout?.CollectReferenceIssues(this, "Main.unity", "references.layout", issues);
             var rowTemplate = GetOceanLayerRowTemplate();
             if (rowTemplate != null)
             {

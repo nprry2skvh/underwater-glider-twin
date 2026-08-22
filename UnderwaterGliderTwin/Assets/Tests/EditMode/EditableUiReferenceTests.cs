@@ -78,6 +78,24 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void RuntimeUiRoot_DrawerLayerAliasesSerializedModalRoot()
+        {
+            var rootObject = scope.CreateRoot("RuntimeUiRoot");
+            var canvas = new GameObject("RuntimeCanvas", typeof(Canvas)).GetComponent<Canvas>();
+            canvas.transform.SetParent(rootObject.transform, false);
+            var modalRoot = new GameObject("ModalRoot").AddComponent<RectTransform>();
+            modalRoot.transform.SetParent(canvas.transform, false);
+            var root = AddRuntimeUiRoot(rootObject);
+            var serialized = new UnityEditor.SerializedObject(root);
+            serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
+            serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
+            ApplySerialized(serialized);
+
+            Assert.That(root.ModalRoot, Is.EqualTo(modalRoot));
+            Assert.That(root.DrawerLayer, Is.SameAs(modalRoot));
+        }
+
+        [Test]
         public void RuntimeUiRoot_ReportsDuplicateEventSystemsAndLongLivedUi()
         {
             scope.CreateRoot("EventSystemA").AddComponent<EventSystem>();
@@ -365,16 +383,26 @@ namespace UnderwaterGliderTwin.Tests
             try
             {
                 UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+                var runtimeRoot = Object.FindObjectOfType<RuntimeUiRoot>();
 
                 Assert.That(GameObject.Find("RuntimeUiRoot"), Is.Not.Null);
                 Assert.That(GameObject.Find("RuntimeCanvas"), Is.Not.Null);
-                Assert.That(GameObject.Find("CommandCenterHeader"), Is.Not.Null);
-                Assert.That(GameObject.Find("DashboardPanel"), Is.Not.Null);
-                Assert.That(GameObject.Find("StatusPanel"), Is.Not.Null);
-                Assert.That(GameObject.Find("DataInputPanel"), Is.Not.Null);
-                Assert.That(GameObject.Find("PlaybackControlsPanel"), Is.Not.Null);
+                Assert.That(runtimeRoot, Is.Not.Null);
+                Assert.That(runtimeRoot.ModalRoot, Is.Not.Null);
+                Assert.That(runtimeRoot.ModalRoot.name, Is.EqualTo("ModalRoot"));
+                Assert.That(runtimeRoot.DrawerLayer, Is.SameAs(runtimeRoot.ModalRoot));
+                Assert.That(GameObject.Find("UiRoot"), Is.Not.Null);
+                Assert.That(GameObject.Find("SystemBar"), Is.Not.Null);
+                Assert.That(GameObject.Find("ConfigurationArea"), Is.Not.Null);
+                Assert.That(GameObject.Find("MainBody"), Is.Not.Null);
+                Assert.That(GameObject.Find("PlaybackBar"), Is.Not.Null);
+                Assert.That(GameObject.Find("DrawerEntryLayer"), Is.Not.Null);
+                Assert.That(GameObject.Find("DrawerScrim"), Is.Not.Null);
                 Assert.That(GameObject.Find("OceanCommandToolbar"), Is.Not.Null);
                 Assert.That(GameObject.Find("ModalRoot"), Is.Not.Null);
+                Assert.That(GameObject.Find("TelemetryDrawerToggle"), Is.Not.Null);
+                Assert.That(GameObject.Find("StatusDrawerToggle"), Is.Not.Null);
+                Assert.That(FindObjectsNamed("DrawerLayer"), Is.EqualTo(0));
             }
             finally
             {
@@ -418,11 +446,16 @@ namespace UnderwaterGliderTwin.Tests
             {
                 UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
                 var runtimeCanvas = GameObject.Find("RuntimeCanvas").transform;
-                AssertPanelUnderCanvasWithSource("DashboardPanel", runtimeCanvas, "Assets/UI/Prefabs/DashboardPanel.prefab");
-                AssertPanelUnderCanvasWithSource("StatusPanel", runtimeCanvas, "Assets/UI/Prefabs/StatusPanel.prefab");
-                AssertPanelUnderCanvasWithSource("DataInputPanel", runtimeCanvas, "Assets/UI/Prefabs/DataInputPanel.prefab");
-                AssertPanelUnderCanvasWithSource("PlaybackControlsPanel", runtimeCanvas, "Assets/UI/Prefabs/PlaybackControlsPanel.prefab");
-                AssertPanelUnderCanvasWithSource("OceanCommandToolbar", runtimeCanvas, "Assets/UI/Prefabs/OceanCommandToolbar.prefab");
+                Assert.That(GameObject.Find("UiRoot").transform.parent, Is.EqualTo(runtimeCanvas));
+                Assert.That(GameObject.Find("ModalRoot").transform.parent, Is.EqualTo(runtimeCanvas));
+                AssertPanelUnderParentWithSource("DashboardPanel", "TelemetryColumn", "Assets/UI/Prefabs/DashboardPanel.prefab");
+                AssertPanelUnderParentWithSource("StatusPanel", "StatusColumn", "Assets/UI/Prefabs/StatusPanel.prefab");
+                AssertPanelUnderParentWithSource("DataInputPanel", "ConfigurationArea", "Assets/UI/Prefabs/DataInputPanel.prefab");
+                AssertPanelUnderParentWithSource("PlaybackControlsPanel", "PlaybackBar", "Assets/UI/Prefabs/PlaybackControlsPanel.prefab");
+                AssertPanelUnderParentWithSource("OceanCommandToolbar", "ViewportColumn", "Assets/UI/Prefabs/OceanCommandToolbar.prefab");
+                Assert.That(FindSceneObjectIncludingInactive("TelemetryDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
+                Assert.That(FindSceneObjectIncludingInactive("StatusDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
+                Assert.That(FindSceneObjectIncludingInactive("DrawerScrim").transform.parent.name, Is.EqualTo("ModalRoot"));
                 Assert.That(FindSceneObjectIncludingInactive("OceanCurrentDrawer").transform.parent.name, Is.EqualTo("ModalRoot"));
                 Assert.That(FindSceneObjectIncludingInactive("FlightLegDrawer").transform.parent.name, Is.EqualTo("ModalRoot"));
             }
@@ -474,6 +507,56 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void RuntimeFallback_CreatesCanonicalUiAndModalHierarchy()
+        {
+            var host = scope.CreateRoot("RuntimeFallbackHost");
+            var canvas = host.AddComponent<Canvas>();
+            RuntimeUiFallback.AllowRuntimeFallback = true;
+
+            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
+
+            Assert.That(uiRoot, Is.Not.Null);
+            Assert.That(uiRoot.name, Is.EqualTo("UiRoot"));
+            Assert.That(uiRoot.Find("SystemBar"), Is.Not.Null);
+            Assert.That(uiRoot.Find("ConfigurationArea"), Is.Not.Null);
+            Assert.That(uiRoot.Find("MainBody/TelemetryColumn"), Is.Not.Null);
+            Assert.That(uiRoot.Find("MainBody/ViewportColumn"), Is.Not.Null);
+            Assert.That(uiRoot.Find("MainBody/StatusColumn"), Is.Not.Null);
+            Assert.That(uiRoot.Find("PlaybackBar"), Is.Not.Null);
+            Assert.That(uiRoot.Find("DrawerEntryLayer/TelemetryDrawerToggle"), Is.Not.Null);
+            Assert.That(uiRoot.Find("DrawerEntryLayer/StatusDrawerToggle"), Is.Not.Null);
+
+            var modalRoot = canvas.transform.Find("ModalRoot");
+            Assert.That(modalRoot, Is.Not.Null);
+            Assert.That(modalRoot.Find("DrawerScrim"), Is.Not.Null);
+            Assert.That(modalRoot.Find("OceanCurrentDrawer"), Is.Not.Null);
+            Assert.That(modalRoot.Find("FlightLegDrawer"), Is.Not.Null);
+            Assert.That(canvas.transform.Find("DrawerLayer"), Is.Null);
+        }
+
+        [Test]
+        public void TwinBootstrap_DisablesWhenFallbackDisabledAndEditableRootIsUnavailable()
+        {
+            var bootstrapObject = scope.CreateRoot("TwinBootstrapWithoutUiRoot");
+            bootstrapObject.SetActive(false);
+            var bootstrap = bootstrapObject.AddComponent<TwinBootstrap>();
+            var serialized = new UnityEditor.SerializedObject(bootstrap);
+            serialized.FindProperty("useGeneratedRuntimeUi").boolValue = false;
+            serialized.FindProperty("allowRuntimeFallback").boolValue = false;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            var validateMethod = typeof(TwinBootstrap).GetMethod(
+                "ValidateConfiguredRuntimeUi",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            LogAssert.Expect(LogType.Error, "TwinBootstrap requires a serialized RuntimeUiRoot when runtime fallback is disabled.");
+            Assert.That(validateMethod, Is.Not.Null);
+            validateMethod.Invoke(bootstrap, null);
+
+            Assert.That(bootstrap.enabled, Is.False);
+            Assert.That(RuntimeUiFallback.AllowRuntimeFallback, Is.False);
+        }
+
+        [Test]
         public void EditableUiSceneBuilder_BuildMainSceneIsIdempotentWithModalPrefabs()
         {
             var previous = SceneManager.GetActiveScene().path;
@@ -504,8 +587,14 @@ namespace UnderwaterGliderTwin.Tests
 
                 Assert.That(canvasCount, Is.EqualTo(1));
                 Assert.That(eventSystemCount, Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("UiRoot"), Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("ModalRoot"), Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("DrawerScrim"), Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("DrawerLayer"), Is.EqualTo(0));
                 Assert.That(FindObjectsNamed("DashboardPanel"), Is.EqualTo(1));
                 Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("DashboardPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
+                Assert.That(FindSceneObjectIncludingInactive("TelemetryDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
+                Assert.That(FindSceneObjectIncludingInactive("StatusDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
                 Assert.That(FindObjectsNamed("OceanCurrentDrawer"), Is.EqualTo(1));
                 Assert.That(FindObjectsNamed("FlightLegDrawer"), Is.EqualTo(1));
             }
@@ -599,11 +688,11 @@ namespace UnderwaterGliderTwin.Tests
             }
         }
 
-        private static void AssertPanelUnderCanvasWithSource(string panelName, Transform runtimeCanvas, string expectedPrefabPath)
+        private static void AssertPanelUnderParentWithSource(string panelName, string expectedParentName, string expectedPrefabPath)
         {
             var panel = GameObject.Find(panelName);
             Assert.That(panel, Is.Not.Null);
-            Assert.That(panel.transform.parent, Is.EqualTo(runtimeCanvas));
+            Assert.That(panel.transform.parent.name, Is.EqualTo(expectedParentName));
             var source = UnityEditor.PrefabUtility.GetCorrespondingObjectFromSource(panel);
             Assert.That(UnityEditor.AssetDatabase.GetAssetPath(source), Is.EqualTo(expectedPrefabPath));
         }

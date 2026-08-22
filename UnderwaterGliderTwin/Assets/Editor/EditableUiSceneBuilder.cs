@@ -134,39 +134,51 @@ namespace UnderwaterGliderTwin.Editor
                 canvasObject.AddComponent<GraphicRaycaster>();
             }
 
-            EnsureSceneChild(canvas.transform, "CommandCenterHeader", typeof(RectTransform), typeof(Image), out var headerWasCreated);
-            if (headerWasCreated)
-            {
-                ConfigureRect(canvas.transform.Find("CommandCenterHeader") as RectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 48f));
-                canvas.transform.Find("CommandCenterHeader").GetComponent<Image>().color = new Color(0.015f, 0.09f, 0.14f, 0.98f);
-            }
+            var uiRoot = EnsureLayoutContainer(canvas.transform, "UiRoot");
+            ConfigureRect(uiRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            var systemBar = EnsureLayoutContainer(uiRoot, "SystemBar");
+            ConfigureRect(systemBar, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 48f));
+            MoveLegacyChildToContainer(canvas.transform, "CommandCenterHeader", systemBar);
+            var configurationArea = EnsureLayoutContainer(uiRoot, "ConfigurationArea");
+            ConfigureRect(configurationArea, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, 320f));
+            var playbackBar = EnsureLayoutContainer(uiRoot, "PlaybackBar");
+            ConfigureRect(playbackBar, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 320f), new Vector2(0f, 124f));
+            var mainBody = EnsureLayoutContainer(uiRoot, "MainBody");
+            ConfigureRect(mainBody, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -22f), new Vector2(0f, -492f));
+            var telemetryColumn = EnsureLayoutContainer(mainBody, "TelemetryColumn");
+            ConfigureRect(telemetryColumn, new Vector2(0f, 0f), new Vector2(0.25f, 1f), new Vector2(0f, 0.5f), Vector2.zero, Vector2.zero);
+            var viewportColumn = EnsureLayoutContainer(mainBody, "ViewportColumn");
+            ConfigureRect(viewportColumn, new Vector2(0.25f, 0f), new Vector2(0.75f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            var statusColumn = EnsureLayoutContainer(mainBody, "StatusColumn");
+            ConfigureRect(statusColumn, new Vector2(0.75f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), Vector2.zero, Vector2.zero);
+            var drawerEntryLayer = EnsureLayoutContainer(uiRoot, "DrawerEntryLayer");
+            ConfigureRect(drawerEntryLayer, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            drawerEntryLayer.SetAsLastSibling();
+            EnsureDrawerEntryToggle(drawerEntryLayer, "TelemetryDrawerToggle", "遥测抽屉", new Vector2(0f, 1f), new Vector2(0f, 1f));
+            EnsureDrawerEntryToggle(drawerEntryLayer, "StatusDrawerToggle", "状态抽屉", new Vector2(0f, 1f), new Vector2(120f, 1f));
 
-            var panelNames = new[]
-            {
-                "DashboardPanel",
-                "StatusPanel",
-                "DataInputPanel",
-                "PlaybackControlsPanel",
-                "OceanCommandToolbar"
-            };
-            foreach (var panelName in panelNames)
-            {
-                EnsurePanelPrefabInstance(scene, canvas.transform, panelName);
-            }
+            EnsurePanelPrefabInstance(scene, telemetryColumn, "DashboardPanel");
+            EnsurePanelPrefabInstance(scene, statusColumn, "StatusPanel");
+            EnsurePanelPrefabInstance(scene, configurationArea, "DataInputPanel");
+            EnsurePanelPrefabInstance(scene, playbackBar, "PlaybackControlsPanel");
+            EnsurePanelPrefabInstance(scene, viewportColumn, "OceanCommandToolbar");
 
             var modalRoot = FindDirectChild(canvas.transform, "ModalRoot");
             if (modalRoot == null)
             {
                 modalRoot = new GameObject("ModalRoot", typeof(RectTransform));
                 modalRoot.transform.SetParent(canvas.transform, false);
-                ConfigureRect(modalRoot.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             }
+            ConfigureRect(modalRoot.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            var drawerScrim = GetOrCreateImage(modalRoot.transform, "DrawerScrim", Vector2.zero, Vector2.one, new Color(0f, 0f, 0f, 0f));
+            drawerScrim.raycastTarget = false;
+            drawerScrim.transform.SetAsFirstSibling();
 
             EnsureModalPrefabInstance(scene, modalRoot.transform, "OceanCurrentDrawer");
             EnsureModalPrefabInstance(scene, modalRoot.transform, "FlightLegDrawer");
 
             EnsureEventSystem(scene);
-            AssignMainReferences(runtimeRoot, canvas, modalRoot.GetComponent<RectTransform>(), rootWasCreated);
+            AssignMainReferences(runtimeRoot, canvas, uiRoot, modalRoot.GetComponent<RectTransform>());
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
             AssetDatabase.SaveAssets();
@@ -204,18 +216,19 @@ namespace UnderwaterGliderTwin.Editor
             EditorSceneManager.SaveScene(scene);
         }
 
-        private static void AssignMainReferences(RuntimeUiRoot runtimeRoot, Canvas canvas, RectTransform modalRoot, bool rootWasCreated)
+        private static void AssignMainReferences(RuntimeUiRoot runtimeRoot, Canvas canvas, RectTransform uiRoot, RectTransform modalRoot)
         {
             var serialized = new SerializedObject(runtimeRoot);
             serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
             serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
             serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.All;
 
-            var dashboard = FindDirectChild(canvas.transform, "DashboardPanel");
-            var status = FindDirectChild(canvas.transform, "StatusPanel");
-            var dataInput = FindDirectChild(canvas.transform, "DataInputPanel");
-            var playback = FindDirectChild(canvas.transform, "PlaybackControlsPanel");
-            var oceanToolbar = FindDirectChild(canvas.transform, "OceanCommandToolbar");
+            var dashboard = FindDescendant(canvas.transform, "DashboardPanel");
+            var status = FindDescendant(canvas.transform, "StatusPanel");
+            var dataInput = FindDescendant(canvas.transform, "DataInputPanel");
+            var playback = FindDescendant(canvas.transform, "PlaybackControlsPanel");
+            var oceanToolbar = FindDescendant(canvas.transform, "OceanCommandToolbar");
+            AssignUiGroup(serialized, new ResponsiveLayoutRefs(), "references.layout", uiRoot, modalRoot);
             AssignUiGroup(serialized, new DashboardPanelRefs(), "references.dashboard", dashboard != null ? dashboard.transform : null, modalRoot);
             AssignUiGroup(serialized, new StatusPanelRefs(), "references.status", status != null ? status.transform : null, modalRoot);
             AssignUiGroup(serialized, new DataInputPanelRefs(), "references.dataInput", dataInput != null ? dataInput.transform : null, modalRoot);
@@ -231,6 +244,7 @@ namespace UnderwaterGliderTwin.Editor
             {
                 var bootstrapSerialized = new SerializedObject(twinBootstrap);
                 bootstrapSerialized.FindProperty("runtimeUiRoot").objectReferenceValue = runtimeRoot;
+                bootstrapSerialized.FindProperty("useGeneratedRuntimeUi").boolValue = false;
                 bootstrapSerialized.FindProperty("allowRuntimeFallback").boolValue = false;
                 bootstrapSerialized.FindProperty("strictUiValidation").boolValue = true;
                 bootstrapSerialized.ApplyModifiedPropertiesWithoutUndo();
@@ -272,7 +286,11 @@ namespace UnderwaterGliderTwin.Editor
                 }
                 else if (targetRoot != null)
                 {
-                    if (groupPath == "references.dataInput.ocean" && field.Name == "oceanCurrentDrawer")
+                    if (groupPath == "references.layout" && field.Name == "drawerScrim")
+                    {
+                        value = FindDirectChild(modalRoot, "DrawerScrim")?.GetComponent(field.FieldType);
+                    }
+                    else if (groupPath == "references.dataInput.ocean" && field.Name == "oceanCurrentDrawer")
                     {
                         value = FindDirectChild(modalRoot, "OceanCurrentDrawer")?.GetComponent(field.FieldType);
                     }
@@ -299,6 +317,11 @@ namespace UnderwaterGliderTwin.Editor
 
         private static Transform ResolveReferenceRoot(string groupPath, string fieldName, Transform panelRoot, RectTransform modalRoot)
         {
+            if (groupPath == "references.layout")
+            {
+                return fieldName == "drawerScrim" ? modalRoot : panelRoot;
+            }
+
             if (groupPath == "references.dataInput.dynamics"
                 || groupPath == "references.dataInput.flightLeg"
                 || (groupPath == "references.dataInput.ocean" && ShouldLiveInModal("dataInput.ocean", fieldName)))
@@ -792,6 +815,53 @@ namespace UnderwaterGliderTwin.Editor
         private static GameObject FindDirectChild(Transform parent, string name)
         {
             return parent == null ? null : parent.Find(name)?.gameObject;
+        }
+
+        private static RectTransform EnsureLayoutContainer(Transform parent, string name)
+        {
+            var existing = FindDirectChild(parent, name);
+            if (existing == null)
+            {
+                existing = new GameObject(name, typeof(RectTransform));
+                existing.transform.SetParent(parent, false);
+            }
+            else if (existing.GetComponent<RectTransform>() == null)
+            {
+                throw new InvalidOperationException(
+                    "Main UI contains a same-name non-layout object: " + GetTransformPath(existing.transform));
+            }
+
+            return existing.GetComponent<RectTransform>();
+        }
+
+        private static void MoveLegacyChildToContainer(Transform parent, string name, Transform destination)
+        {
+            var child = FindDirectChild(parent, name);
+            if (child == null)
+            {
+                return;
+            }
+
+            if (destination == null)
+            {
+                throw new InvalidOperationException(
+                    "Cannot migrate legacy UI object because its destination is missing: " + GetTransformPath(child.transform));
+            }
+
+            child.transform.SetParent(destination, false);
+        }
+
+        private static void EnsureDrawerEntryToggle(Transform parent, string name, string label, Vector2 anchoredPosition, Vector2 size)
+        {
+            var button = GetOrCreateButton(parent, name, label, anchoredPosition, size);
+            var rect = button.GetComponent<RectTransform>();
+            ConfigureRect(rect, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), anchoredPosition, size);
+            var labelText = button.transform.Find(name + "Label")?.GetComponent<Text>();
+            if (labelText != null)
+            {
+                labelText.text = label;
+                labelText.alignment = TextAnchor.MiddleCenter;
+            }
         }
 
         private static void EnsureNoUnsavedSceneChanges(string targetScenePath, string operationName)

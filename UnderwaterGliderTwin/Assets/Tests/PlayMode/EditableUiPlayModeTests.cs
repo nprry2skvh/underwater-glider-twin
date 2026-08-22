@@ -21,6 +21,7 @@ namespace UnderwaterGliderTwin.Tests
             yield return null;
 
             var scene = SceneManager.GetActiveScene();
+            var runtimeRoot = Object.FindObjectOfType<UnderwaterGliderTwin.UI.RuntimeUiRoot>(true);
             var canvasCount = 0;
             var eventSystemCount = 0;
             foreach (var canvas in Object.FindObjectsOfType<Canvas>(true))
@@ -43,6 +44,19 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(eventSystemCount, Is.EqualTo(1));
             Assert.That(FindSceneObject(scene, "RuntimeUiRoot"), Is.Not.Null);
             Assert.That(FindSceneObject(scene, "RuntimeCanvas"), Is.Not.Null);
+            Assert.That(runtimeRoot, Is.Not.Null);
+            Assert.That(runtimeRoot.ModalRoot.name, Is.EqualTo("ModalRoot"));
+            Assert.That(runtimeRoot.DrawerLayer, Is.SameAs(runtimeRoot.ModalRoot));
+            Assert.That(FindSceneObject(scene, "UiRoot"), Is.Not.Null);
+            Assert.That(FindSceneObject(scene, "SystemBar"), Is.Not.Null);
+            Assert.That(FindSceneObject(scene, "ConfigurationArea"), Is.Not.Null);
+            Assert.That(FindSceneObject(scene, "MainBody"), Is.Not.Null);
+            Assert.That(FindSceneObject(scene, "PlaybackBar"), Is.Not.Null);
+            Assert.That(FindSceneObject(scene, "DrawerEntryLayer"), Is.Not.Null);
+            Assert.That(FindSceneObject(scene, "DrawerScrim"), Is.Not.Null);
+            Assert.That(FindSceneObject(scene, "TelemetryDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
+            Assert.That(FindSceneObject(scene, "StatusDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
+            Assert.That(FindSceneObjects(scene, "DrawerLayer").Count, Is.EqualTo(0));
             Assert.That(FindSceneObject(scene, "RuntimeUI"), Is.Null);
             Assert.That(Object.FindObjectsOfType<Button>(true).Length, Is.GreaterThan(0));
         }
@@ -91,6 +105,20 @@ namespace UnderwaterGliderTwin.Tests
             }
 
             return null;
+        }
+
+        private static System.Collections.Generic.List<GameObject> FindSceneObjects(Scene scene, string objectName)
+        {
+            var matches = new System.Collections.Generic.List<GameObject>();
+            foreach (var transform in Object.FindObjectsOfType<Transform>(true))
+            {
+                if (transform.gameObject.scene == scene && transform.name == objectName)
+                {
+                    matches.Add(transform.gameObject);
+                }
+            }
+
+            return matches;
         }
     }
 }
