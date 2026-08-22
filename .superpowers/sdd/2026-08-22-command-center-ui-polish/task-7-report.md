@@ -68,3 +68,15 @@ Prefab user override protection 保持成立：没有写回 prefab；existing pr
 该环境在 1920 窗口下受桌面裁剪影响产生了无效黑帧，因此没有把它当作验收截图；没有使用 batchmode 截图冒充 Player，也没有提交临时 harness、日志或无效帧。
 
 本次提交不包含 `Welcome.unity`、`ProjectSettings.asset`、`paper-ppt` 或无关 `.meta` 的用户既有改动。
+
+## 展开态补充修复
+
+后续复核发现展开配置区仍有两处真实层级问题：旧输入控件缺少独立标签行，以及 `MissionConfigurationStatus` 使用固定负坐标覆盖参数卡片。最终修复已在 `538745f` 提交：
+
+- 为遗留输入控件创建独立的 `*Field` 包装行，并保留原 `InputField` 业务绑定；
+- 在绑定阶段刷新 `ReferenceCycleDurationValue`，不再显示 Prefab 占位文本；
+- 将配置状态移入 `MissionSectionCard` 的最后一行，参与 `VerticalLayoutGroup`，高度 26px；
+- 对长状态文本保留 44px 包裹高度；
+- 增加展开态层级、状态位置、唯一参考值和占位文本回归断言。
+
+补充验证：EditMode `435/435`，Task 7 PlayMode `26/26`，Windows Player build 成功。此前真实 Player 展开截图 `023507` 已验证标签和参考时长恢复；其后状态末行又完成了布局修复，代码级断言确认不再使用固定 `-250` 坐标。
