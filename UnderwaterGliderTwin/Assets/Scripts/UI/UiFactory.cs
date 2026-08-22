@@ -129,16 +129,16 @@ namespace UnderwaterGliderTwin.UI
             var telemetryColumn = EnsureRectTransformChild(mainBody, "TelemetryColumn");
             ConfigureRect(telemetryColumn, new Vector2(0f, 0f), new Vector2(0.25f, 1f), new Vector2(0f, 0.5f), Vector2.zero, Vector2.zero);
             ConfigureVerticalContent(telemetryColumn, 12f);
-            ConfigureHorizontalZone(telemetryColumn, 320f, 360f);
+            ConfigureHorizontalZone(telemetryColumn, 280f, 280f);
             var viewportColumn = EnsureRectTransformChild(mainBody, "ViewportColumn");
             ConfigureRect(viewportColumn, new Vector2(0.25f, 0f), new Vector2(0.75f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             ConfigureVerticalContent(viewportColumn, 12f);
-            ConfigureHorizontalZone(viewportColumn, 640f, 760f);
+            ConfigureHorizontalZone(viewportColumn, 640f, 0f);
             viewportColumn.GetComponent<LayoutElement>().flexibleWidth = 1f;
             var statusColumn = EnsureRectTransformChild(mainBody, "StatusColumn");
             ConfigureRect(statusColumn, new Vector2(0.75f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), Vector2.zero, Vector2.zero);
             ConfigureVerticalContent(statusColumn, 12f);
-            ConfigureHorizontalZone(statusColumn, 320f, 360f);
+            ConfigureHorizontalZone(statusColumn, 320f, 320f);
 
             var drawerEntryLayer = EnsureRectTransformChild(uiRoot, "DrawerEntryLayer");
             ConfigureRect(drawerEntryLayer, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
@@ -417,6 +417,7 @@ namespace UnderwaterGliderTwin.UI
             var layoutElement = zone.GetComponent<LayoutElement>() ?? zone.gameObject.AddComponent<LayoutElement>();
             layoutElement.minWidth = minWidth;
             layoutElement.preferredWidth = preferredWidth;
+            layoutElement.flexibleWidth = 0f;
             layoutElement.flexibleHeight = 1f;
         }
 

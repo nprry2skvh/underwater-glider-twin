@@ -153,6 +153,10 @@ namespace UnderwaterGliderTwin.Editor
             ConfigureRect(viewportColumn, new Vector2(0.25f, 0f), new Vector2(0.75f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             var statusColumn = EnsureLayoutContainer(mainBody, "StatusColumn");
             ConfigureRect(statusColumn, new Vector2(0.75f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), Vector2.zero, Vector2.zero);
+            ConfigureMainBodyLayout(mainBody);
+            ConfigureColumnWidth(telemetryColumn, 280f, 280f, 0f);
+            ConfigureColumnWidth(viewportColumn, 640f, 0f, 1f);
+            ConfigureColumnWidth(statusColumn, 320f, 320f, 0f);
             var drawerEntryLayer = EnsureLayoutContainer(uiRoot, "DrawerEntryLayer");
             ConfigureRect(drawerEntryLayer, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             drawerEntryLayer.SetAsLastSibling();
@@ -447,12 +451,27 @@ namespace UnderwaterGliderTwin.Editor
                 prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
             }
 
-            var existing = FindDirectChild(modalRoot, drawerName);
+            var existing = default(GameObject);
+            foreach (var candidate in FindSceneObjects(scene, drawerName))
+            {
+                if (PrefabUtility.GetPrefabInstanceStatus(candidate) != PrefabInstanceStatus.Connected)
+                {
+                    throw new InvalidOperationException("Main UI contains a same-name non-Prefab modal: " + GetTransformPath(candidate.transform));
+                }
+
+                if (existing != null)
+                {
+                    throw new InvalidOperationException("Main UI contains duplicate connected Prefab modals: " + drawerName);
+                }
+
+                existing = candidate;
+            }
+
             if (existing != null)
             {
-                if (PrefabUtility.GetPrefabInstanceStatus(existing) != PrefabInstanceStatus.Connected)
+                if (existing.transform.parent != modalRoot)
                 {
-                    throw new InvalidOperationException("Main UI contains a same-name non-Prefab modal: " + GetTransformPath(existing.transform));
+                    existing.transform.SetParent(modalRoot, false);
                 }
 
                 return;
@@ -841,6 +860,40 @@ namespace UnderwaterGliderTwin.Editor
             layout.flexibleWidth = 1f;
             layout.minHeight = 0f;
             layout.preferredHeight = 0f;
+            layout.flexibleHeight = 1f;
+        }
+
+        private static void ConfigureMainBodyLayout(RectTransform mainBody)
+        {
+            if (mainBody == null)
+            {
+                return;
+            }
+
+            var layout = mainBody.GetComponent<HorizontalLayoutGroup>() ?? mainBody.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(0, 0, 0, 0);
+            layout.spacing = 12f;
+            layout.childAlignment = TextAnchor.UpperLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = true;
+
+            var element = mainBody.GetComponent<LayoutElement>() ?? mainBody.gameObject.AddComponent<LayoutElement>();
+            element.flexibleHeight = 1f;
+        }
+
+        private static void ConfigureColumnWidth(RectTransform column, float minWidth, float preferredWidth, float flexibleWidth)
+        {
+            if (column == null)
+            {
+                return;
+            }
+
+            var layout = column.GetComponent<LayoutElement>() ?? column.gameObject.AddComponent<LayoutElement>();
+            layout.minWidth = minWidth;
+            layout.preferredWidth = preferredWidth;
+            layout.flexibleWidth = flexibleWidth;
             layout.flexibleHeight = 1f;
         }
 

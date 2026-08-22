@@ -34,8 +34,14 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(GameObject.Find("MainBody"), Is.Not.Null);
             Assert.That(GameObject.Find("ViewportColumn"), Is.Not.Null);
             Assert.That(GameObject.Find("PlaybackBar"), Is.Not.Null);
+            Assert.That(GameObject.Find("UiRoot/DrawerEntryLayer/TelemetryDrawerToggle"), Is.Not.Null);
+            Assert.That(GameObject.Find("UiRoot/DrawerEntryLayer/StatusDrawerToggle"), Is.Not.Null);
             Assert.That(Object.FindObjectsOfType<Canvas>(true).Length, Is.EqualTo(1));
             Assert.That(CountObjectsNamed("ModalRoot"), Is.EqualTo(1));
+
+            var runtimeRoot = Object.FindObjectOfType<RuntimeUiRoot>(true);
+            Assert.That(runtimeRoot, Is.Not.Null);
+            Assert.That(runtimeRoot.DrawerLayer, Is.SameAs(runtimeRoot.ModalRoot));
 
             var controller = Object.FindObjectOfType<ResponsiveUiLayoutController>(true);
             Assert.That(controller, Is.Not.Null);

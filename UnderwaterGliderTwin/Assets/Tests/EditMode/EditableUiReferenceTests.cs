@@ -400,8 +400,10 @@ namespace UnderwaterGliderTwin.Tests
                 Assert.That(GameObject.Find("DrawerScrim"), Is.Not.Null);
                 Assert.That(GameObject.Find("OceanCommandToolbar"), Is.Not.Null);
                 Assert.That(GameObject.Find("ModalRoot"), Is.Not.Null);
-                Assert.That(GameObject.Find("TelemetryDrawerToggle"), Is.Not.Null);
-                Assert.That(GameObject.Find("StatusDrawerToggle"), Is.Not.Null);
+                Assert.That(GameObject.Find("UiRoot/DrawerEntryLayer/TelemetryDrawerToggle"), Is.Not.Null);
+                Assert.That(GameObject.Find("UiRoot/DrawerEntryLayer/StatusDrawerToggle"), Is.Not.Null);
+                Assert.That(Object.FindObjectsOfType<Canvas>(true).Length, Is.EqualTo(1));
+                Assert.That(FindObjectsNamed("ModalRoot"), Is.EqualTo(1));
                 Assert.That(FindObjectsNamed("DrawerLayer"), Is.EqualTo(0));
             }
             finally
@@ -706,32 +708,90 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void EditableUiSceneBuilder_BuildMainSceneRejectsSameNameNonPrefabModal()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            try
+            {
+                EditableUiSceneBuilder.BuildMainScene();
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+                var modalRoot = GameObject.Find("ModalRoot");
+                var nonPrefab = new GameObject("OceanCurrentDrawer", typeof(RectTransform));
+                nonPrefab.transform.SetParent(modalRoot.transform, false);
+                UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+
+                var ex = Assert.Throws<System.InvalidOperationException>(() => EditableUiSceneBuilder.BuildMainScene());
+
+                Assert.That(ex.Message, Does.Contain("same-name non-Prefab modal"));
+            }
+            finally
+            {
+                if (SceneManager.GetActiveScene().path == "Assets/Scenes/Main.unity")
+                {
+                    foreach (var transform in Object.FindObjectsOfType<Transform>(true))
+                    {
+                        if (transform.name == "OceanCurrentDrawer"
+                            && UnityEditor.PrefabUtility.GetPrefabInstanceStatus(transform.gameObject) != UnityEditor.PrefabInstanceStatus.Connected)
+                        {
+                            Object.DestroyImmediate(transform.gameObject);
+                        }
+                    }
+
+                    UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+                }
+
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    RestorePreviousScene(previous);
+                }
+            }
+        }
+
+        [Test]
         public void EditableUiSceneBuilder_BuildMainScenePreservesExistingPrefabInstanceOverrides()
         {
             var previous = SceneManager.GetActiveScene().path;
             var originalPosition = Vector2.zero;
             var originalSize = Vector2.zero;
+            var originalColor = Color.clear;
+            var originalFontSize = 0;
             try
             {
                 EditableUiSceneBuilder.BuildMainScene();
                 UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
                 var panel = GameObject.Find("DashboardPanel").GetComponent<RectTransform>();
+                var image = panel.GetComponent<UnityEngine.UI.Image>();
+                var title = panel.transform.Find("TitleText").GetComponent<UnityEngine.UI.Text>();
                 originalPosition = panel.anchoredPosition;
                 originalSize = panel.sizeDelta;
+                originalColor = image.color;
+                originalFontSize = title.fontSize;
                 panel.anchoredPosition = new Vector2(123f, -456f);
                 panel.sizeDelta = new Vector2(777f, 333f);
+                image.color = new Color(0.40f, 0.10f, 0.70f, 0.90f);
+                title.fontSize = 41;
                 UnityEditor.EditorUtility.SetDirty(panel);
+                UnityEditor.EditorUtility.SetDirty(image);
+                UnityEditor.EditorUtility.SetDirty(title);
                 UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
 
                 EditableUiSceneBuilder.BuildMainScene();
                 UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
                 panel = GameObject.Find("DashboardPanel").GetComponent<RectTransform>();
+                image = panel.GetComponent<UnityEngine.UI.Image>();
+                title = panel.transform.Find("TitleText").GetComponent<UnityEngine.UI.Text>();
 
                 Assert.That(panel.anchoredPosition, Is.EqualTo(new Vector2(123f, -456f)));
                 Assert.That(panel.sizeDelta, Is.EqualTo(new Vector2(777f, 333f)));
+                Assert.That(image.color, Is.EqualTo(new Color(0.40f, 0.10f, 0.70f, 0.90f)));
+                Assert.That(title.fontSize, Is.EqualTo(41));
                 panel.anchoredPosition = originalPosition;
                 panel.sizeDelta = originalSize;
+                image.color = originalColor;
+                title.fontSize = originalFontSize;
                 UnityEditor.EditorUtility.SetDirty(panel);
+                UnityEditor.EditorUtility.SetDirty(image);
+                UnityEditor.EditorUtility.SetDirty(title);
                 UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
             }
             finally

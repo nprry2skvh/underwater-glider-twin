@@ -37,6 +37,13 @@ namespace UnderwaterGliderTwin.UI
         private int lastScreenHeight = -1;
         private bool suppressAutomaticRefreshForTests;
 
+        private const float FullTelemetryColumnWidth = 280f;
+        private const float FullStatusColumnWidth = 320f;
+        private const float CompressedTelemetryColumnWidth = 236f;
+        private const float CompressedStatusColumnWidth = 260f;
+        private const float ViewportColumnMinWidth = 640f;
+        private const float MainBodySpacing = 12f;
+
         public RuntimeUiLayoutMode CurrentMode => currentMode;
 
         public void Bind(RuntimeUiRoot root, RuntimeUiReferences boundReferences)
@@ -262,6 +269,7 @@ namespace UnderwaterGliderTwin.UI
             SetActive(telemetryToggle, false);
             SetActive(statusToggle, false);
             SetScrimState(false, 0f);
+            ApplyThreeColumnLayoutProfile();
         }
 
         private void ApplyDrawerModeState()
@@ -332,6 +340,45 @@ namespace UnderwaterGliderTwin.UI
             SetActive(viewportColumn, true);
             SetScrimState(false, 0f);
             RestoreFocus();
+        }
+
+        private void ApplyThreeColumnLayoutProfile()
+        {
+            if (mainBody != null)
+            {
+                var layout = mainBody.GetComponent<HorizontalLayoutGroup>() ?? mainBody.gameObject.AddComponent<HorizontalLayoutGroup>();
+                layout.spacing = MainBodySpacing;
+                layout.childControlWidth = true;
+                layout.childControlHeight = true;
+                layout.childForceExpandWidth = false;
+                layout.childForceExpandHeight = true;
+            }
+
+            if (currentMode == RuntimeUiLayoutMode.FullThreeColumn)
+            {
+                SetColumnWidth(telemetryColumn, FullTelemetryColumnWidth, FullTelemetryColumnWidth, 0f);
+                SetColumnWidth(viewportColumn, ViewportColumnMinWidth, 0f, 1f);
+                SetColumnWidth(statusColumn, FullStatusColumnWidth, FullStatusColumnWidth, 0f);
+                return;
+            }
+
+            SetColumnWidth(telemetryColumn, CompressedTelemetryColumnWidth, CompressedTelemetryColumnWidth, 0f);
+            SetColumnWidth(viewportColumn, ViewportColumnMinWidth, 0f, 1f);
+            SetColumnWidth(statusColumn, CompressedStatusColumnWidth, CompressedStatusColumnWidth, 0f);
+        }
+
+        private static void SetColumnWidth(RectTransform column, float minWidth, float preferredWidth, float flexibleWidth)
+        {
+            if (column == null)
+            {
+                return;
+            }
+
+            var layout = column.GetComponent<LayoutElement>() ?? column.gameObject.AddComponent<LayoutElement>();
+            layout.minWidth = minWidth;
+            layout.preferredWidth = preferredWidth;
+            layout.flexibleWidth = flexibleWidth;
+            layout.flexibleHeight = 1f;
         }
 
         private void FocusDrawer(RuntimeUiSideDrawer drawer)
