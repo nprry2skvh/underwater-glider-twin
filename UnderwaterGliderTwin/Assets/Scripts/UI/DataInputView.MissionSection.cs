@@ -26,15 +26,17 @@ namespace UnderwaterGliderTwin.UI
         {
             if (simulationDurationInput != null)
             {
-                simulationDurationInput.onEndEdit.AddListener(_ => AutoCorrectCycleDuration());
+                simulationDurationInput.onEndEdit.RemoveListener(AutoCorrectCycleDuration);
+                simulationDurationInput.onEndEdit.AddListener(AutoCorrectCycleDuration);
             }
             if (simulationDepthInput != null)
             {
-                simulationDepthInput.onEndEdit.AddListener(_ => AutoCorrectCycleDuration());
+                simulationDepthInput.onEndEdit.RemoveListener(AutoCorrectCycleDuration);
+                simulationDepthInput.onEndEdit.AddListener(AutoCorrectCycleDuration);
             }
         }
 
-        private void AutoCorrectCycleDuration()
+        private void AutoCorrectCycleDuration(string _)
         {
             if (!TryReadPositiveFloat(simulationDurationInput, out var cycleDuration)
                 || !TryReadPositiveFloat(simulationDepthInput, out var targetDepth))

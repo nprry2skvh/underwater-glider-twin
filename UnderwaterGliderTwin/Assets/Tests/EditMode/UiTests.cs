@@ -778,7 +778,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(content.spacing, Is.LessThanOrEqualTo(6f));
             Assert.That(missionSection.spacing, Is.LessThanOrEqualTo(4f));
             Assert.That(missionFields.spacing.y, Is.LessThanOrEqualTo(4f));
-            Assert.That(field.sizeDelta.y, Is.LessThanOrEqualTo(54f));
+            Assert.That(field.sizeDelta.y, Is.InRange(60f, 64f));
         }
 
         [Test]

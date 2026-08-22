@@ -224,6 +224,17 @@ namespace UnderwaterGliderTwin.Tests
                 {
                     activeLegacyInputs.Add(GetTransformPath(input.transform));
                 }
+
+                var label = System.Array.Find(
+                    input.transform.parent.GetComponentsInChildren<Text>(true),
+                    candidate => candidate != null
+                        && candidate != input.textComponent
+                        && candidate != input.placeholder
+                        && !string.IsNullOrWhiteSpace(candidate.text));
+                Assert.That(label, Is.Not.Null,
+                    $"Active input {GetTransformPath(input.transform)} must have a visible text label in its field wrapper.");
+                Assert.That(Overlaps(label.rectTransform, input.transform as RectTransform), Is.False,
+                    $"Label and input must not overlap: {GetTransformPath(input.transform)}.");
             }
 
             foreach (var text in expandedContent.GetComponentsInChildren<Text>(true))
@@ -252,6 +263,9 @@ namespace UnderwaterGliderTwin.Tests
                 "ReferenceCycleDurationValue must be bound to a formatted duration, not the prefab placeholder name.");
             Assert.That(FindSceneObjects(scene, "ReferenceCycleDurationValue").Count, Is.EqualTo(1),
                 "ReferenceCycleDurationValue must not be duplicated as a stale legacy object.");
+            Assert.That(FindSceneObjects(scene, "MissionSectionCard").Count, Is.EqualTo(1));
+            Assert.That(FindSceneObjects(scene, "SimulationSectionCard").Count, Is.EqualTo(1));
+            Assert.That(FindSceneObjects(scene, "OceanSectionCard").Count, Is.EqualTo(1));
             Assert.That(activeLegacyInputs, Is.Empty,
                 "Expanded configuration must not render active legacy InputField controls outside labeled *Field rows.");
 
@@ -267,8 +281,8 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(statusLayout, Is.Not.Null);
             Assert.That(statusLayout.ignoreLayout, Is.False,
                 "Configuration status must participate in the mission section VerticalLayoutGroup.");
-            Assert.That(statusLayout.preferredHeight, Is.InRange(24f, 28f));
-            Assert.That(configurationStatus.rectTransform.rect.height, Is.InRange(24f, 28f));
+            Assert.That(statusLayout.preferredHeight, Is.InRange(36f, 44f));
+            Assert.That(configurationStatus.rectTransform.rect.height, Is.InRange(36f, 44f));
         }
 
         [UnityTest]
@@ -619,6 +633,22 @@ namespace UnderwaterGliderTwin.Tests
         private static string DescribeRect(RectTransform rect)
         {
             return rect == null ? "<no-rect>" : $"pos={rect.anchoredPosition} size={rect.rect.size} delta={rect.sizeDelta}";
+        }
+
+        private static bool Overlaps(RectTransform first, RectTransform second)
+        {
+            if (first == null || second == null)
+            {
+                return false;
+            }
+
+            var firstCorners = new Vector3[4];
+            var secondCorners = new Vector3[4];
+            first.GetWorldCorners(firstCorners);
+            second.GetWorldCorners(secondCorners);
+            var firstRect = Rect.MinMaxRect(firstCorners[0].x, firstCorners[0].y, firstCorners[2].x, firstCorners[2].y);
+            var secondRect = Rect.MinMaxRect(secondCorners[0].x, secondCorners[0].y, secondCorners[2].x, secondCorners[2].y);
+            return firstRect.Overlaps(secondRect, true);
         }
 
         private static GameObject FindSceneObject(Scene scene, string objectName)

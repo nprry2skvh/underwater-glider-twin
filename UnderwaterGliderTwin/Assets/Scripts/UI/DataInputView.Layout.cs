@@ -113,19 +113,17 @@ namespace UnderwaterGliderTwin.UI
             ConfigureFastDrawerScroll(bottomDrawerScrollRect);
             DisableRootDrawerScroll(drawer);
 
-            var missionSection = bottomDrawerContent.Find("MissionSectionCard") as RectTransform;
-            var simulationSection = bottomDrawerContent.Find("SimulationSectionCard") as RectTransform;
-            var oceanSection = bottomDrawerContent.Find("OceanSectionCard") as RectTransform;
-            if (missionSection == null || simulationSection == null || oceanSection == null)
-            {
-                missionSection = CreateSectionCard("MissionSectionCard", "任务与预测", bottomDrawerContent);
-                simulationSection = CreateSectionCard("SimulationSectionCard", "仿真参数", bottomDrawerContent);
-                oceanSection = CreateSectionCard("OceanSectionCard", "海流与航段", bottomDrawerContent);
+            var missionSection = bottomDrawerContent.Find("MissionSectionCard") as RectTransform
+                ?? CreateSectionCard("MissionSectionCard", "任务与预测", bottomDrawerContent);
+            var simulationSection = bottomDrawerContent.Find("SimulationSectionCard") as RectTransform
+                ?? CreateSectionCard("SimulationSectionCard", "仿真参数", bottomDrawerContent);
+            var oceanSection = bottomDrawerContent.Find("OceanSectionCard") as RectTransform
+                ?? CreateSectionCard("OceanSectionCard", "海流与航段", bottomDrawerContent);
 
-                CreateCompositeField(missionSection, "CsvSourceLabel", "CsvPathInput", "LoadCsvButton", "CsvPathField", true);
-                CreateCompositeField(missionSection, "PredictionModelLabel", FindExistingModelButtonName(), null, "PredictionModelField", false);
-                CreateCompositeField(missionSection, "PredictionHorizonLabel", "PredictionHorizonInput", "ApplyPredictionConfigButton", "PredictionHorizonField", false);
-                CreateCompositeField(missionSection, null, "PredictionToggleButton", "PredictionRuntimeLabel", "PredictionRuntimeField", false);
+            EnsureCompositeField(missionSection, "CsvSourceLabel", "CsvPathInput", "LoadCsvButton", "CsvPathField", true);
+            EnsureCompositeField(missionSection, "PredictionModelLabel", FindExistingModelButtonName(), null, "PredictionModelField", false);
+            EnsureCompositeField(missionSection, "PredictionHorizonLabel", "PredictionHorizonInput", "ApplyPredictionConfigButton", "PredictionHorizonField", false);
+            EnsureCompositeField(missionSection, null, "PredictionToggleButton", "PredictionRuntimeLabel", "PredictionRuntimeField", false);
 
                 MoveToSection(simulationSection, "SimulationCyclesInputField");
                 MoveToSection(simulationSection, "SimulationDurationInputField");
@@ -156,12 +154,11 @@ namespace UnderwaterGliderTwin.UI
                 MoveToSection(oceanSection, "OceanCurrentLayerSummary");
                 MoveToSection(oceanSection, "OceanCurrentDrawerButton");
 
-                HideLegacyTextChild("MissionConfigurationTitle");
-                HideLegacyTextChild("SimulationLabel");
-                HideLegacyTextChild("OceanCurrentLabel");
-                MoveToSectionFooter(missionSection, "MissionConfigurationStatus");
-                HideLegacyConfigurationGroups(drawer);
-            }
+            HideLegacyTextChild("MissionConfigurationTitle");
+            HideLegacyTextChild("SimulationLabel");
+            HideLegacyTextChild("OceanCurrentLabel");
+            MoveToSectionFooter(missionSection, "MissionConfigurationStatus");
+            HideLegacyConfigurationGroups(drawer);
 
             SetConfigurationExpanded(false);
         }
@@ -333,6 +330,16 @@ namespace UnderwaterGliderTwin.UI
             return null;
         }
 
+        private void EnsureCompositeField(Transform section, string labelName, string controlName, string secondaryName, string wrapperName, bool fullWidth)
+        {
+            if (section == null || section.Find(wrapperName) != null)
+            {
+                return;
+            }
+
+            CreateCompositeField(section, labelName, controlName, secondaryName, wrapperName, fullWidth);
+        }
+
         private void CreateCompositeField(Transform section, string labelName, string controlName, string secondaryName, string wrapperName, bool fullWidth)
         {
             if (string.IsNullOrWhiteSpace(controlName) && string.IsNullOrWhiteSpace(labelName))
@@ -429,7 +436,7 @@ namespace UnderwaterGliderTwin.UI
             layout.childForceExpandHeight = false;
             var element = wrapper.GetComponent<LayoutElement>() ?? wrapper.gameObject.AddComponent<LayoutElement>();
             element.minWidth = TaskParameterFieldWidth;
-            element.preferredHeight = 54f;
+            element.preferredHeight = 62f;
 
             var labelName = wrapperName + "Label";
             var label = wrapper.Find(labelName)?.GetComponent<Text>();
@@ -496,7 +503,7 @@ namespace UnderwaterGliderTwin.UI
             // position in the expanded drawer.
             child.SetParent(section, false);
             child.SetAsLastSibling();
-            NormalizeLayoutChild(child, 26f);
+            NormalizeLayoutChild(child, 44f);
             var layoutElement = child.gameObject.GetComponent<LayoutElement>();
             layoutElement.ignoreLayout = false;
             var text = child.GetComponent<Text>();
@@ -1174,7 +1181,7 @@ namespace UnderwaterGliderTwin.UI
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = columns;
             grid.spacing = new Vector2(HorizontalGap, VerticalGap);
-            grid.cellSize = new Vector2(FixedCardWidth, 54f);
+            grid.cellSize = new Vector2(FixedCardWidth, 62f);
             if (fitter != null)
             {
                 fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
