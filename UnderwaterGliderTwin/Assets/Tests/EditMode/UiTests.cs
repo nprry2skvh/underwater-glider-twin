@@ -1738,6 +1738,28 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void ResponsiveLayoutController_UsesSameCompressedTypographyForPrefabAndFallbackPaths()
+        {
+            const float width = 1366f;
+            const float height = 768f;
+            var prefabProbe = CreateTypographyProbe("PrefabTypographyCanvas", createFallbackContent: false);
+            var fallbackProbe = CreateTypographyProbe("FallbackTypographyCanvas", createFallbackContent: true);
+
+            ApplyTypography(prefabProbe.runtimeCanvas, width, height);
+            ApplyTypography(fallbackProbe.runtimeCanvas, width, height);
+
+            Assert.That(prefabProbe.title.fontSize, Is.EqualTo(fallbackProbe.title.fontSize));
+            Assert.That(prefabProbe.label.fontSize, Is.EqualTo(fallbackProbe.label.fontSize));
+            Assert.That(prefabProbe.value.fontSize, Is.EqualTo(fallbackProbe.value.fontSize));
+            Assert.That(prefabProbe.button.fontSize, Is.EqualTo(fallbackProbe.button.fontSize));
+
+            var effectiveScale = ResponsiveUiLayoutPolicy.GetEffectiveCanvasScale(width, height, new Vector2(1920f, 1080f), 0.5f);
+            Assert.That(ResponsiveUiTypography.GetActualPixelSize(fallbackProbe.label.fontSize, effectiveScale), Is.GreaterThanOrEqualTo(11f));
+            Assert.That(ResponsiveUiTypography.GetActualPixelSize(fallbackProbe.value.fontSize, effectiveScale), Is.GreaterThanOrEqualTo(11f));
+            Assert.That(ResponsiveUiTypography.GetActualPixelSize(fallbackProbe.button.fontSize, effectiveScale), Is.GreaterThanOrEqualTo(11f));
+        }
+
+        [Test]
         public void PlaybackControlsView_CreatesGroupedControlLabels()
         {
             var frames = Frames(2);
@@ -1949,6 +1971,88 @@ namespace UnderwaterGliderTwin.Tests
             var textObject = new GameObject(name, typeof(RectTransform), typeof(Text));
             textObject.transform.SetParent(parent, false);
             return textObject.GetComponent<Text>();
+        }
+
+        private static TypographyProbe CreateTypographyProbe(string canvasName, bool createFallbackContent)
+        {
+            var canvasObject = new GameObject(canvasName, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = canvasObject.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
+
+            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
+            var contentRoot = uiRoot.Find("ConfigurationArea");
+            Text title;
+            Text label;
+            Text value;
+            Text button;
+
+            if (createFallbackContent)
+            {
+                var dataInput = new GameObject("FallbackDataInput").AddComponent<DataInputView>();
+                dataInput.Initialize(CreateTempCsv(), SimulationProfile.Default, null);
+                var fallbackCanvas = Object.FindObjectsOfType<Canvas>(true);
+                foreach (var candidate in fallbackCanvas)
+                {
+                    if (candidate.gameObject.name == "RuntimeCanvas" && candidate.transform.Find("MissionConfigurationPanel") != null)
+                    {
+                        canvas = candidate;
+                        break;
+                    }
+                }
+
+                title = FindChildNamed(canvas.transform, "MissionConfigurationTitle").GetComponent<Text>();
+                label = FindChildNamed(canvas.transform, "CsvSourceLabel").GetComponent<Text>();
+                value = FindChildNamed(canvas.transform, "MissionConfigurationStatus").GetComponent<Text>();
+                button = FindChildNamed(canvas.transform, "LoadCsvButtonLabel").GetComponent<Text>();
+            }
+            else
+            {
+                title = CreateText(contentRoot, "PrefabMissionConfigurationTitle");
+                label = CreateText(contentRoot, "PrefabCsvSourceLabel");
+                value = CreateText(contentRoot, "PrefabMissionConfigurationStatus");
+                var buttonRoot = new GameObject("PrefabLoadCsvButton", typeof(RectTransform), typeof(Image), typeof(Button)).GetComponent<Button>();
+                buttonRoot.transform.SetParent(contentRoot, false);
+                button = CreateText(buttonRoot.transform, "PrefabLoadCsvButtonLabel");
+                title.fontSize = 8;
+                label.fontSize = 8;
+                value.fontSize = 8;
+                button.fontSize = 8;
+            }
+
+            return new TypographyProbe(canvas, title, label, value, button);
+        }
+
+        private static void ApplyTypography(Canvas canvas, float width, float height)
+        {
+            var runtimeRoot = canvas.gameObject.GetComponent<RuntimeUiRoot>() ?? canvas.gameObject.AddComponent<RuntimeUiRoot>();
+            var modalRoot = canvas.transform.Find("ModalRoot") as RectTransform;
+            runtimeRoot.ConfigureRuntimeReferences(canvas, modalRoot, new RuntimeUiReferences(), 0);
+            var controller = canvas.gameObject.GetComponent<ResponsiveUiLayoutController>() ?? canvas.gameObject.AddComponent<ResponsiveUiLayoutController>();
+            controller.SetAnimationsEnabledForTests(false);
+            controller.Bind(runtimeRoot, runtimeRoot.References);
+            controller.RefreshForScreen(width, height);
+        }
+
+        private readonly struct TypographyProbe
+        {
+            public TypographyProbe(Canvas runtimeCanvas, Text title, Text label, Text value, Text button)
+            {
+                this.runtimeCanvas = runtimeCanvas;
+                this.title = title;
+                this.label = label;
+                this.value = value;
+                this.button = button;
+            }
+
+            public readonly Canvas runtimeCanvas;
+            public readonly Text title;
+            public readonly Text label;
+            public readonly Text value;
+            public readonly Text button;
         }
 
         private static InputField CreateInput(Transform parent, string name)

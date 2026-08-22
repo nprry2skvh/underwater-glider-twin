@@ -41,5 +41,16 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(ResponsiveUiTypography.GetActualPixelSize(profile.buttonSize, effectiveScale), Is.GreaterThanOrEqualTo(11f));
             Assert.That(profile.minimumReadablePixelSize, Is.EqualTo(11f));
         }
+
+        [Test]
+        public void Typography_CompressedModeKeepsReadableMinimumsAt1366x768()
+        {
+            var effectiveScale = ResponsiveUiLayoutPolicy.GetEffectiveCanvasScale(1366f, 768f, new Vector2(1920f, 1080f), 0.5f);
+            var profile = ResponsiveUiTypography.ForMode(RuntimeUiLayoutMode.CompressedThreeColumn, 1366f, 768f);
+
+            Assert.That(ResponsiveUiTypography.GetActualPixelSize(profile.labelSize, effectiveScale), Is.GreaterThanOrEqualTo(11f));
+            Assert.That(ResponsiveUiTypography.GetActualPixelSize(profile.valueSize, effectiveScale), Is.GreaterThanOrEqualTo(11f));
+            Assert.That(ResponsiveUiTypography.GetActualPixelSize(profile.buttonSize, effectiveScale), Is.GreaterThanOrEqualTo(11f));
+        }
     }
 }

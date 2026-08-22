@@ -30,7 +30,7 @@ namespace UnderwaterGliderTwin.UI
                     return RuntimeUiLayoutMode.Drawer;
                 }
 
-                if (width < 1584f || height <= 640f)
+                if (width <= 1584f || height <= 640f)
                 {
                     return RuntimeUiLayoutMode.CompressedThreeColumn;
                 }
@@ -45,7 +45,7 @@ namespace UnderwaterGliderTwin.UI
                     return RuntimeUiLayoutMode.Drawer;
                 }
 
-                if (width >= 1616f && height >= 656f)
+                if (width >= 1600f && height >= 656f)
                 {
                     return RuntimeUiLayoutMode.FullThreeColumn;
                 }
