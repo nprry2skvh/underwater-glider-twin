@@ -149,10 +149,22 @@ namespace UnderwaterGliderTwin.Tests
             yield return null;
             Assert.That(statusText.text, Is.EqualTo("循环次数必须是整数"));
 
-            for (var toggleIndex = 0; toggleIndex < 4; toggleIndex++)
+            var expandedContentGroup = expandedContent.GetComponent<CanvasGroup>();
+            var expandedContentLayout = expandedContent.GetComponent<LayoutElement>();
+            Assert.That(expandedContentGroup, Is.Not.Null);
+            Assert.That(expandedContentLayout, Is.Not.Null);
+
+            for (var toggleIndex = 0; toggleIndex < 8; toggleIndex++)
             {
                 toggleButton.onClick.Invoke();
                 yield return null;
+
+                var expectedExpanded = toggleIndex % 2 == 0;
+                Assert.That(dataInputView.ConfigurationExpandedForTests, Is.EqualTo(expectedExpanded));
+                Assert.That(expandedContentGroup.alpha, Is.EqualTo(expectedExpanded ? 1f : 0f));
+                Assert.That(expandedContentGroup.interactable, Is.EqualTo(expectedExpanded));
+                Assert.That(expandedContentGroup.blocksRaycasts, Is.EqualTo(expectedExpanded));
+                Assert.That(expandedContentLayout.preferredHeight, Is.EqualTo(expectedExpanded ? expandedContentLayout.minHeight : 0f));
             }
 
             Assert.That(dataInputPanel.activeSelf, Is.True);

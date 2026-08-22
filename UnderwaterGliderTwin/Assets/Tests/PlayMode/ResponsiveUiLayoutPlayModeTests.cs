@@ -80,6 +80,14 @@ namespace UnderwaterGliderTwin.Tests
                 AssertColumnWidth(scope.ViewportColumn, 640f, 0f, 1f);
                 AssertColumnWidth(scope.StatusColumn, 260f, 260f);
 
+                scope.Controller.RefreshForScreen(1615f, 655f);
+                yield return null;
+
+                Assert.That(scope.Controller.CurrentMode, Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
+                AssertColumnWidth(scope.TelemetryColumn, 236f, 236f);
+                AssertColumnWidth(scope.ViewportColumn, 640f, 0f, 1f);
+                AssertColumnWidth(scope.StatusColumn, 260f, 260f);
+
                 scope.Controller.RefreshForScreen(1280f, 623f);
                 yield return null;
 
@@ -94,6 +102,42 @@ namespace UnderwaterGliderTwin.Tests
                 AssertColumnWidth(scope.TelemetryColumn, 236f, 236f);
                 AssertColumnWidth(scope.ViewportColumn, 640f, 0f, 1f);
                 AssertColumnWidth(scope.StatusColumn, 260f, 260f);
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator RefreshForScreen_RepeatedSameSizeDoesNotDuplicateHierarchyOrBindings()
+        {
+            using (var scope = new ResponsiveLayoutTestScope())
+            {
+                scope.Controller.SetAnimationsEnabledForTests(false);
+                scope.Controller.RefreshForScreen(1296f, 656f);
+                yield return null;
+                Assert.That(scope.Controller.CurrentMode, Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
+
+                scope.Controller.RefreshForScreen(1279f, 720f);
+                yield return null;
+                Assert.That(scope.Controller.CurrentMode, Is.EqualTo(RuntimeUiLayoutMode.Drawer));
+
+                var transformCount = scope.Canvas.GetComponentsInChildren<Transform>(true).Length;
+                var buttonCount = scope.Canvas.GetComponentsInChildren<Button>(true).Length;
+                var selectableCount = scope.Canvas.GetComponentsInChildren<Selectable>(true).Length;
+
+                for (var refreshIndex = 0; refreshIndex < 5; refreshIndex++)
+                {
+                    scope.Controller.RefreshForScreen(1279f, 720f);
+                }
+
+                yield return null;
+
+                Assert.That(scope.Canvas.GetComponentsInChildren<Transform>(true).Length, Is.EqualTo(transformCount));
+                Assert.That(scope.Canvas.GetComponentsInChildren<Button>(true).Length, Is.EqualTo(buttonCount));
+                Assert.That(scope.Canvas.GetComponentsInChildren<Selectable>(true).Length, Is.EqualTo(selectableCount));
+
+                scope.TelemetryToggle.onClick.Invoke();
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.TelemetryInput.gameObject));
+                scope.Controller.CloseSideDrawer();
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.TelemetryToggle.gameObject));
             }
         }
 
@@ -145,6 +189,10 @@ namespace UnderwaterGliderTwin.Tests
                 EventSystem.current.SetSelectedGameObject(null);
                 scope.Controller.OpenSideDrawer(RuntimeUiSideDrawer.Telemetry);
                 Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.TelemetryInput.gameObject));
+                var focusVisual = scope.TelemetryInput.GetComponent<UiFocusVisual>();
+                Assert.That(focusVisual, Is.Not.Null);
+                Assert.That(focusVisual.FocusDecoration, Is.Not.Null);
+                Assert.That(focusVisual.FocusDecoration.raycastTarget, Is.False);
                 scope.Controller.CloseSideDrawer();
                 Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.TelemetryToggle.gameObject));
 
@@ -179,6 +227,11 @@ namespace UnderwaterGliderTwin.Tests
                 yield return null;
                 var source = scope.CreateTooltipHost(new Vector2(0f, 420f), new Vector2(140f, 60f));
                 scope.TooltipController.SetShowDelayForTests(0f);
+
+                Assert.That(scope.TooltipController.PopupImage, Is.Not.Null);
+                Assert.That(scope.TooltipController.PopupImage.raycastTarget, Is.False);
+                Assert.That(scope.TooltipController.PopupGroup, Is.Not.Null);
+                Assert.That(scope.TooltipController.PopupGroup.blocksRaycasts, Is.False);
 
                 scope.TooltipController.Show(source);
                 yield return null;
