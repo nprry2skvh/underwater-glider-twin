@@ -153,7 +153,7 @@ namespace UnderwaterGliderTwin.UI
 
                 if (batteryValue != null)
                 {
-                    batteryValue.text = $"{playback.Model.CurrentFrame.BatteryPercent:0} %";
+                    SetValue(batteryValue, $"{playback.Model.CurrentFrame.BatteryPercent:0}", "%");
                 }
 
                 return;
@@ -220,6 +220,9 @@ namespace UnderwaterGliderTwin.UI
             {
                 return;
             }
+
+            UiFactory.ConfigureFixedValueColumn(value);
+            EnsureUnitColumn(value);
 
             var label = FindText(panel, labelName);
             if (label == null)
@@ -332,6 +335,11 @@ namespace UnderwaterGliderTwin.UI
                 return string.Empty;
             }
 
+            if (valueName.IndexOf("PredictionTime", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "ms";
+            }
+
             if (valueName.IndexOf("Distance", System.StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 return "km";
@@ -426,16 +434,16 @@ namespace UnderwaterGliderTwin.UI
             segmentValue.text = RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation
                 ? $"{frame.TargetSegment:0} / {Mathf.Max(1, RuntimeDataSourceState.SimulationProfile?.CycleCount ?? 1)}"
                 : $"{frame.TargetSegment:0}";
-            remainingDistanceValue.text = $"{GetRemainingDistance(index) / 1000f:0.00} km";
+            SetValue(remainingDistanceValue, $"{GetRemainingDistance(index) / 1000f:0.00}", "km");
             etaValue.text = EstimateEta(index);
             predictionStatusValue.text = FormatPredictionStatus(snapshot);
             predictionStatusValue.color = snapshot.SampleCount > 1 ? new Color(0.74f, 0.95f, 1f) : new Color(1f, 0.72f, 0.32f);
-            batteryValue.text = $"{frame.BatteryPercent:0} %";
-            driftValue.text = $"{snapshot.CurrentErrorMeters:0.00} m";
-            rmseValue.text = $"{snapshot.RmseMeters:0.00} m";
-            maeValue.text = $"{snapshot.MaeMeters:0.00} m";
-            confidenceValue.text = $"{snapshot.Confidence01 * 100f:0} %";
-            predictionTimeValue.text = $"{snapshot.ComputeMilliseconds:0.00} ms";
+            SetValue(batteryValue, $"{frame.BatteryPercent:0}", "%");
+            SetValue(driftValue, $"{snapshot.CurrentErrorMeters:0.00}", "m");
+            SetValue(rmseValue, $"{snapshot.RmseMeters:0.00}", "m");
+            SetValue(maeValue, $"{snapshot.MaeMeters:0.00}", "m");
+            SetValue(confidenceValue, $"{snapshot.Confidence01 * 100f:0}", "%");
+            SetValue(predictionTimeValue, $"{snapshot.ComputeMilliseconds:0.00}", "ms");
             SetPredictionMetricsVisible(snapshot.SampleCount > 1);
 
             var validation = MissionValidationEvaluator.Evaluate(
@@ -584,6 +592,23 @@ namespace UnderwaterGliderTwin.UI
             var minutes = (totalSeconds % 3600) / 60;
             var seconds = totalSeconds % 60;
             return $"{hours:00}:{minutes:00}:{seconds:00}";
+        }
+
+        private static void SetValue(Text value, string text, string unit)
+        {
+            if (value == null)
+            {
+                return;
+            }
+
+            value.text = text ?? string.Empty;
+            var parent = value.transform.parent;
+            var unitText = parent == null ? null : parent.Find(value.name + "Unit")?.GetComponent<Text>();
+            if (unitText != null)
+            {
+                unitText.text = unit ?? string.Empty;
+                unitText.gameObject.SetActive(!string.IsNullOrEmpty(unitText.text));
+            }
         }
 
         private static float[] BuildDistanceCache(PlaybackModel model)

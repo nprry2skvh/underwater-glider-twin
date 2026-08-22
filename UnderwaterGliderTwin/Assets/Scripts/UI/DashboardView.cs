@@ -55,15 +55,12 @@ namespace UnderwaterGliderTwin.UI
         private GameObject telemetryEmptyState;
         private Text telemetryEmptyStateTitle;
         private Text telemetryEmptyStateHint;
-        private bool telemetryEmptyStateForced;
-        private bool useIndependentUnits;
         private bool showingDetails;
         private bool minimalBoundReferences;
 
         [System.Obsolete("Use Bind(...) with editable UI references.")]
         public void Initialize(PlaybackController playbackController, PredictionController predictionController)
         {
-            useIndependentUnits = false;
             playback = playbackController;
             prediction = predictionController;
             cumulativeDistanceMeters = BuildDistanceCache(playback.Model);
@@ -120,7 +117,6 @@ namespace UnderwaterGliderTwin.UI
 
         public void Bind(DashboardPanelRefs refs, PlaybackController playbackController, PredictionController predictionController)
         {
-            useIndependentUnits = true;
             playback = playbackController;
             prediction = predictionController;
             if (refs == null || playback == null || playback.Model == null)
@@ -166,7 +162,6 @@ namespace UnderwaterGliderTwin.UI
             actuatorPowerValue = refs.actuatorPowerValue;
             dynamicsSummaryValue = refs.dynamicsSummaryValue;
             minimalBoundReferences = headingValue == null || pitchValue == null || rollValue == null;
-            useIndependentUnits = !minimalBoundReferences;
             EnsureTelemetryEmptyState();
             cumulativeDistanceMeters = BuildDistanceCache(playback.Model);
             if (detailsButton != null)
@@ -191,14 +186,11 @@ namespace UnderwaterGliderTwin.UI
 
             if (playback.Model.Frames == null || playback.Model.Frames.Count == 0)
             {
-                SetTelemetryEmptyState(true);
+                RefreshTelemetryState(playback.Model.Frames);
                 return;
             }
 
-            if (!telemetryEmptyStateForced)
-            {
-                SetTelemetryEmptyState(false);
-            }
+            RefreshTelemetryState(playback.Model.Frames);
 
             if (minimalBoundReferences)
             {
@@ -553,14 +545,23 @@ namespace UnderwaterGliderTwin.UI
             return card.gameObject;
         }
 
+        public void RefreshTelemetryStateForTests(System.Collections.Generic.IReadOnlyList<TelemetryFrame> frames)
+        {
+            RefreshTelemetryState(frames);
+        }
+
         public void SetTelemetryEmptyState(bool visible)
         {
-            telemetryEmptyStateForced = visible;
             EnsureTelemetryEmptyState();
             if (telemetryEmptyState != null)
             {
                 telemetryEmptyState.SetActive(visible);
             }
+        }
+
+        private void RefreshTelemetryState(System.Collections.Generic.IReadOnlyList<TelemetryFrame> frames)
+        {
+            SetTelemetryEmptyState(frames == null || frames.Count == 0);
         }
 
         private void EnsureTelemetryEmptyState()
@@ -610,14 +611,11 @@ namespace UnderwaterGliderTwin.UI
         {
             if (playback == null || playback.Model == null || playback.Model.Frames == null || playback.Model.Frames.Count == 0)
             {
-                SetTelemetryEmptyState(true);
+                RefreshTelemetryState(playback?.Model?.Frames);
                 return;
             }
 
-            if (!telemetryEmptyStateForced)
-            {
-                SetTelemetryEmptyState(false);
-            }
+            RefreshTelemetryState(playback.Model.Frames);
             if (!ShouldUpdateForFrame(Time.unscaledTime, reason))
             {
                 return;
@@ -658,11 +656,9 @@ namespace UnderwaterGliderTwin.UI
                     ? RuntimeDataSourceState.SimulationProfile.OceanCurrentProfile?.GetVelocity(frame.DepthM) ?? Vector2.zero
                     : Vector2.zero;
             var oceanCurrentText = RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation
-                ? useIndependentUnits
-                    ? $"东 {oceanCurrent.x:0.00} 北 {oceanCurrent.y:0.00}"
-                    : $"东 {oceanCurrent.x:0.00} m/s 北 {oceanCurrent.y:0.00} m/s"
+                ? $"东 {oceanCurrent.x:0.00} 北 {oceanCurrent.y:0.00}"
                 : "-";
-            SetValue(oceanCurrentValue, oceanCurrentText, useIndependentUnits ? "m/s" : string.Empty);
+            SetValue(oceanCurrentValue, oceanCurrentText, "m/s");
             if (frame.Diagnostics.HasValue)
             {
                 var diagnostics = frame.Diagnostics.Value;
@@ -715,9 +711,7 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            value.text = useIndependentUnits || string.IsNullOrEmpty(unit)
-                ? text
-                : unit == "°" ? text + unit : text + " " + unit;
+            value.text = text;
             var unitText = value.transform.parent.Find(value.name + "Unit")?.GetComponent<Text>();
             if (unitText != null)
             {

@@ -406,8 +406,10 @@ namespace UnderwaterGliderTwin.UI
             child.anchorMax = new Vector2(0f, 1f);
             child.pivot = new Vector2(0f, 0.5f);
             child.anchoredPosition = new Vector2(18f, -250f);
-            child.sizeDelta = new Vector2(900f, 22f);
+            child.sizeDelta = new Vector2(900f, 44f);
             var layoutElement = child.gameObject.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
+            layoutElement.minHeight = 44f;
+            layoutElement.preferredHeight = 44f;
             layoutElement.ignoreLayout = true;
             var text = child.GetComponent<Text>();
             if (text != null)

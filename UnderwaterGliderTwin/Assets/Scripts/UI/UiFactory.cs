@@ -1061,7 +1061,7 @@ namespace UnderwaterGliderTwin.UI
             ApplyTextRole(text, UiTextRole.Auxiliary, RuntimeUiLayoutMode.CompressedThreeColumn);
             var layout = text.GetComponent<LayoutElement>() ?? text.gameObject.AddComponent<LayoutElement>();
             layout.minHeight = 18f;
-            layout.preferredHeight = 36f;
+            layout.preferredHeight = 44f;
             layout.flexibleHeight = 0f;
         }
 

@@ -69,11 +69,11 @@ namespace UnderwaterGliderTwin.Tests
             dashboard.Initialize(playback, prediction);
 
             Assert.That(FindText("TelemetryTitle").text, Is.EqualTo("遥测数据"));
-            Assert.That(FindText("DepthValue").text, Is.EqualTo("10.0 m"));
-            Assert.That(FindText("BatteryValue").text, Is.EqualTo("15 %"));
-            Assert.That(FindText("VelocityXValue").text, Is.EqualTo("0.00 m/s"));
-            Assert.That(FindText("VelocityYValue").text, Is.EqualTo("0.00 m/s"));
-            Assert.That(FindText("VelocityZValue").text, Is.EqualTo("0.00 m/s"));
+            Assert.That(FindText("DepthValue").text, Is.EqualTo("10.0"));
+            Assert.That(FindText("BatteryValue").text, Is.EqualTo("15"));
+            Assert.That(FindText("VelocityXValue").text, Is.EqualTo("0.00"));
+            Assert.That(FindText("VelocityYValue").text, Is.EqualTo("0.00"));
+            Assert.That(FindText("VelocityZValue").text, Is.EqualTo("0.00"));
         }
 
         [Test]
@@ -89,8 +89,20 @@ namespace UnderwaterGliderTwin.Tests
 
             dashboard.Bind(refs, playback, prediction);
 
-            Assert.That(depth.text, Is.EqualTo("10.0 m"));
-            Assert.That(battery.text, Is.EqualTo("15 %"));
+            Assert.That(depth.text, Is.EqualTo("10.0"));
+            Assert.That(battery.text, Is.EqualTo("15"));
+        }
+
+        [Test]
+        public void DashboardView_FallbackSeparatesTelemetryValueAndUnitColumns()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Initialize(playback, null);
+
+            Assert.That(FindText("DepthValue").text, Does.Not.Contain("m"));
+            Assert.That(FindText("DepthValueUnit").text, Is.EqualTo("m"));
         }
 
         [Test]
@@ -107,7 +119,8 @@ namespace UnderwaterGliderTwin.Tests
             status.Bind(refs, playback, new AlarmEvaluator(1000f, 1f, 90f), null, prediction);
 
             Assert.That(mission.text, Is.Not.Empty);
-            Assert.That(battery.text, Is.EqualTo("15 %"));
+            Assert.That(battery.text, Is.EqualTo("15"));
+            Assert.That(root.transform.Find("BatteryValueUnit").GetComponent<Text>().text, Is.EqualTo("%"));
         }
 
         [Test]
@@ -535,9 +548,9 @@ namespace UnderwaterGliderTwin.Tests
             dashboard.Initialize(playback, prediction);
             playback.Seek(1f);
 
-            Assert.That(FindText("VelocityXValue").text, Is.EqualTo("1.01 m/s"));
-            Assert.That(FindText("VelocityYValue").text, Is.EqualTo("-0.30 m/s"));
-            Assert.That(FindText("VelocityZValue").text, Is.EqualTo("1.11 m/s"));
+            Assert.That(FindText("VelocityXValue").text, Is.EqualTo("1.01"));
+            Assert.That(FindText("VelocityYValue").text, Is.EqualTo("-0.30"));
+            Assert.That(FindText("VelocityZValue").text, Is.EqualTo("1.11"));
             Assert.That(FindText("HorizontalDisplacementValue").text, Is.EqualTo("E 10.1 N 11.1 |15.0| m"));
         }
 
@@ -553,7 +566,7 @@ namespace UnderwaterGliderTwin.Tests
 
             dashboard.Initialize(playback, prediction);
 
-            Assert.That(FindText("OceanCurrentValue").text, Is.EqualTo("东 0.20 m/s 北 -0.40 m/s"));
+            Assert.That(FindText("OceanCurrentValue").text, Is.EqualTo("东 0.20 北 -0.40"));
         }
 
         [Test]
@@ -1592,6 +1605,39 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void StatusPanelView_SeparatesPredictionTimeValueAndUnitColumns()
+        {
+            var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-status-units-" + System.Guid.NewGuid().ToString("N"));
+            var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+
+            panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), new TwinLogger(logDirectory), prediction);
+
+            Assert.That(FindObjectIncludingInactive("PredictionTimeValue").GetComponent<Text>().text, Does.Not.Contain("ms"));
+            Assert.That(FindObjectIncludingInactive("PredictionTimeValueUnit").GetComponent<Text>().text, Is.EqualTo("ms"));
+            Assert.That(FindObjectIncludingInactive("RemainingDistanceValue").GetComponent<Text>().text, Does.Not.Contain("km"));
+            Assert.That(FindObjectIncludingInactive("RemainingDistanceValueUnit").GetComponent<Text>().text, Is.EqualTo("km"));
+        }
+
+        [Test]
+        public void DataInputView_LongStatusTextUsesWrappedDedicatedHeight()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            var status = FindText("MissionConfigurationStatus");
+            status.text = new string('错', 120);
+            UiFactory.ConfigureWrappedStatusText(status);
+
+            Assert.That(status.horizontalOverflow, Is.EqualTo(HorizontalWrapMode.Wrap));
+            Assert.That(status.verticalOverflow, Is.EqualTo(VerticalWrapMode.Overflow));
+            Assert.That(status.GetComponent<LayoutElement>().preferredHeight, Is.GreaterThanOrEqualTo(36f));
+            Assert.That(status.rectTransform.rect.height, Is.GreaterThanOrEqualTo(36f));
+            AssertRectanglesDoNotOverlap(status.rectTransform, GameObject.Find("OceanCurrentDrawerButton").GetComponent<RectTransform>());
+        }
+
+        [Test]
         public void StatusPanelView_UsesChineseMissionCopy()
         {
             var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-status-copy-" + System.Guid.NewGuid().ToString("N"));
@@ -2141,19 +2187,19 @@ namespace UnderwaterGliderTwin.Tests
 
             dashboard.Initialize(CreatePlayback(frames), null);
 
-            Assert.That(FindText("WaterSpeedValue").text, Is.EqualTo("0.51 m/s"));
-            Assert.That(FindText("GroundSpeedValue").text, Is.EqualTo("0.59 m/s"));
-            Assert.That(FindText("SideSlipValue").text, Is.EqualTo("12.4°"));
-            Assert.That(FindText("OceanCurrentValue").text, Is.EqualTo("东 0.20 m/s 北 -0.10 m/s"));
-            Assert.That(FindText("NetBuoyancyValue").text, Is.EqualTo("6.5 N"));
-            Assert.That(FindText("EnergyValue").text, Is.EqualTo("8.2 W"));
-            Assert.That(FindText("AngleOfAttackValue").text, Is.EqualTo("3.2 deg"));
-            Assert.That(FindText("LiftForceValue").text, Is.EqualTo("4.5 N"));
-            Assert.That(FindText("DragForceValue").text, Is.EqualTo("7.8 N"));
-            Assert.That(FindText("AngularRateValue").text, Is.EqualTo("2.14 deg/s"));
-            Assert.That(FindText("PistonPositionValue").text, Is.EqualTo("12.5 mm"));
-            Assert.That(FindText("ControlSurfaceValue").text, Is.EqualTo("R 4.0 / P -3.0 / Y 1.5 deg"));
-            Assert.That(FindText("ActuatorPowerValue").text, Is.EqualTo("6.7 W"));
+            Assert.That(FindText("WaterSpeedValue").text, Is.EqualTo("0.51"));
+            Assert.That(FindText("GroundSpeedValue").text, Is.EqualTo("0.59"));
+            Assert.That(FindText("SideSlipValue").text, Is.EqualTo("12.4"));
+            Assert.That(FindText("OceanCurrentValue").text, Is.EqualTo("东 0.20 北 -0.10"));
+            Assert.That(FindText("NetBuoyancyValue").text, Is.EqualTo("6.5"));
+            Assert.That(FindText("EnergyValue").text, Is.EqualTo("8.2"));
+            Assert.That(FindText("AngleOfAttackValue").text, Is.EqualTo("3.2"));
+            Assert.That(FindText("LiftForceValue").text, Is.EqualTo("4.5"));
+            Assert.That(FindText("DragForceValue").text, Is.EqualTo("7.8"));
+            Assert.That(FindText("AngularRateValue").text, Is.EqualTo("2.14"));
+            Assert.That(FindText("PistonPositionValue").text, Is.EqualTo("12.5"));
+            Assert.That(FindText("ControlSurfaceValue").text, Is.EqualTo("R 4.0 / P -3.0 / Y 1.5"));
+            Assert.That(FindText("ActuatorPowerValue").text, Is.EqualTo("6.7"));
             Assert.That(FindText("DynamicsSummaryValue").text, Is.EqualTo("AoA 3.2°  L 4.5N  D 7.8N"));
         }
 

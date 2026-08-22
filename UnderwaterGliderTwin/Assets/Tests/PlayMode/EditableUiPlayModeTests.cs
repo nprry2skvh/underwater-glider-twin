@@ -188,7 +188,7 @@ namespace UnderwaterGliderTwin.Tests
 
             var dashboard = Object.FindObjectOfType<DashboardView>(true);
             Assert.That(dashboard, Is.Not.Null);
-            dashboard.gameObject.SendMessage("SetTelemetryEmptyState", true, SendMessageOptions.DontRequireReceiver);
+            dashboard.gameObject.SendMessage("RefreshTelemetryStateForTests", new System.Collections.Generic.List<TelemetryFrame>(), SendMessageOptions.DontRequireReceiver);
 
             var emptyState = FindDescendant(dashboard.transform, "TelemetryEmptyState");
             Assert.That(emptyState, Is.Not.Null);
@@ -200,6 +200,9 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(title.text, Is.EqualTo("尚未加载有效轨迹"));
             Assert.That(hint, Is.Not.Null);
             Assert.That(hint.text, Is.Not.Empty);
+
+            dashboard.gameObject.SendMessage("RefreshTelemetryStateForTests", new System.Collections.Generic.List<TelemetryFrame> { default(TelemetryFrame) }, SendMessageOptions.DontRequireReceiver);
+            Assert.That(emptyState.activeSelf, Is.False);
         }
 
         [UnityTest]
@@ -216,6 +219,8 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(row, Is.Not.Null);
             var unit = FindDescendant(row, "DepthValueUnit");
             Assert.That(unit, Is.Not.Null);
+            Assert.That(depthValue.text, Does.Not.Contain("m"));
+            Assert.That(unit.GetComponent<Text>().text, Is.EqualTo("m"));
 
             var valueLayout = depthValue.GetComponent<LayoutElement>();
             Assert.That(valueLayout, Is.Not.Null);
@@ -251,6 +256,13 @@ namespace UnderwaterGliderTwin.Tests
             var predictionStatus = FindSceneComponent<Text>(scene, "PredictionStatusValue");
             Assert.That(predictionStatus, Is.Not.Null);
             Assert.That(predictionStatus.text, Is.Not.Empty);
+
+            var predictionTime = FindSceneComponent<Text>(scene, "PredictionTimeValue");
+            var predictionTimeUnit = FindSceneComponent<Text>(scene, "PredictionTimeValueUnit");
+            Assert.That(predictionTime, Is.Not.Null);
+            Assert.That(predictionTimeUnit, Is.Not.Null);
+            Assert.That(predictionTime.text, Does.Not.Contain("ms"));
+            Assert.That(predictionTimeUnit.text, Is.EqualTo("ms"));
         }
 
         [UnityTest]
