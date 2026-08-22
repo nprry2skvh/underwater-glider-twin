@@ -306,8 +306,12 @@ namespace UnderwaterGliderTwin.Bootstrap
             UiFactory.ApplyRuntimeLabels(canvas.transform);
 
             var modalRoot = canvas.transform.Find("ModalRoot") as RectTransform;
+            var tooltipController = UiFactory.EnsureTooltipPopup(modalRoot);
             var runtimeRoot = canvasRoot.GetComponent<RuntimeUiRoot>() ?? canvasRoot.AddComponent<RuntimeUiRoot>();
-            runtimeRoot.ConfigureRuntimeReferences(canvas, modalRoot, new RuntimeUiReferences(), RuntimeUiPanelFlags.None);
+            var references = new RuntimeUiReferences();
+            references.layout.tooltipPopup = tooltipController != null ? tooltipController.Popup : null;
+            references.layout.tooltipController = tooltipController;
+            runtimeRoot.ConfigureRuntimeReferences(canvas, modalRoot, references, RuntimeUiPanelFlags.None);
             var controller = uiRoot.GetComponent<ResponsiveUiLayoutController>() ?? uiRoot.gameObject.AddComponent<ResponsiveUiLayoutController>();
             controller.Bind(runtimeRoot, null);
             controller.RefreshForScreen(Screen.width, Screen.height);
@@ -333,6 +337,12 @@ namespace UnderwaterGliderTwin.Bootstrap
             UiFactory.ApplyResponsivePanelRoots(root.RuntimeCanvas);
             UiFactory.ApplyRuntimePalette(root.RuntimeCanvas.transform);
             UiFactory.ApplyRuntimeLabels(root.RuntimeCanvas.transform);
+            var tooltipController = UiFactory.EnsureTooltipPopup(root.ModalRoot);
+            if (root.References != null && root.References.layout != null)
+            {
+                root.References.layout.tooltipPopup = tooltipController != null ? tooltipController.Popup : null;
+                root.References.layout.tooltipController = tooltipController;
+            }
 
             var controller = uiRoot.GetComponent<ResponsiveUiLayoutController>() ?? uiRoot.gameObject.AddComponent<ResponsiveUiLayoutController>();
             controller.Bind(root, root.References);

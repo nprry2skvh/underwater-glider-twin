@@ -133,6 +133,42 @@ namespace UnderwaterGliderTwin.Tests
             }
         }
 
+        [UnityTest]
+        public IEnumerator DrawerFocus_EntersFromEmptyCenterPlaybackAndDrawerFocus_AndReturnsToEntry()
+        {
+            using (var scope = new ResponsiveLayoutTestScope())
+            {
+                scope.Controller.SetAnimationsEnabledForTests(false);
+                scope.Controller.RefreshForScreen(1279f, 720f);
+                yield return null;
+
+                EventSystem.current.SetSelectedGameObject(null);
+                scope.Controller.OpenSideDrawer(RuntimeUiSideDrawer.Telemetry);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.TelemetryInput.gameObject));
+                scope.Controller.CloseSideDrawer();
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.TelemetryToggle.gameObject));
+
+                EventSystem.current.SetSelectedGameObject(scope.ViewportInput.gameObject);
+                scope.Controller.OpenSideDrawer(RuntimeUiSideDrawer.Status);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.StatusInput.gameObject));
+                scope.Controller.CloseSideDrawer();
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.StatusToggle.gameObject));
+
+                EventSystem.current.SetSelectedGameObject(scope.PlaybackInput.gameObject);
+                scope.Controller.OpenSideDrawer(RuntimeUiSideDrawer.Telemetry);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.TelemetryInput.gameObject));
+                scope.Controller.CloseSideDrawer();
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.TelemetryToggle.gameObject));
+
+                EventSystem.current.SetSelectedGameObject(scope.ModalDrawerInput.gameObject);
+                scope.Controller.OpenSideDrawer(RuntimeUiSideDrawer.Status);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.StatusInput.gameObject));
+                scope.Controller.CloseSideDrawer();
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(scope.StatusToggle.gameObject));
+                Assert.That(scope.ScrimCanvasGroup.blocksRaycasts, Is.False);
+            }
+        }
+
         private static void AssertColumnWidth(RectTransform column, float minWidth, float preferredWidth, float flexibleWidth = 0f)
         {
             var layout = column.GetComponent<LayoutElement>();
@@ -188,7 +224,7 @@ namespace UnderwaterGliderTwin.Tests
 
                 var modalRoot = CreateRect("ModalRoot", canvasObject.transform);
                 references.layout.drawerScrim = CreateImage("DrawerScrim", modalRoot);
-                CreateRect("OceanCurrentDrawer", modalRoot);
+                var oceanCurrentDrawer = CreateRect("OceanCurrentDrawer", modalRoot);
                 CreateRect("FlightLegDrawer", modalRoot);
 
                 TelemetryToggle = references.layout.telemetryDrawerToggle;
@@ -200,7 +236,10 @@ namespace UnderwaterGliderTwin.Tests
                 ScrimImage = references.layout.drawerScrim;
 
                 TelemetryInput = AddSelectable("TelemetryField", references.layout.telemetryColumn, out _);
-                AddSelectable("StatusField", references.layout.statusColumn, out _);
+                StatusInput = AddSelectable("StatusField", references.layout.statusColumn, out _);
+                ViewportInput = AddSelectable("ViewportField", references.layout.viewportColumn, out _);
+                PlaybackInput = AddSelectable("PlaybackField", references.layout.playbackBar, out _);
+                ModalDrawerInput = AddSelectable("ModalDrawerField", oceanCurrentDrawer, out _);
 
                 runtimeRoot.ConfigureRuntimeReferences(canvas, modalRoot, references, RuntimeUiPanelFlags.None);
 
@@ -218,6 +257,10 @@ namespace UnderwaterGliderTwin.Tests
             public RectTransform ViewportColumn { get; }
             public RectTransform StatusColumn { get; }
             public InputField TelemetryInput { get; }
+            public InputField StatusInput { get; }
+            public InputField ViewportInput { get; }
+            public InputField PlaybackInput { get; }
+            public InputField ModalDrawerInput { get; }
             public Image ScrimImage { get; }
             public CanvasGroup TelemetryCanvasGroup => EnsureCanvasGroup(TelemetryColumn != null ? TelemetryColumn.gameObject : null);
             public CanvasGroup StatusCanvasGroup => EnsureCanvasGroup(StatusColumn != null ? StatusColumn.gameObject : null);

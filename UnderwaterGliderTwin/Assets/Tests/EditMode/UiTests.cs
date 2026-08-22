@@ -264,6 +264,75 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void Task5_FeedbackComponents_ExposeAccessibleContracts()
+        {
+            var tooltipType = System.Type.GetType("UnderwaterGliderTwin.UI.UiTooltip, UnderwaterGliderTwin.Runtime");
+            var controllerType = System.Type.GetType("UnderwaterGliderTwin.UI.UiTooltipController, UnderwaterGliderTwin.Runtime");
+            var badgeType = System.Type.GetType("UnderwaterGliderTwin.UI.UiStateBadge, UnderwaterGliderTwin.Runtime");
+            var focusType = System.Type.GetType("UnderwaterGliderTwin.UI.UiFocusVisual, UnderwaterGliderTwin.Runtime");
+
+            Assert.That(tooltipType, Is.Not.Null, "UiTooltip must be a runtime component");
+            Assert.That(controllerType, Is.Not.Null, "UiTooltipController must be a runtime component");
+            Assert.That(badgeType, Is.Not.Null, "UiStateBadge must be a runtime component");
+            Assert.That(focusType, Is.Not.Null, "UiFocusVisual must be a runtime component");
+            Assert.That(tooltipType.GetProperty("Message"), Is.Not.Null);
+            Assert.That(tooltipType.GetProperty("Host"), Is.Not.Null);
+            Assert.That(controllerType.GetMethod("Show"), Is.Not.Null);
+            Assert.That(controllerType.GetMethod("Hide"), Is.Not.Null);
+            Assert.That(controllerType.GetMethod("RefreshPosition"), Is.Not.Null);
+            Assert.That(badgeType.GetMethod("SetState"), Is.Not.Null);
+            Assert.That(typeof(UnityEngine.EventSystems.ISelectHandler).IsAssignableFrom(focusType), Is.True);
+            Assert.That(typeof(UnityEngine.EventSystems.IDeselectHandler).IsAssignableFrom(focusType), Is.True);
+        }
+
+        [Test]
+        public void Task5_FeedbackDecorations_DoNotInterceptRaycastsOrResizeHost()
+        {
+            var canvasObject = new GameObject("Task5Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
+            var popup = uiRoot.parent.Find("ModalRoot/TooltipPopup");
+            Assert.That(popup, Is.Not.Null);
+            Assert.That(popup.GetComponent<Image>().raycastTarget, Is.False);
+            Assert.That(popup.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
+
+            var buttonObject = new GameObject("Task5Button", typeof(RectTransform), typeof(Image), typeof(Button));
+            buttonObject.transform.SetParent(uiRoot, false);
+            var buttonRect = buttonObject.GetComponent<RectTransform>();
+            buttonRect.sizeDelta = new Vector2(140f, 36f);
+            var originalSize = buttonRect.sizeDelta;
+            var focusType = System.Type.GetType("UnderwaterGliderTwin.UI.UiFocusVisual, UnderwaterGliderTwin.Runtime");
+            var badgeType = System.Type.GetType("UnderwaterGliderTwin.UI.UiStateBadge, UnderwaterGliderTwin.Runtime");
+            var focus = buttonObject.AddComponent(focusType);
+            focus = UiFactory.EnsureFocusVisual(buttonObject.GetComponent<Button>());
+            var badgeObject = new GameObject("Task5Badge", typeof(RectTransform));
+            badgeObject.transform.SetParent(uiRoot, false);
+            var badge = badgeObject.AddComponent(badgeType);
+            var stateKind = System.Enum.Parse(System.Type.GetType("UnderwaterGliderTwin.UI.UiStateKind, UnderwaterGliderTwin.Runtime"), "Warning");
+            badgeType.GetMethod("SetState").Invoke(badge, new[] { stateKind, (object)"需要关注" });
+
+            Assert.That(focus.GetComponent<Outline>(), Is.Not.Null);
+            foreach (var image in focus.GetComponentsInChildren<Image>(true))
+            {
+                if (image.gameObject == buttonObject)
+                {
+                    continue;
+                }
+
+                Assert.That(image.raycastTarget, Is.False, image.name + " must be decorative");
+            }
+
+            var marker = badge.GetType().GetProperty("MarkerImage")?.GetValue(badge, null) as Image;
+            var stateBar = badge.GetType().GetProperty("StateBar")?.GetValue(badge, null) as Image;
+            Assert.That(marker, Is.Not.Null);
+            Assert.That(stateBar, Is.Not.Null);
+            Assert.That(marker.raycastTarget, Is.False);
+            Assert.That(stateBar.raycastTarget, Is.False);
+            Assert.That(buttonRect.sizeDelta, Is.EqualTo(originalSize));
+        }
+
+        [Test]
         public void DashboardView_CreatesNavigationReferenceCard()
         {
             var playback = CreatePlayback(Frames(2));

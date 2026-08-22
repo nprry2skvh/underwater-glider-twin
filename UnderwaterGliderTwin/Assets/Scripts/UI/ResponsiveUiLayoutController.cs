@@ -25,6 +25,7 @@ namespace UnderwaterGliderTwin.UI
         private Button telemetryToggle;
         private Button statusToggle;
         private Image drawerScrim;
+        private UiTooltipController tooltipController;
         private CanvasGroup telemetryGroup;
         private CanvasGroup statusGroup;
         private CanvasGroup scrimGroup;
@@ -51,6 +52,11 @@ namespace UnderwaterGliderTwin.UI
             runtimeRoot = root;
             references = boundReferences ?? root?.References;
             UiFactory.EnsureCommandCenterHeader(runtimeRoot != null ? runtimeRoot.RuntimeCanvas?.transform : null);
+            if (runtimeRoot != null && runtimeRoot.ModalRoot != null)
+            {
+                tooltipController = UiFactory.EnsureTooltipPopup(runtimeRoot.ModalRoot);
+                UiFactory.ApplyAccessibleFeedback(runtimeRoot.RuntimeCanvas != null ? runtimeRoot.RuntimeCanvas.transform : null, tooltipController);
+            }
             CacheReferences();
             WireDrawerButtons();
             CloseSideDrawerImmediate();
@@ -74,6 +80,7 @@ namespace UnderwaterGliderTwin.UI
             if (next != RuntimeUiLayoutMode.Drawer)
             {
                 openDrawer = null;
+                tooltipController?.Hide();
                 StopTransition();
                 ApplyThreeColumnState();
                 ApplyTypography(width, height);
@@ -94,12 +101,13 @@ namespace UnderwaterGliderTwin.UI
             focusReturnTarget = drawer == RuntimeUiSideDrawer.Telemetry
                 ? telemetryToggle?.gameObject
                 : statusToggle?.gameObject;
+            tooltipController?.Hide();
             openDrawer = drawer;
             StopTransition();
             ApplyColumnVisibility(drawer);
-            SetCanvasState(GetColumnGroup(drawer), true, 1f);
+            SetCanvasState(GetColumnGroup(drawer), true, animationsEnabled ? 0f : 1f);
             SetCanvasState(GetColumnGroup(Opposite(drawer)), false, 0f);
-            SetScrimState(true, animationsEnabled ? 1f : 1f);
+            SetScrimState(true, animationsEnabled ? 0f : 1f);
 
             if (animationsEnabled)
             {
@@ -162,9 +170,13 @@ namespace UnderwaterGliderTwin.UI
                 RefreshForScreen(Screen.width, Screen.height);
             }
 
-            if (openDrawer.HasValue && Input.GetKeyDown(KeyCode.Escape))
+            if (Input.GetKeyDown(KeyCode.Escape))
             {
-                CloseSideDrawer();
+                tooltipController?.Hide();
+                if (openDrawer.HasValue)
+                {
+                    CloseSideDrawer();
+                }
             }
         }
 
@@ -195,6 +207,11 @@ namespace UnderwaterGliderTwin.UI
             telemetryToggle = layout.telemetryDrawerToggle ?? telemetryToggle;
             statusToggle = layout.statusDrawerToggle ?? statusToggle;
             drawerScrim = layout.drawerScrim ?? drawerScrim;
+            tooltipController = layout.tooltipController ?? tooltipController;
+            if (tooltipController == null && runtimeRoot != null && runtimeRoot.ModalRoot != null)
+            {
+                tooltipController = runtimeRoot.ModalRoot.Find("TooltipPopup")?.GetComponent<UiTooltipController>();
+            }
             telemetryGroup = EnsureCanvasGroup(telemetryColumn);
             statusGroup = EnsureCanvasGroup(statusColumn);
             scrimGroup = drawerScrim != null ? EnsureCanvasGroup(drawerScrim.gameObject) : null;
@@ -329,6 +346,7 @@ namespace UnderwaterGliderTwin.UI
         {
             openDrawer = null;
             StopTransition();
+            tooltipController?.Hide();
             SetCanvasState(telemetryGroup, false, 0f);
             SetCanvasState(statusGroup, false, 0f);
             SetActive(viewportColumn, true);
@@ -380,8 +398,7 @@ namespace UnderwaterGliderTwin.UI
             var selectable = GetColumnGroup(drawer)?.GetComponentInChildren<Selectable>(true);
             if (selectable != null && EventSystem.current != null)
             {
-                var current = EventSystem.current.currentSelectedGameObject;
-                if (current != null && !current.transform.IsChildOf(transform))
+                if (FocusBelongsToAnotherRuntimeRoot(EventSystem.current.currentSelectedGameObject))
                 {
                     return;
                 }
@@ -394,14 +411,24 @@ namespace UnderwaterGliderTwin.UI
         {
             if (focusReturnTarget != null && EventSystem.current != null)
             {
-                var current = EventSystem.current.currentSelectedGameObject;
-                if (current != null && !current.transform.IsChildOf(transform))
+                if (FocusBelongsToAnotherRuntimeRoot(EventSystem.current.currentSelectedGameObject))
                 {
                     return;
                 }
 
                 EventSystem.current.SetSelectedGameObject(focusReturnTarget);
             }
+        }
+
+        private bool FocusBelongsToAnotherRuntimeRoot(GameObject selected)
+        {
+            if (selected == null)
+            {
+                return false;
+            }
+
+            var owner = selected.GetComponentInParent<RuntimeUiRoot>();
+            return owner != null && owner != runtimeRoot;
         }
 
         private CanvasGroup GetColumnGroup(RuntimeUiSideDrawer drawer)

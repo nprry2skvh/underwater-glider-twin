@@ -36,6 +36,10 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(GameObject.Find("PlaybackBar"), Is.Not.Null);
             Assert.That(GameObject.Find("UiRoot/DrawerEntryLayer/TelemetryDrawerToggle"), Is.Not.Null);
             Assert.That(GameObject.Find("UiRoot/DrawerEntryLayer/StatusDrawerToggle"), Is.Not.Null);
+            var tooltipPopup = FindObjectIncludingInactive("TooltipPopup");
+            Assert.That(tooltipPopup, Is.Not.Null);
+            Assert.That(tooltipPopup.GetComponent<UnityEngine.UI.Image>().raycastTarget, Is.False);
+            Assert.That(tooltipPopup.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
             Assert.That(Object.FindObjectsOfType<Canvas>(true).Length, Is.EqualTo(1));
             Assert.That(CountObjectsNamed("ModalRoot"), Is.EqualTo(1));
 
@@ -102,6 +106,19 @@ namespace UnderwaterGliderTwin.Tests
             }
 
             return count;
+        }
+
+        private static GameObject FindObjectIncludingInactive(string objectName)
+        {
+            foreach (var transform in Object.FindObjectsOfType<Transform>(true))
+            {
+                if (transform.name == objectName)
+                {
+                    return transform.gameObject;
+                }
+            }
+
+            return null;
         }
 
     }

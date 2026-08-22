@@ -165,6 +165,7 @@ namespace UnderwaterGliderTwin.UI
             scrim.raycastTarget = true;
             EnsureRuntimeDrawerPlaceholder(modalRoot, "OceanCurrentDrawer");
             EnsureRuntimeDrawerPlaceholder(modalRoot, "FlightLegDrawer");
+            EnsureTooltipPopup(modalRoot);
             return uiRoot;
         }
 
@@ -592,6 +593,130 @@ namespace UnderwaterGliderTwin.UI
             image = created.GetComponent<Image>() ?? created.AddComponent<Image>();
             image.color = color;
             return image;
+        }
+
+        public static UiTooltipController EnsureTooltipPopup(RectTransform modalRoot)
+        {
+            if (modalRoot == null)
+            {
+                return null;
+            }
+
+            var popup = EnsureRectTransformChild(modalRoot, "TooltipPopup");
+            ConfigureRect(popup, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(280f, 52f));
+            var image = popup.GetComponent<Image>();
+            if (image == null)
+            {
+                image = popup.gameObject.AddComponent<Image>();
+            }
+            image.color = CommandPanelFill;
+            image.raycastTarget = false;
+            var group = popup.GetComponent<CanvasGroup>();
+            if (group == null)
+            {
+                group = popup.gameObject.AddComponent<CanvasGroup>();
+            }
+            group.interactable = false;
+            group.blocksRaycasts = false;
+
+            var message = popup.Find("Message")?.GetComponent<Text>();
+            if (message == null)
+            {
+                message = Text("Message", popup, string.Empty, 14, TextAnchor.MiddleLeft, CommandText,
+                    Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(12f, 4f), new Vector2(-24f, -8f));
+            }
+            message.raycastTarget = false;
+            message.horizontalOverflow = HorizontalWrapMode.Wrap;
+            message.verticalOverflow = VerticalWrapMode.Overflow;
+
+            var controller = popup.GetComponent<UiTooltipController>() ?? popup.gameObject.AddComponent<UiTooltipController>();
+            controller.ConfigurePopup(popup, image, group, message);
+            popup.gameObject.SetActive(false);
+            return controller;
+        }
+
+        public static UiFocusVisual EnsureFocusVisual(Selectable selectable)
+        {
+            if (selectable == null)
+            {
+                return null;
+            }
+
+            var visual = selectable.GetComponent<UiFocusVisual>() ?? selectable.gameObject.AddComponent<UiFocusVisual>();
+            visual.SetHost(selectable);
+            return visual;
+        }
+
+        public static UiTooltip EnsureTooltip(Selectable selectable, UiTooltipController controller, string message)
+        {
+            if (selectable == null)
+            {
+                return null;
+            }
+
+            var tooltip = selectable.GetComponent<UiTooltip>() ?? selectable.gameObject.AddComponent<UiTooltip>();
+            tooltip.SetHost(selectable);
+            tooltip.SetController(controller);
+            tooltip.SetMessage(message);
+            return tooltip;
+        }
+
+        public static void ApplyAccessibleFeedback(Transform root, UiTooltipController controller = null)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            var selectables = root.GetComponentsInChildren<Selectable>(true);
+            for (var i = 0; i < selectables.Length; i++)
+            {
+                var selectable = selectables[i];
+                if (selectable == null)
+                {
+                    continue;
+                }
+
+                EnsureFocusVisual(selectable);
+                if (controller != null && (selectable is Button || selectable is Toggle))
+                {
+                    EnsureTooltip(selectable, controller, BuildTooltipMessage(selectable));
+                }
+            }
+
+            ApplyExplicitVerticalNavigation(selectables);
+        }
+
+        private static void ApplyExplicitVerticalNavigation(Selectable[] selectables)
+        {
+            for (var i = 0; i < selectables.Length; i++)
+            {
+                if (selectables[i] == null)
+                {
+                    continue;
+                }
+
+                var navigation = selectables[i].navigation;
+                navigation.mode = Navigation.Mode.Explicit;
+                navigation.selectOnUp = i > 0 ? selectables[i - 1] : null;
+                navigation.selectOnDown = i + 1 < selectables.Length ? selectables[i + 1] : null;
+                navigation.selectOnLeft = null;
+                navigation.selectOnRight = null;
+                selectables[i].navigation = navigation;
+            }
+        }
+
+        private static string BuildTooltipMessage(Selectable selectable)
+        {
+            var name = selectable != null ? selectable.name : string.Empty;
+            if (name.IndexOf("DrawerToggle", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return name.IndexOf("Telemetry", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    ? "打开遥测抽屉"
+                    : "打开状态抽屉";
+            }
+
+            return name;
         }
 
         private static void EnsureRuntimeDrawerToggle(Transform parent, string name, string label, Vector2 position)

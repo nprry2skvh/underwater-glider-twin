@@ -39,6 +39,8 @@ namespace UnderwaterGliderTwin.UI
         public RectTransform statusColumn;
         public RectTransform playbackBar;
         public Image drawerScrim;
+        [OptionalUiReference] public RectTransform tooltipPopup;
+        [OptionalUiReference] public UiTooltipController tooltipController;
     }
 
     [Serializable]
