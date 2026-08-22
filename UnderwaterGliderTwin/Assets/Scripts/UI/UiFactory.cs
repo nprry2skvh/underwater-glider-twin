@@ -7,27 +7,39 @@ namespace UnderwaterGliderTwin.UI
     public enum UiVisualRole
     {
         PanelFill,
+        CardFill,
+        ControlFill,
         PanelEdge,
+        Divider,
         ButtonFill,
         AccentFill,
         AccentText,
         InputFill,
         Text,
         MutedText,
-        WarningFill
+        AuxiliaryText,
+        SuccessFill,
+        WarningFill,
+        ErrorFill
     }
 
     public static class UiFactory
     {
-        public static readonly Color CommandPanelFill = new Color(0.055f, 0.145f, 0.205f, 0.98f);
-        public static readonly Color CommandPanelEdge = new Color(0.180f, 0.360f, 0.445f, 0.96f);
+        public static readonly Color CommandPageBackground = new Color(0.027451f, 0.094118f, 0.129412f, 1f);
+        public static readonly Color CommandPanelFill = new Color(0.043137f, 0.141176f, 0.188235f, 1f);
+        public static readonly Color CommandCardFill = new Color(0.062745f, 0.184314f, 0.235294f, 1f);
+        public static readonly Color CommandControlFill = new Color(0.082353f, 0.231373f, 0.290196f, 1f);
+        public static readonly Color CommandPanelEdge = new Color(0.086275f, 0.266667f, 0.329412f, 1f);
+        public static readonly Color CommandDivider = new Color(0.086275f, 0.266667f, 0.329412f, 1f);
         public static readonly Color CommandAccent = new Color(0.3647059f, 0.84313726f, 0.9098039f, 1f);
-        public static readonly Color CommandText = new Color(0.8784314f, 0.9490196f, 0.96862745f, 1f);
-        public static readonly Color CommandButtonFill = new Color(0.100f, 0.240f, 0.330f, 0.98f);
-        public static readonly Color CommandInputFill = new Color(0.025f, 0.078f, 0.120f, 0.98f);
-        public static readonly Color CommandViewportOverlay = new Color(0.055f, 0.145f, 0.205f, 0.34f);
-        public static readonly Color CommandMutedText = new Color(0.720f, 0.850f, 0.885f, 0.96f);
+        public static readonly Color CommandText = new Color(0.898039f, 0.949020f, 0.952941f, 1f);
+        public static readonly Color CommandButtonFill = new Color(0.082353f, 0.231373f, 0.290196f, 1f);
+        public static readonly Color CommandInputFill = new Color(0.027451f, 0.094118f, 0.129412f, 1f);
+        public static readonly Color CommandViewportOverlay = new Color(0.027451f, 0.094118f, 0.129412f, 0.20f);
+        public static readonly Color CommandMutedText = new Color(0.568627f, 0.709804f, 0.745098f, 1f);
+        public static readonly Color CommandSuccess = new Color(0.254902f, 0.776471f, 0.654902f, 1f);
         public static readonly Color CommandWarning = new Color(0.905f, 0.788f, 0.419f, 1f);
+        public static readonly Color CommandError = new Color(0.949020f, 0.482353f, 0.482353f, 1f);
         public static readonly Color CommandDarkText = new Color(0.031f, 0.090f, 0.129f, 1f);
         public const float CommandCenterHeaderHeight = 48f;
         public const float CommandCenterParameterBarHeight = 48f;
@@ -189,6 +201,7 @@ namespace UnderwaterGliderTwin.UI
                 : null;
             if (existing != null)
             {
+                EnsureHeaderExit(existing);
                 return existing;
             }
 
@@ -209,11 +222,24 @@ namespace UnderwaterGliderTwin.UI
             outline.effectDistance = new Vector2(0f, -1f);
             Text("CommandCenterProductName", header, "UnderwaterGliderTwin", 18, TextAnchor.MiddleLeft, CommandText,
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(22f, 0f), new Vector2(320f, 32f));
-            Text("CommandCenterSystemHealth", header, "系统正常", 14, TextAnchor.MiddleRight, new Color(0.52f, 0.92f, 0.70f, 1f),
+            Text("CommandCenterSystemHealth", header, "系统正常", 14, TextAnchor.MiddleRight, CommandSuccess,
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-176f, 0f), new Vector2(120f, 28f));
             Text("CommandCenterRuntime", header, "海流任务指挥舱", 14, TextAnchor.MiddleRight, CommandMutedText,
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-24f, 0f), new Vector2(142f, 28f));
+            Text("CommandCenterExit", header, "退出", 14, TextAnchor.MiddleRight, CommandMutedText,
+                new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-188f, -18f), new Vector2(52f, 20f));
             return header;
+        }
+
+        private static void EnsureHeaderExit(RectTransform header)
+        {
+            if (header == null || header.Find("CommandCenterExit") != null)
+            {
+                return;
+            }
+
+            Text("CommandCenterExit", header, "退出", 14, TextAnchor.MiddleRight, CommandMutedText,
+                new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-188f, -18f), new Vector2(52f, 20f));
         }
 
         public static Text Text(string name, Transform parent, string value, int fontSize, TextAnchor anchor, Color color, Vector2 anchoredPosition, Vector2 size)
@@ -225,7 +251,7 @@ namespace UnderwaterGliderTwin.UI
             var text = textObject.AddComponent<Text>();
             text.font = GetFont();
             text.text = value;
-            text.fontSize = Mathf.Max(fontSize, 14);
+            text.fontSize = Mathf.Max(fontSize, 10);
             text.alignment = anchor;
             text.color = color;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -433,8 +459,17 @@ namespace UnderwaterGliderTwin.UI
                 case UiVisualRole.PanelFill:
                     graphic.color = CommandPanelFill;
                     break;
+                case UiVisualRole.CardFill:
+                    graphic.color = CommandCardFill;
+                    break;
+                case UiVisualRole.ControlFill:
+                    graphic.color = CommandControlFill;
+                    break;
                 case UiVisualRole.PanelEdge:
                     graphic.color = CommandPanelEdge;
+                    break;
+                case UiVisualRole.Divider:
+                    graphic.color = CommandDivider;
                     break;
                 case UiVisualRole.ButtonFill:
                     graphic.color = CommandButtonFill;
@@ -454,8 +489,17 @@ namespace UnderwaterGliderTwin.UI
                 case UiVisualRole.MutedText:
                     graphic.color = CommandMutedText;
                     break;
+                case UiVisualRole.AuxiliaryText:
+                    graphic.color = CommandMutedText;
+                    break;
+                case UiVisualRole.SuccessFill:
+                    graphic.color = CommandSuccess;
+                    break;
                 case UiVisualRole.WarningFill:
                     graphic.color = CommandWarning;
+                    break;
+                case UiVisualRole.ErrorFill:
+                    graphic.color = CommandError;
                     break;
             }
         }
@@ -622,12 +666,60 @@ namespace UnderwaterGliderTwin.UI
         {
             var colors = ColorBlock.defaultColorBlock;
             colors.normalColor = new Color(1f, 1f, 1f, 1f);
-            colors.highlightedColor = new Color(0.88f, 0.96f, 0.99f, 1f);
-            colors.pressedColor = new Color(0.68f, 0.80f, 0.90f, 0.92f);
-            colors.selectedColor = new Color(0.72f, 0.95f, 0.98f, 1f);
-            colors.disabledColor = new Color(0.48f, 0.56f, 0.62f, 0.35f);
+            colors.highlightedColor = new Color(0.86f, 0.96f, 0.98f, 1f);
+            colors.pressedColor = new Color(0.70f, 0.86f, 0.90f, 1f);
+            colors.selectedColor = new Color(0.78f, 0.96f, 0.98f, 1f);
+            colors.disabledColor = new Color(0.48f, 0.58f, 0.62f, 0.52f);
             colors.fadeDuration = 0.12f;
             return colors;
+        }
+
+        private static bool IsDefaultGraphicColor(Color color)
+        {
+            return color == Color.white || color.a <= 0.001f;
+        }
+
+        private static bool IsDefaultButtonStates(ColorBlock colors)
+        {
+            return colors.normalColor == Color.white
+                && colors.fadeDuration == ColorBlock.defaultColorBlock.fadeDuration;
+        }
+
+        private static bool IsPrimaryButton(Button button)
+        {
+            if (button == null)
+            {
+                return false;
+            }
+
+            var name = button.name ?? string.Empty;
+            return name.IndexOf("Apply", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("PlayPause", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("ResetCommand", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static void ApplyTextRoleColor(Text text, UiTextRole role)
+        {
+            switch (role)
+            {
+                case UiTextRole.Title:
+                case UiTextRole.Value:
+                case UiTextRole.Label:
+                    ApplyCommandPalette(text, UiVisualRole.Text);
+                    break;
+                case UiTextRole.SectionTitle:
+                case UiTextRole.Auxiliary:
+                    ApplyCommandPalette(text, UiVisualRole.MutedText);
+                    break;
+                case UiTextRole.Button:
+                    ApplyCommandPalette(text, text.GetComponentInParent<Button>() != null && IsPrimaryButton(text.GetComponentInParent<Button>())
+                        ? UiVisualRole.AccentText
+                        : UiVisualRole.Text);
+                    break;
+                case UiTextRole.Error:
+                    ApplyCommandPalette(text, UiVisualRole.ErrorFill);
+                    break;
+            }
         }
 
         public static void SetButtonText(Button button, string label)
@@ -704,36 +796,135 @@ namespace UnderwaterGliderTwin.UI
                 }
 
                 var panelImage = panel.GetComponent<Image>();
-                ApplyCommandPalette(panelImage, UiVisualRole.PanelFill);
+                var panelWasDefault = IsDefaultGraphicColor(panelImage != null ? panelImage.color : Color.clear);
+                if (panelWasDefault)
+                {
+                    ApplyCommandPalette(panelImage, UiVisualRole.PanelFill);
+                }
                 if (panelName == "OceanCommandToolbar" && panelImage != null)
                 {
-                    panelImage.color = CommandViewportOverlay;
-                    panelImage.raycastTarget = false;
+                    if (panelWasDefault || panelImage.color == CommandPanelFill)
+                    {
+                        panelImage.color = CommandViewportOverlay;
+                        panelImage.raycastTarget = false;
+                    }
                 }
                 foreach (var outline in panel.GetComponents<Outline>())
                 {
-                    outline.effectColor = CommandPanelEdge;
+                    if (outline.effectColor == Color.white || outline.effectColor == CommandPanelEdge)
+                    {
+                        outline.effectColor = CommandPanelEdge;
+                    }
                 }
 
                 foreach (var button in panel.GetComponentsInChildren<Button>(true))
                 {
-                    ApplyCommandPalette(button.image, UiVisualRole.ButtonFill);
-                    button.colors = CreateButtonStates();
+                    if (button.image != null && IsDefaultGraphicColor(button.image.color))
+                    {
+                        ApplyCommandPalette(button.image, IsPrimaryButton(button) ? UiVisualRole.AccentFill : UiVisualRole.ButtonFill);
+                    }
+                    if (IsDefaultButtonStates(button.colors))
+                    {
+                        button.colors = CreateButtonStates();
+                    }
                     foreach (var outline in button.GetComponents<Outline>())
                     {
-                        outline.effectColor = CommandPanelEdge;
+                        if (outline.effectColor == Color.white || outline.effectColor == CommandPanelEdge)
+                        {
+                            outline.effectColor = CommandPanelEdge;
+                        }
                     }
                 }
 
                 foreach (var input in panel.GetComponentsInChildren<InputField>(true))
                 {
-                    ApplyCommandPalette(input.GetComponent<Image>(), UiVisualRole.InputFill);
+                    var inputImage = input.GetComponent<Image>();
+                    if (IsDefaultGraphicColor(inputImage != null ? inputImage.color : Color.clear))
+                    {
+                        ApplyCommandPalette(inputImage, UiVisualRole.InputFill);
+                    }
                     foreach (var outline in input.GetComponents<Outline>())
                     {
-                        outline.effectColor = CommandPanelEdge;
+                        if (outline.effectColor == Color.white || outline.effectColor == CommandPanelEdge)
+                        {
+                            outline.effectColor = CommandPanelEdge;
+                        }
+                    }
+                }
+
+                foreach (var text in panel.GetComponentsInChildren<Text>(true))
+                {
+                    if (IsDefaultGraphicColor(text.color))
+                    {
+                        ApplyTextRoleColor(text, ResolveTextRole(text));
                     }
                 }
             }
+        }
+
+        public static void ApplyTextRole(Text text, UiTextRole role, RuntimeUiLayoutMode mode)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            var profile = ResponsiveUiTypography.ForMode(mode, 0f, 0f);
+            text.fontSize = Mathf.Max(text.fontSize, ResponsiveUiTypography.GetLogicalSize(profile, role));
+            ApplyTextRoleColor(text, role);
+        }
+
+        public static UiTextRole ResolveTextRole(Text text)
+        {
+            if (text == null)
+            {
+                return UiTextRole.Value;
+            }
+
+            var name = text.name ?? string.Empty;
+            if (name.IndexOf("Error", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("Alarm", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return UiTextRole.Error;
+            }
+
+            if (name.IndexOf("ProductName", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("Title", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return UiTextRole.Title;
+            }
+
+            if (name.IndexOf("GroupLabel", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("Legend", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("Auxiliary", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return UiTextRole.Auxiliary;
+            }
+
+            if (text.GetComponentInParent<Button>() != null)
+            {
+                return UiTextRole.Button;
+            }
+
+            if (name.IndexOf("Label", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return UiTextRole.Label;
+            }
+
+            return UiTextRole.Value;
+        }
+
+        public static void SetButtonSelected(Button button, bool selected)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            var outline = button.GetComponent<Outline>() ?? button.gameObject.AddComponent<Outline>();
+            outline.effectColor = selected ? CommandAccent : CommandPanelEdge;
+            outline.effectDistance = selected ? new Vector2(2f, -2f) : new Vector2(1f, -1f);
+            outline.useGraphicAlpha = true;
         }
 
         public static void ApplyRuntimeLabels(Transform root)

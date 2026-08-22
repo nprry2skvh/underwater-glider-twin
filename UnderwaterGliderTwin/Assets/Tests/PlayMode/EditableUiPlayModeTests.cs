@@ -201,6 +201,27 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(CountActiveSceneObjects(scene, "TrajectoryToggle"), Is.EqualTo(1));
         }
 
+        [UnityTest]
+        public IEnumerator MainScene_UsesThreePlaybackSegmentsAndVisibleSystemBarHierarchy()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var scene = SceneManager.GetActiveScene();
+            var playback = FindSceneObject(scene, "PlaybackControlsPanel");
+            Assert.That(playback, Is.Not.Null);
+            Assert.That(FindDescendant(playback.transform, "PlaybackOperationsRow"), Is.Not.Null);
+            Assert.That(FindDescendant(playback.transform, "PlaybackTimelineRow"), Is.Not.Null);
+            Assert.That(FindDescendant(playback.transform, "PlaybackOptionsRow"), Is.Not.Null);
+            Assert.That(CountActiveSceneObjects(scene, "CameraFollowButton"), Is.EqualTo(0));
+            Assert.That(CountActiveSceneObjects(scene, "CameraGlobalButton"), Is.EqualTo(0));
+            Assert.That(CountActiveSceneObjects(scene, "CameraOrbitButton"), Is.EqualTo(0));
+            Assert.That(FindSceneObject(scene, "CommandCenterProductName"), Is.Not.Null);
+            Assert.That(FindSceneObject(scene, "CommandCenterExit"), Is.Not.Null);
+        }
+
         private static GameObject FindSceneObject(Scene scene, string objectName)
         {
             foreach (var transform in Object.FindObjectsOfType<Transform>(true))

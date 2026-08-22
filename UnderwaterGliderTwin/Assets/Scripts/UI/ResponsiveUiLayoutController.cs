@@ -50,6 +50,7 @@ namespace UnderwaterGliderTwin.UI
         {
             runtimeRoot = root;
             references = boundReferences ?? root?.References;
+            UiFactory.EnsureCommandCenterHeader(runtimeRoot != null ? runtimeRoot.RuntimeCanvas?.transform : null);
             CacheReferences();
             WireDrawerButtons();
             CloseSideDrawerImmediate();
@@ -211,15 +212,8 @@ namespace UnderwaterGliderTwin.UI
             var logicalScale = canvas.scaleFactor > 0f ? canvas.scaleFactor : 1f;
             foreach (var text in canvas.GetComponentsInChildren<Text>(true))
             {
-                var isButtonText = text.GetComponentInParent<Button>() != null;
-                var isTitle = text.name.IndexOf("Title", System.StringComparison.OrdinalIgnoreCase) >= 0;
-                var desiredSize = isTitle
-                    ? profile.sectionTitleSize
-                    : isButtonText
-                        ? profile.buttonSize
-                        : text.name.IndexOf("Label", System.StringComparison.OrdinalIgnoreCase) >= 0
-                            ? profile.labelSize
-                            : profile.valueSize;
+                var role = UiFactory.ResolveTextRole(text);
+                var desiredSize = ResponsiveUiTypography.GetLogicalSize(profile, role);
                 text.fontSize = Mathf.Max(text.fontSize, desiredSize);
                 text.horizontalOverflow = HorizontalWrapMode.Wrap;
                 text.verticalOverflow = VerticalWrapMode.Truncate;

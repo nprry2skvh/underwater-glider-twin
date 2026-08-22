@@ -56,6 +56,7 @@ namespace UnderwaterGliderTwin.UI
                 cameraController.ResetView();
                 trajectoryView.SetCameraMode(CameraMode.Global);
             });
+            UiFactory.SetButtonSelected(panel.Find("CameraFollowCommand")?.GetComponent<Button>(), true);
         }
 
         public void Bind(OceanToolbarRefs refs, TwinCameraController cameraController, TrajectoryView trajectoryView)
@@ -71,6 +72,7 @@ namespace UnderwaterGliderTwin.UI
             BindCameraButton(refs.cameraTopCommand, cameraController, trajectoryView, CameraMode.Top);
             BindCameraButton(refs.cameraSideCommand, cameraController, trajectoryView, CameraMode.Side);
             BindCameraButton(refs.cameraOrbitCommand, cameraController, trajectoryView, CameraMode.Orbit);
+            UiFactory.SetButtonSelected(refs.cameraFollowCommand, true);
             if (refs.cameraResetCommand != null)
             {
                 refs.cameraResetCommand.onClick.RemoveAllListeners();
@@ -105,6 +107,7 @@ namespace UnderwaterGliderTwin.UI
             {
                 cameraController.SetMode(mode);
                 trajectoryView.SetCameraMode(mode);
+                SetCameraSelection(button);
             });
         }
 
@@ -120,7 +123,28 @@ namespace UnderwaterGliderTwin.UI
             {
                 cameraController?.SetMode(mode);
                 trajectoryView?.SetCameraMode(mode);
+                SetCameraSelection(button);
             });
+        }
+
+        private static void SetCameraSelection(Button selected)
+        {
+            if (selected == null || selected.transform.parent == null)
+            {
+                return;
+            }
+
+            foreach (var button in selected.transform.parent.GetComponentsInChildren<Button>(true))
+            {
+                if (button.name.IndexOf("Camera", System.StringComparison.OrdinalIgnoreCase) < 0
+                    || button.name.IndexOf("Command", System.StringComparison.OrdinalIgnoreCase) < 0
+                    || button.name.IndexOf("Reset", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    continue;
+                }
+
+                UiFactory.SetButtonSelected(button, button == selected);
+            }
         }
 
         private static void AddViewportBorder(RectTransform frame)

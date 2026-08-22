@@ -170,26 +170,34 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            var primary = EnsureLayoutRow(panel, "PlaybackPrimaryRow", new Vector2(0f, 0.52f), Vector2.one);
-            var secondary = EnsureLayoutRow(panel, "PlaybackSecondaryRow", Vector2.zero, new Vector2(1f, 0.48f));
-            MoveToRow(panel, primary, "PlayPauseButton", 82f);
-            MoveToRow(panel, primary, "ReverseButton", 82f);
-            MoveToRow(panel, primary, "ReplayButton", 82f);
-            MoveToRow(panel, primary, "ResetButton", 82f);
-            MoveToRow(panel, primary, "ExportButton", 82f);
-            MoveToRow(panel, primary, "ProgressSlider", 0f, true);
-            MoveToRow(panel, primary, "ExitButton", 76f);
+            var operations = EnsureLayoutRow(panel, "PlaybackOperationsRow", new Vector2(0f, 0.66f), Vector2.one);
+            var timeline = EnsureLayoutRow(panel, "PlaybackTimelineRow", new Vector2(0f, 0.34f), new Vector2(1f, 0.66f));
+            var options = EnsureLayoutRow(panel, "PlaybackOptionsRow", Vector2.zero, new Vector2(1f, 0.34f));
 
-            MoveToRow(panel, secondary, "MissionVolumeButton", 76f);
-            MoveToRow(panel, secondary, "FogToggle", 76f);
-            MoveToRow(panel, secondary, "ParticlesToggle", 76f);
-            MoveToRow(panel, secondary, "TrajectoryToggle", 76f);
-            MoveToRow(panel, secondary, "Speed05Button", 48f);
-            MoveToRow(panel, secondary, "Speed1Button", 48f);
-            MoveToRow(panel, secondary, "Speed2Button", 48f);
-            MoveToRow(panel, secondary, "Speed5Button", 48f);
-            MoveToRow(panel, secondary, "Speed10Button", 48f);
-            MoveToRow(panel, secondary, "PlaybackStatus", 0f, true);
+            MoveToRow(panel, operations, "PlaybackGroupLabel", 86f);
+            MoveToRow(panel, operations, "PlayPauseButton", 82f);
+            MoveToRow(panel, operations, "ReverseButton", 82f);
+            MoveToRow(panel, operations, "ReplayButton", 82f);
+            MoveToRow(panel, operations, "ResetButton", 82f);
+            MoveToRow(panel, operations, "ExportButton", 82f);
+            MoveToRow(panel, operations, "ExitButton", 76f);
+
+            MoveToRow(panel, timeline, "ProgressSlider", 0f, true);
+            MoveToRow(panel, timeline, "PlaybackStatus", 220f);
+
+            MoveToRow(panel, options, "MissionVolumeButton", 76f);
+            MoveToRow(panel, options, "FogToggle", 76f);
+            MoveToRow(panel, options, "ParticlesToggle", 76f);
+            MoveToRow(panel, options, "TrajectoryToggle", 76f);
+            MoveToRow(panel, options, "SpeedGroupLabel", 48f);
+            MoveToRow(panel, options, "Speed05Button", 48f);
+            MoveToRow(panel, options, "Speed1Button", 48f);
+            MoveToRow(panel, options, "Speed2Button", 48f);
+            MoveToRow(panel, options, "Speed5Button", 48f);
+            MoveToRow(panel, options, "Speed10Button", 48f);
+            MoveToRow(panel, options, "LegendActual", 64f);
+            MoveToRow(panel, options, "LegendPredicted", 96f);
+            MoveToRow(panel, options, "LegendPlanned", 66f);
 
         }
 
@@ -219,7 +227,7 @@ namespace UnderwaterGliderTwin.UI
 
         private static void MoveToRow(Transform panel, Transform row, string name, float preferredWidth, bool flexible = false)
         {
-            var control = panel.Find(name) as RectTransform;
+            var control = FindDescendant(panel, name);
             if (control == null || row == null)
             {
                 return;
@@ -235,6 +243,24 @@ namespace UnderwaterGliderTwin.UI
             element.preferredWidth = preferredWidth;
             element.minWidth = flexible ? 80f : preferredWidth;
             element.flexibleWidth = flexible ? 1f : 0f;
+        }
+
+        private static RectTransform FindDescendant(Transform root, string name)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            foreach (var child in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name == name)
+                {
+                    return child as RectTransform;
+                }
+            }
+
+            return null;
         }
 
         private void AddSpeedButton(Transform panel, string name, string label, float x, float speed)

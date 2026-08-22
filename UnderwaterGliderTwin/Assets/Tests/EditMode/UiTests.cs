@@ -1775,8 +1775,8 @@ namespace UnderwaterGliderTwin.Tests
         [Test]
         public void UiFactory_CommandPaletteSeparatesPanelAndInputSurfaces()
         {
-            Assert.That(UiFactory.CommandPanelFill.grayscale - UiFactory.CommandInputFill.grayscale, Is.GreaterThan(0.04f));
-            Assert.That(UiFactory.CommandButtonFill.grayscale - UiFactory.CommandInputFill.grayscale, Is.GreaterThan(0.06f));
+            Assert.That(UiFactory.CommandPanelFill.grayscale - UiFactory.CommandInputFill.grayscale, Is.GreaterThan(0.035f));
+            Assert.That(UiFactory.CommandButtonFill.grayscale - UiFactory.CommandInputFill.grayscale, Is.GreaterThan(0.055f));
             Assert.That(UiFactory.CommandPanelEdge.grayscale, Is.GreaterThan(UiFactory.CommandPanelFill.grayscale));
         }
 
@@ -1803,6 +1803,51 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(viewport.GetComponent<Image>().raycastTarget, Is.False);
             Assert.That(button.GetComponent<Image>().color, Is.EqualTo(UiFactory.CommandButtonFill));
             Assert.That(input.GetComponent<Image>().color, Is.EqualTo(UiFactory.CommandInputFill));
+        }
+
+        [Test]
+        public void UiFactory_UsesApprovedCommandCenterPaletteAndButtonStates()
+        {
+            AssertColorClose(UiFactory.CommandPanelFill, ParseColor("#0B2430"));
+            AssertColorClose(UiFactory.CommandInputFill, ParseColor("#071821"));
+            AssertColorClose(UiFactory.CommandButtonFill, ParseColor("#153B4A"));
+            AssertColorClose(UiFactory.CommandPanelEdge, ParseColor("#164454"));
+            AssertColorClose(UiFactory.CommandAccent, ParseColor("#5DD7E8"));
+            AssertColorClose(UiFactory.CommandText, ParseColor("#E5F2F3"));
+            AssertColorClose(UiFactory.CommandMutedText, ParseColor("#91B5BE"));
+
+            var canvas = new GameObject("PaletteCanvas", typeof(RectTransform), typeof(Canvas));
+            var panel = new GameObject("PlaybackControlsPanel", typeof(RectTransform), typeof(Image));
+            panel.transform.SetParent(canvas.transform, false);
+            var title = CreateText(panel.transform, "CommandCenterProductName");
+            var section = CreateText(panel.transform, "PlaybackGroupLabel");
+            var value = CreateText(panel.transform, "PlaybackStatus");
+            var primary = UiFactory.PrimaryButton("ApplyButton", panel.transform, "运行仿真", Vector2.zero, Vector2.one,
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(120f, 36f));
+            UiFactory.ApplyRuntimePalette(canvas.transform);
+
+            var label = primary.GetComponentInChildren<Text>();
+            Assert.That(primary.image.color, Is.EqualTo(UiFactory.CommandAccent));
+            Assert.That(label.color, Is.EqualTo(UiFactory.CommandDarkText));
+            Assert.That(title.color, Is.EqualTo(UiFactory.CommandText));
+            Assert.That(section.color, Is.EqualTo(UiFactory.CommandMutedText));
+            Assert.That(value.color, Is.EqualTo(UiFactory.CommandText));
+            Assert.That(primary.colors.disabledColor.grayscale, Is.LessThan(primary.colors.normalColor.grayscale));
+            Assert.That(primary.colors.disabledColor.a, Is.GreaterThan(0.15f));
+            Assert.That(primary.colors.selectedColor.grayscale, Is.GreaterThan(primary.colors.normalColor.grayscale * 0.75f));
+        }
+
+        [Test]
+        public void ResponsiveUiTypography_ExposesStableVisualRoles()
+        {
+            var profile = ResponsiveUiTypography.ForMode(RuntimeUiLayoutMode.CompressedThreeColumn, 1366f, 768f);
+
+            Assert.That(profile.sectionTitleSize, Is.EqualTo(18));
+            Assert.That(profile.labelSize, Is.EqualTo(18));
+            Assert.That(profile.valueSize, Is.EqualTo(18));
+            Assert.That(profile.buttonSize, Is.EqualTo(18));
+            Assert.That(profile.auxiliarySize, Is.EqualTo(17));
+            Assert.That(ResponsiveUiTypography.GetActualPixelSize(profile.buttonSize, 0.67f), Is.GreaterThanOrEqualTo(11f));
         }
 
         [Test]
@@ -1844,6 +1889,57 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(GameObject.Find("PlaybackGroupLabel"), Is.Not.Null);
             Assert.That(GameObject.Find("SpeedGroupLabel"), Is.Not.Null);
+        }
+
+        [Test]
+        public void PlaybackControlsView_UsesThreeVisualSegmentsWithoutCameraDuplicates()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
+            var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
+            var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
+
+            controls.Initialize(playback, cameraController, environment, trajectory);
+
+            Assert.That(GameObject.Find("PlaybackOperationsRow"), Is.Not.Null);
+            Assert.That(GameObject.Find("PlaybackTimelineRow"), Is.Not.Null);
+            Assert.That(GameObject.Find("PlaybackOptionsRow"), Is.Not.Null);
+            Assert.That(FindObjectIncludingInactive("CameraFollowButton"), Is.Not.Null);
+            Assert.That(FindObjectIncludingInactive("CameraFollowButton").activeSelf, Is.False);
+            Assert.That(FindObjectIncludingInactive("CameraGlobalButton"), Is.Not.Null);
+            Assert.That(FindObjectIncludingInactive("CameraGlobalButton").activeSelf, Is.False);
+            Assert.That(FindObjectIncludingInactive("CameraOrbitButton"), Is.Not.Null);
+            Assert.That(FindObjectIncludingInactive("CameraOrbitButton").activeSelf, Is.False);
+            Assert.That(GameObject.Find("PlayPauseButton").transform.parent.name, Is.EqualTo("PlaybackOperationsRow"));
+            Assert.That(GameObject.Find("ProgressSlider").transform.parent.name, Is.EqualTo("PlaybackTimelineRow"));
+            Assert.That(GameObject.Find("Speed1Button").transform.parent.name, Is.EqualTo("PlaybackOptionsRow"));
+        }
+
+        [Test]
+        public void OceanCommandToolbarView_MarksCurrentCameraWithAccentEdge()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("ToolbarCamera").AddComponent<TwinCameraController>();
+            var target = new GameObject("ToolbarTarget");
+            cameraController.Initialize(target.transform, new[] { Vector3.zero, Vector3.one });
+            var trajectory = new GameObject("ToolbarTrajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            var toolbar = new GameObject("Toolbar").AddComponent<OceanCommandToolbarView>();
+
+            toolbar.Initialize(cameraController, trajectory);
+            var top = GameObject.Find("CameraTopCommand").GetComponent<Button>();
+            top.onClick.Invoke();
+
+            Assert.That(top.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandAccent));
+            Assert.That(GameObject.Find("CameraFollowCommand").GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandPanelEdge));
         }
 
         [Test]
@@ -1946,6 +2042,19 @@ namespace UnderwaterGliderTwin.Tests
         private static Text FindText(string name)
         {
             return GameObject.Find(name).GetComponent<Text>();
+        }
+
+        private static GameObject FindObjectIncludingInactive(string name)
+        {
+            foreach (var transform in Object.FindObjectsOfType<Transform>(true))
+            {
+                if (transform.name == name)
+                {
+                    return transform.gameObject;
+                }
+            }
+
+            return null;
         }
 
         private static Color ParseColor(string html)
