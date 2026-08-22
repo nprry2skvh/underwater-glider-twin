@@ -178,6 +178,8 @@ namespace UnderwaterGliderTwin.Editor
             EnsureModalPrefabInstance(scene, modalRoot.transform, "FlightLegDrawer");
 
             EnsureEventSystem(scene);
+            var responsiveController = uiRoot.GetComponent<ResponsiveUiLayoutController>() ?? uiRoot.gameObject.AddComponent<ResponsiveUiLayoutController>();
+            EditorUtility.SetDirty(responsiveController);
             AssignMainReferences(runtimeRoot, canvas, uiRoot, modalRoot.GetComponent<RectTransform>());
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);

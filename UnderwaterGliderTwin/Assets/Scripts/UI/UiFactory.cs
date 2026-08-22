@@ -495,6 +495,15 @@ namespace UnderwaterGliderTwin.UI
                 return parent;
             }
 
+            // Auxiliary modal canvases (for example the legacy ocean-current
+            // editor) are already isolated overlays. Do not scaffold the
+            // command-center hierarchy inside them; that would create another
+            // UiRoot/ModalRoot pair and break the single-modal-owner rule.
+            if (RuntimeUiFallback.LegacyCanvas != null && canvas != RuntimeUiFallback.LegacyCanvas)
+            {
+                return parent;
+            }
+
             var uiRoot = EnsureResponsiveRuntimeLayout(canvas);
             switch (name)
             {

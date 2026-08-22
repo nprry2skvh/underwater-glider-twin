@@ -12,6 +12,8 @@ namespace UnderwaterGliderTwin.UI
         private Button bottomDrawerToggleButton;
         private bool bottomDrawerExpanded;
         private Canvas oceanCurrentModalCanvas;
+        private RectTransform oceanCurrentModalOverlay;
+        private RectTransform oceanCurrentDrawerParent;
         private bool bottomDrawerExpandedBeforeModal;
         private bool bottomDrawerExpandedBeforeFlightLeg;
         private const float ExpandedTaskDrawerHeight = 320f;
@@ -409,34 +411,64 @@ namespace UnderwaterGliderTwin.UI
             }
 
             var main = mainCanvas != null ? mainCanvas.GetComponent<Canvas>() : null;
-            var modalObject = new GameObject("OceanCurrentModalCanvas");
-            modalObject.transform.SetParent(mainCanvas, false);
-            var modalRect = modalObject.AddComponent<RectTransform>();
-            var mainRect = mainCanvas as RectTransform;
-            var modalSize = mainRect != null && mainRect.rect.width > 0f && mainRect.rect.height > 0f
-                ? mainRect.rect.size
-                : new Vector2(1920f, 1080f);
-            modalRect.anchorMin = new Vector2(0.5f, 0.5f);
-            modalRect.anchorMax = new Vector2(0.5f, 0.5f);
-            modalRect.pivot = new Vector2(0.5f, 0.5f);
-            modalRect.anchoredPosition = Vector2.zero;
-            modalRect.sizeDelta = modalSize;
-            oceanCurrentModalCanvas = modalObject.AddComponent<Canvas>();
-            oceanCurrentModalCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            oceanCurrentModalCanvas.overrideSorting = true;
-            oceanCurrentModalCanvas.sortingOrder = (main != null ? main.sortingOrder : 10) + 20;
-            modalObject.AddComponent<GraphicRaycaster>();
+            if (main == null || mainCanvas == null)
+            {
+                return null;
+            }
 
-            var blocker = UiFactory.Panel("OceanCurrentModalRaycastBlocker", modalObject.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.18f));
-            blocker.GetComponent<Image>().raycastTarget = true;
-            blocker.SetAsFirstSibling();
-            modalObject.SetActive(false);
+            var modalRoot = mainCanvas.Find("ModalRoot") as RectTransform;
+            if (modalRoot == null)
+            {
+                modalRoot = new GameObject("ModalRoot", typeof(RectTransform)).GetComponent<RectTransform>();
+                modalRoot.SetParent(mainCanvas, false);
+                modalRoot.anchorMin = Vector2.zero;
+                modalRoot.anchorMax = Vector2.one;
+                modalRoot.offsetMin = Vector2.zero;
+                modalRoot.offsetMax = Vector2.zero;
+            }
+
+            oceanCurrentModalOverlay = modalRoot.Find("OceanCurrentModalCanvas") as RectTransform;
+            if (oceanCurrentModalOverlay == null)
+            {
+                var overlayObject = new GameObject("OceanCurrentModalCanvas", typeof(RectTransform));
+                overlayObject.transform.SetParent(modalRoot, false);
+                oceanCurrentModalOverlay = overlayObject.GetComponent<RectTransform>();
+            }
+
+            oceanCurrentModalOverlay.anchorMin = Vector2.zero;
+            oceanCurrentModalOverlay.anchorMax = Vector2.one;
+            oceanCurrentModalOverlay.offsetMin = Vector2.zero;
+            oceanCurrentModalOverlay.offsetMax = Vector2.zero;
+
+            var blockerRect = oceanCurrentModalOverlay.Find("OceanCurrentModalRaycastBlocker") as RectTransform;
+            if (blockerRect == null)
+            {
+                var blockerObject = new GameObject("OceanCurrentModalRaycastBlocker", typeof(RectTransform), typeof(Image));
+                blockerObject.transform.SetParent(oceanCurrentModalOverlay, false);
+                blockerRect = blockerObject.GetComponent<RectTransform>();
+            }
+
+            blockerRect.anchorMin = Vector2.zero;
+            blockerRect.anchorMax = Vector2.one;
+            blockerRect.offsetMin = Vector2.zero;
+            blockerRect.offsetMax = Vector2.zero;
+            var blocker = blockerRect.GetComponent<Image>();
+            blocker.color = new Color(0f, 0f, 0f, 0.18f);
+            blocker.raycastTarget = true;
+            oceanCurrentDrawerParent = oceanCurrentModalOverlay;
+            oceanCurrentModalOverlay.gameObject.SetActive(false);
+            oceanCurrentModalCanvas = main;
             return oceanCurrentModalCanvas;
         }
 
         private void ToggleBottomDrawer()
         {
             SetBottomDrawerExpanded(!bottomDrawerExpanded);
+        }
+
+        public void ToggleAdvancedConfiguration()
+        {
+            ToggleBottomDrawer();
         }
 
         private void SetBottomDrawerExpanded(bool expanded)

@@ -689,11 +689,12 @@ namespace UnderwaterGliderTwin.Tests
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
             FindChildNamed(dataInput.transform, "OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
 
-            var modal = GameObject.Find("OceanCurrentModalCanvas").GetComponent<Canvas>();
+            var modal = GameObject.Find("OceanCurrentModalCanvas");
             var main = GameObject.Find("RuntimeCanvas").GetComponent<Canvas>();
             var blocker = GameObject.Find("OceanCurrentModalRaycastBlocker").GetComponent<Image>();
-            Assert.That(modal.overrideSorting, Is.True);
-            Assert.That(modal.sortingOrder, Is.GreaterThan(main.sortingOrder));
+            Assert.That(modal.GetComponent<Canvas>(), Is.Null);
+            Assert.That(modal.transform.IsChildOf(main.transform), Is.True);
+            Assert.That(modal.transform.parent.name, Is.EqualTo("ModalRoot"));
             Assert.That(blocker.raycastTarget, Is.True);
             Assert.That(GameObject.Find("OceanCurrentDrawerPanel").transform.IsChildOf(modal.transform), Is.True);
         }

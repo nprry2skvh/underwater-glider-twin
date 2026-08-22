@@ -587,6 +587,8 @@ namespace UnderwaterGliderTwin.UI
             bottomDrawerScrollRect = null;
             bottomDrawerToggleButton = null;
             oceanCurrentModalCanvas = null;
+            oceanCurrentModalOverlay = null;
+            oceanCurrentDrawerParent = null;
             ClearChildren(dynamicRowsRoot, oceanLayerRowTemplate);
         }
 
