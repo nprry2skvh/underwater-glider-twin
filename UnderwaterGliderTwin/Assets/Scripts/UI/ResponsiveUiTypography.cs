@@ -53,11 +53,11 @@ namespace UnderwaterGliderTwin.UI
                 case RuntimeUiLayoutMode.CompressedThreeColumn:
                     return new ResponsiveUiTypographyProfile(
                         sectionTitleSize: 18,
-                        labelSize: 17,
-                        valueSize: 17,
-                        buttonSize: 17,
+                        labelSize: 18,
+                        valueSize: 18,
+                        buttonSize: 18,
                         auxiliarySize: 17,
-                        minimumReadablePixelSize: 10f,
+                        minimumReadablePixelSize: 11f,
                         showLowPriorityText: true);
 
                 default:
@@ -67,7 +67,7 @@ namespace UnderwaterGliderTwin.UI
                         valueSize: 20,
                         buttonSize: 20,
                         auxiliarySize: 18,
-                        minimumReadablePixelSize: 10f,
+                        minimumReadablePixelSize: 11f,
                         showLowPriorityText: false);
             }
         }
