@@ -516,6 +516,41 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void DataInputView_RebindDoesNotDuplicateDrawerToggleOrLoadListeners()
+        {
+            var panel = new GameObject("MissionConfigurationPanel", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
+            var csvInput = new GameObject("CsvPathInput", typeof(RectTransform), typeof(InputField)).GetComponent<InputField>();
+            csvInput.transform.SetParent(panel, false);
+            var loadButton = new GameObject("LoadCsvButton", typeof(RectTransform), typeof(Image), typeof(Button)).GetComponent<Button>();
+            loadButton.transform.SetParent(panel, false);
+            var status = CreateText(panel, "MissionConfigurationStatus");
+            var refs = new DataInputPanelRefs
+            {
+                configurationPanel = panel,
+                statusText = status
+            };
+            refs.mission.csvPathInput = csvInput;
+            refs.mission.loadCsvButton = loadButton;
+            var view = new GameObject("DataInput").AddComponent<DataInputView>();
+            var loadCount = 0;
+            var csvPath = CreateTempCsv();
+
+            view.Bind(refs, csvPath, SimulationProfile.Default, null, onLoadRequested: _ => loadCount++);
+            view.Bind(refs, csvPath, SimulationProfile.Default, null, onLoadRequested: _ => loadCount++);
+
+            var toggleButton = FindChildNamed(panel, "MissionConfigurationDrawerToggleButton").GetComponent<Button>();
+            Assert.That(view.ConfigurationExpandedForTests, Is.False);
+            toggleButton.onClick.Invoke();
+            Assert.That(view.ConfigurationExpandedForTests, Is.True);
+            toggleButton.onClick.Invoke();
+            Assert.That(view.ConfigurationExpandedForTests, Is.False);
+
+            csvInput.text = csvPath;
+            loadButton.onClick.Invoke();
+            Assert.That(loadCount, Is.EqualTo(1));
+        }
+
+        [Test]
         public void DataInputView_DoesNotLeaveDuplicatePanelsInTheScene()
         {
             var view = new GameObject("DataInput").AddComponent<DataInputView>();
@@ -846,13 +881,14 @@ namespace UnderwaterGliderTwin.Tests
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
 
-            var taskScroll = GameObject.Find("MissionConfigurationPanel").GetComponent<ScrollRect>();
+            var taskScroll = GameObject.Find("ConfigurationExpandedContent").GetComponent<ScrollRect>();
             GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
             var oceanScroll = GameObject.Find("OceanCurrentDrawerPanel").GetComponent<ScrollRect>();
             GameObject.Find("OceanCurrentDrawerCloseButton").GetComponent<Button>().onClick.Invoke();
             GameObject.Find("FlightLegSettingsButton").GetComponent<Button>().onClick.Invoke();
             var flightScroll = GameObject.Find("FlightLegDrawerPanel").GetComponent<ScrollRect>();
 
+            Assert.That(RootScrollIsAbsentOrDisabled(GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>()), Is.True);
             Assert.That(taskScroll.scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
             Assert.That(oceanScroll.scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
             Assert.That(flightScroll.scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
@@ -874,9 +910,41 @@ namespace UnderwaterGliderTwin.Tests
 
             view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
 
-            Assert.That(panel.GetComponent<ScrollRect>().scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
+            var taskScroll = panel.transform.Find("ConfigurationExpandedContent").GetComponent<ScrollRect>();
+            Assert.That(RootScrollIsAbsentOrDisabled(panel.GetComponent<RectTransform>()), Is.True);
+            Assert.That(taskScroll.scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
             Assert.That(oceanDrawer.GetComponent<ScrollRect>().scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
             Assert.That(flightDrawer.GetComponent<ScrollRect>().scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
+        }
+
+        [Test]
+        public void MissionConfigurationUsesSingleInteractiveScrollRectInExpandedContent()
+        {
+            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            var drawer = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
+            var summary = GameObject.Find("ConfigurationSummaryBar").GetComponent<RectTransform>();
+            var expanded = GameObject.Find("ConfigurationExpandedContent").GetComponent<RectTransform>();
+            var enabledScrollCount = 0;
+            ScrollRect enabledScroll = null;
+            foreach (var scroll in drawer.GetComponentsInChildren<ScrollRect>(true))
+            {
+                if (!scroll.enabled)
+                {
+                    continue;
+                }
+
+                enabledScrollCount++;
+                enabledScroll = scroll;
+            }
+
+            Assert.That(RootScrollIsAbsentOrDisabled(drawer), Is.True);
+            Assert.That(summary.GetComponentInChildren<ScrollRect>(true), Is.Null);
+            Assert.That(enabledScrollCount, Is.EqualTo(1));
+            Assert.That(enabledScroll.transform, Is.SameAs(expanded));
+            Assert.That(enabledScroll.viewport.name, Is.EqualTo("ConfigurationScrollViewport"));
+            Assert.That(enabledScroll.content.name, Is.EqualTo("MissionConfigurationContent"));
         }
 
         [Test]
@@ -1971,6 +2039,12 @@ namespace UnderwaterGliderTwin.Tests
             var textObject = new GameObject(name, typeof(RectTransform), typeof(Text));
             textObject.transform.SetParent(parent, false);
             return textObject.GetComponent<Text>();
+        }
+
+        private static bool RootScrollIsAbsentOrDisabled(RectTransform drawer)
+        {
+            var rootScroll = drawer != null ? drawer.GetComponent<ScrollRect>() : null;
+            return rootScroll == null || !rootScroll.enabled;
         }
 
         private static TypographyProbe CreateTypographyProbe(string canvasName, bool createFallbackContent)

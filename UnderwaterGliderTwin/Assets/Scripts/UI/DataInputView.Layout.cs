@@ -110,17 +110,7 @@ namespace UnderwaterGliderTwin.UI
             bottomDrawerScrollRect.vertical = true;
             bottomDrawerScrollRect.movementType = ScrollRect.MovementType.Clamped;
             ConfigureFastDrawerScroll(bottomDrawerScrollRect);
-            var rootScrollRect = drawer.gameObject.GetComponent<ScrollRect>();
-            if (rootScrollRect == null)
-            {
-                rootScrollRect = drawer.gameObject.AddComponent<ScrollRect>();
-            }
-            rootScrollRect.viewport = bottomDrawerViewport;
-            rootScrollRect.content = bottomDrawerContent;
-            rootScrollRect.horizontal = false;
-            rootScrollRect.vertical = true;
-            rootScrollRect.movementType = ScrollRect.MovementType.Clamped;
-            ConfigureFastDrawerScroll(rootScrollRect);
+            DisableRootDrawerScroll(drawer);
 
             var missionSection = bottomDrawerContent.Find("MissionSectionCard") as RectTransform;
             var simulationSection = bottomDrawerContent.Find("SimulationSectionCard") as RectTransform;
@@ -276,6 +266,27 @@ namespace UnderwaterGliderTwin.UI
             }
 
             return element;
+        }
+
+        private static void DisableRootDrawerScroll(RectTransform drawer)
+        {
+            if (drawer == null)
+            {
+                return;
+            }
+
+            var rootScroll = drawer.GetComponent<ScrollRect>();
+            if (rootScroll == null)
+            {
+                return;
+            }
+
+            rootScroll.StopMovement();
+            rootScroll.viewport = null;
+            rootScroll.content = null;
+            rootScroll.horizontal = false;
+            rootScroll.vertical = false;
+            rootScroll.enabled = false;
         }
 
         private RectTransform CreateSectionCard(string name, string title, Transform parent)

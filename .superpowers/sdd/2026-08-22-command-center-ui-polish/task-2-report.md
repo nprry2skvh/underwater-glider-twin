@@ -43,3 +43,45 @@
 - Runtime editable object names are normalized during `DataInputView.Bind`, so prefab YAML was not changed.
 - Root and expanded drawer scroll rects are both configured for compatibility with existing tests and runtime scrolling.
 - Non-Task-2 dirty files in the worktree were intentionally left untouched and will not be included in the focused commit.
+
+## Reviewer follow-up - ScrollRect ownership and listener idempotency
+
+### RED
+
+- Added/adjusted EditMode coverage before production changes:
+  - `MissionConfigurationUsesSingleInteractiveScrollRectInExpandedContent`
+  - `ParameterDrawersUseFastMouseWheelScrolling`
+  - `BoundParameterDrawersUseFastMouseWheelScrolling`
+  - `DataInputView_RebindDoesNotDuplicateDrawerToggleOrLoadListeners`
+- RED command: `scripts/test-editmode.cmd`.
+- RED result: failed as expected, `420 total / 417 passed / 3 failed`.
+- Expected failures:
+  - `ParameterDrawersUseFastMouseWheelScrolling`: root `MissionConfigurationPanel` still had an enabled `ScrollRect`.
+  - `BoundParameterDrawersUseFastMouseWheelScrolling`: bound root panel `ScrollRect` still remained enabled.
+  - `MissionConfigurationUsesSingleInteractiveScrollRectInExpandedContent`: more than one enabled mission-configuration `ScrollRect` existed under the drawer.
+- The repeated Bind/listener test passed during RED, confirming the listener behavior was already implemented but previously lacked direct coverage.
+
+### Fix
+
+- Removed the root interactive mission-configuration `ScrollRect` compatibility path.
+- The only enabled, wheel-processing mission-configuration `ScrollRect` now lives on `ConfigurationExpandedContent` and targets `ConfigurationScrollViewport` / `MissionConfigurationContent`.
+- If a bound root `MissionConfigurationPanel` already carries a `ScrollRect`, `DataInputView` stops it, clears its viewport/content, disables horizontal/vertical scrolling, and disables the component so root/summary-wheel input cannot drive expanded content.
+- The previous risk note about root and expanded drawer scroll rects both being configured is superseded by this follow-up.
+
+### GREEN
+
+- GREEN commands:
+  - `scripts/test-editmode.cmd`
+  - `Unity.exe -batchmode -nographics -projectPath UnderwaterGliderTwin -runTests -testPlatform PlayMode -testResults TestResults/Task2ReviewerGreenPlayModeResults.xml`
+- GREEN results:
+  - EditMode: `420/420` passed.
+  - PlayMode: `8/8` passed (`TestResults/Task2ReviewerGreenPlayModeResults.xml`).
+
+### Commit
+
+- Follow-up commit message: `fix: keep configuration scrolling on expanded content`
+
+### Risk
+
+- Existing root `ScrollRect` components are disabled rather than destroyed, preserving serialized/component stability while preventing duplicate input handling.
+- The listener-idempotency assertion is now direct: repeated `Bind` calls followed by one drawer-toggle click produce exactly one expanded-state transition, and one CSV-load click produces exactly one callback.
