@@ -94,6 +94,29 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(flightDrawer.activeSelf, Is.True);
         }
 
+        [UnityTest]
+        public IEnumerator MainScene_HasSingleVisibleCameraCommandOwner()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var scene = SceneManager.GetActiveScene();
+            Assert.That(CountActiveSceneObjects(scene, "CameraFollowCommand"), Is.EqualTo(1));
+            Assert.That(CountActiveSceneObjects(scene, "CameraGlobalCommand"), Is.EqualTo(1));
+            Assert.That(CountActiveSceneObjects(scene, "CameraTopCommand"), Is.EqualTo(1));
+            Assert.That(CountActiveSceneObjects(scene, "CameraSideCommand"), Is.EqualTo(1));
+            Assert.That(CountActiveSceneObjects(scene, "CameraOrbitCommand"), Is.EqualTo(1));
+            Assert.That(CountActiveSceneObjects(scene, "CameraResetCommand"), Is.EqualTo(1));
+            Assert.That(CountActiveSceneObjects(scene, "CameraFollowButton"), Is.EqualTo(0));
+            Assert.That(CountActiveSceneObjects(scene, "CameraGlobalButton"), Is.EqualTo(0));
+            Assert.That(CountActiveSceneObjects(scene, "CameraOrbitButton"), Is.EqualTo(0));
+            Assert.That(CountActiveSceneObjects(scene, "MissionVolumeButton"), Is.EqualTo(1));
+            Assert.That(CountActiveSceneObjects(scene, "Speed1Button"), Is.EqualTo(1));
+            Assert.That(CountActiveSceneObjects(scene, "TrajectoryToggle"), Is.EqualTo(1));
+        }
+
         private static GameObject FindSceneObject(Scene scene, string objectName)
         {
             foreach (var transform in Object.FindObjectsOfType<Transform>(true))
@@ -119,6 +142,22 @@ namespace UnderwaterGliderTwin.Tests
             }
 
             return matches;
+        }
+
+        private static int CountActiveSceneObjects(Scene scene, string objectName)
+        {
+            var count = 0;
+            foreach (var transform in Object.FindObjectsOfType<Transform>(true))
+            {
+                if (transform.gameObject.scene == scene
+                    && transform.name == objectName
+                    && transform.gameObject.activeInHierarchy)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
     }
 }

@@ -39,6 +39,7 @@ namespace UnderwaterGliderTwin.UI
         private string lastAlarmMessage;
         private readonly List<GameObject> predictionMetricRows = new List<GameObject>();
         private bool minimalBoundReferences;
+        private RectTransform panel;
 
         [System.Obsolete("Use Bind(...) with editable UI references.")]
         public void Initialize(PlaybackController playbackController, AlarmEvaluator evaluator, TwinLogger twinLogger, PredictionController predictionController)
@@ -53,7 +54,7 @@ namespace UnderwaterGliderTwin.UI
             var canvasRect = canvas.transform as RectTransform;
             var canvasHeight = canvasRect != null && canvasRect.rect.height > 0f ? canvasRect.rect.height : 1080f;
             var panelHeight = Mathf.Max(420f, canvasHeight - UiFactory.CommandCenterContentTopOffset - UiFactory.CommandCenterOperationsTopOffset);
-            var panel = UiFactory.CommandPanel("MissionStatusPanel", canvas.transform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -UiFactory.CommandCenterContentTopOffset), new Vector2(352f, panelHeight));
+            panel = UiFactory.CommandPanel("MissionStatusPanel", canvas.transform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -UiFactory.CommandCenterContentTopOffset), new Vector2(352f, panelHeight));
             UiFactory.Text("MissionStatusTitle", panel, "任务状态", 18, TextAnchor.MiddleLeft, new Color(0.92f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -20f), new Vector2(220f, 28f));
             var healthBadge = UiFactory.Panel("MissionHealthBadge", panel, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-16f, -20f), new Vector2(118f, 28f), new Color(0.02f, 0.28f, 0.22f, 0.96f));
             missionHealthValue = UiFactory.Text("MissionHealthBadgeValue", healthBadge, "正常", 12, TextAnchor.MiddleCenter, Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(106f, 22f));
@@ -118,6 +119,13 @@ namespace UnderwaterGliderTwin.UI
             engineeringValidationValue = refs.engineeringValidationValue;
             alarmValue = refs.alarmValue;
             missionHealthValue = refs.missionHealthValue;
+            predictionMetricRows.Clear();
+            ConfigureBoundRows();
+            RegisterPredictionMetric(refs.panel, "漂移Label", driftValue);
+            RegisterPredictionMetric(refs.panel, "均方根误差Label", rmseValue);
+            RegisterPredictionMetric(refs.panel, "平均绝对误差Label", maeValue);
+            RegisterPredictionMetric(refs.panel, "置信度Label", confidenceValue);
+            RegisterPredictionMetric(refs.panel, "预测耗时Label", predictionTimeValue);
             minimalBoundReferences = modeValue == null || stateValue == null || alarmValue == null;
             cumulativeDistanceMeters = BuildDistanceCache(playback.Model);
             playback.FrameChangedWithReason -= OnFrameChanged;
@@ -177,8 +185,137 @@ namespace UnderwaterGliderTwin.UI
 
         private static Text AddRow(Transform panel, string label, string valueName, float topOffset)
         {
-            UiFactory.Text(label + "Label", panel, label, 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.97f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -topOffset), new Vector2(134f, 22f));
-            return UiFactory.Text(valueName, panel, "-", 13, TextAnchor.MiddleRight, new Color(0.96f, 0.99f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-16f, -topOffset), new Vector2(170f, 22f));
+            var row = CreateRow(panel, valueName + "Row", topOffset);
+            var labelText = UiFactory.Text(label + "Label", row, label, 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.97f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            var valueText = UiFactory.Text(valueName, row, "-", 13, TextAnchor.MiddleRight, new Color(0.96f, 0.99f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            ConfigureKeyValueChildren(labelText, valueText);
+            return valueText;
+        }
+
+        private void ConfigureBoundRows()
+        {
+            ConfigureBoundRow("MissionRow", "任务来源Label", missionValue);
+            ConfigureBoundRow("ModeRow", "工作模式Label", modeValue);
+            ConfigureBoundRow("StateRow", "运行状态Label", stateValue);
+            ConfigureBoundRow("SegmentRow", "当前航段Label", segmentValue);
+            ConfigureBoundRow("RemainingDistanceRow", "剩余距离Label", remainingDistanceValue);
+            ConfigureBoundRow("EtaRow", "预计时间Label", etaValue);
+            ConfigureBoundRow("PredictionStatusRow", "预测状态Label", predictionStatusValue);
+            ConfigureBoundRow("BatteryRow", "剩余电量Label", batteryValue);
+            ConfigureBoundRow("DriftRow", "漂移Label", driftValue);
+            ConfigureBoundRow("RmseRow", "均方根误差Label", rmseValue);
+            ConfigureBoundRow("MaeRow", "平均绝对误差Label", maeValue);
+            ConfigureBoundRow("ConfidenceRow", "置信度Label", confidenceValue);
+            ConfigureBoundRow("PredictionTimeRow", "预测耗时Label", predictionTimeValue);
+            ConfigureBoundRow("EngineeringValidationRow", "工程校核Label", engineeringValidationValue);
+        }
+
+        private void ConfigureBoundRow(string rowName, string labelName, Text value)
+        {
+            if (value == null)
+            {
+                return;
+            }
+
+            var label = FindText(panel, labelName);
+            if (label == null)
+            {
+                return;
+            }
+
+            var row = EnsureRow(panel, rowName);
+            label.transform.SetParent(row, false);
+            value.transform.SetParent(row, false);
+            ConfigureKeyValueChildren(label, value);
+        }
+
+        private static RectTransform CreateRow(Transform parent, string name, float topOffset)
+        {
+            var row = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
+            row.SetParent(parent, false);
+            row.anchorMin = new Vector2(0f, 1f);
+            row.anchorMax = new Vector2(1f, 1f);
+            row.pivot = new Vector2(0.5f, 1f);
+            row.anchoredPosition = new Vector2(0f, -topOffset);
+            row.sizeDelta = new Vector2(-8f, 26f);
+            return ConfigureRow(row);
+        }
+
+        private static RectTransform EnsureRow(Transform parent, string name)
+        {
+            var existing = parent.Find(name) as RectTransform;
+            if (existing != null)
+            {
+                return ConfigureRow(existing);
+            }
+
+            var row = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
+            row.SetParent(parent, false);
+            row.anchorMin = new Vector2(0f, 1f);
+            row.anchorMax = new Vector2(1f, 1f);
+            row.pivot = new Vector2(0.5f, 1f);
+            row.anchoredPosition = Vector2.zero;
+            row.sizeDelta = new Vector2(0f, 26f);
+            return ConfigureRow(row);
+        }
+
+        private static RectTransform ConfigureRow(RectTransform row)
+        {
+            var layout = row.GetComponent<HorizontalLayoutGroup>() ?? row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(6, 6, 2, 2);
+            layout.spacing = 4f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+            var element = row.GetComponent<LayoutElement>() ?? row.gameObject.AddComponent<LayoutElement>();
+            element.minHeight = 26f;
+            element.preferredHeight = 26f;
+            element.flexibleWidth = 1f;
+            return row;
+        }
+
+        private static void ConfigureKeyValueChildren(Text label, Text value)
+        {
+            ConfigureKeyText(label, 116f);
+            ConfigureKeyText(value, 0f);
+            var valueLayout = value.GetComponent<LayoutElement>() ?? value.gameObject.AddComponent<LayoutElement>();
+            valueLayout.minWidth = 72f;
+            valueLayout.flexibleWidth = 1f;
+        }
+
+        private static void ConfigureKeyText(Text text, float preferredWidth)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+            text.supportRichText = false;
+            var element = text.GetComponent<LayoutElement>() ?? text.gameObject.AddComponent<LayoutElement>();
+            element.minWidth = preferredWidth > 0f ? preferredWidth : 0f;
+            element.preferredWidth = preferredWidth;
+            element.flexibleWidth = preferredWidth > 0f ? 0f : 1f;
+        }
+
+        private static Text FindText(Transform root, string name)
+        {
+            if (root == null || string.IsNullOrWhiteSpace(name))
+            {
+                return null;
+            }
+
+            foreach (var text in root.GetComponentsInChildren<Text>(true))
+            {
+                if (text.name == name)
+                {
+                    return text;
+                }
+            }
+
+            return null;
         }
 
         private void OnFrameChanged(TelemetryFrame frame, int index, float progress01, FrameUpdateReason reason)
@@ -240,8 +377,16 @@ namespace UnderwaterGliderTwin.UI
 
         private void RegisterPredictionMetric(Transform panel, string labelName, Text value)
         {
-            predictionMetricRows.Add(panel.Find(labelName).gameObject);
-            predictionMetricRows.Add(value.gameObject);
+            var label = FindText(panel, labelName);
+            if (label != null)
+            {
+                predictionMetricRows.Add(label.gameObject);
+            }
+
+            if (value != null)
+            {
+                predictionMetricRows.Add(value.gameObject);
+            }
         }
 
         private void SetPredictionMetricsVisible(bool visible)

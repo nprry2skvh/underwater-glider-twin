@@ -95,6 +95,7 @@ namespace UnderwaterGliderTwin.UI
             BindButton(refs.exportButton, OnExportClicked);
             BindButton(refs.exitButton, OnExitClicked);
             BindButton(refs.missionVolumeButton, OnMissionViewClicked);
+            HideLegacyCameraControls(refs.panel);
             BindCameraButton(refs.cameraFollowButton, cameraController, trajectoryView, CameraMode.Follow);
             BindCameraButton(refs.cameraGlobalButton, cameraController, trajectoryView, CameraMode.Global);
             BindCameraButton(refs.cameraOrbitButton, cameraController, trajectoryView, CameraMode.Orbit);
@@ -148,8 +149,7 @@ namespace UnderwaterGliderTwin.UI
                 "ViewGroupLabel",
                 "CameraFollowButton",
                 "CameraGlobalButton",
-                "CameraOrbitButton",
-                "MissionVolumeButton"
+                "CameraOrbitButton"
             };
             foreach (var legacyName in legacyNames)
             {

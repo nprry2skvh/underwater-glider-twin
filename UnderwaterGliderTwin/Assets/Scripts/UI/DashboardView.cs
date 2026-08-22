@@ -121,6 +121,7 @@ namespace UnderwaterGliderTwin.UI
             }
 
             panel = refs.panel;
+            refsAdvancedRowsRoot = refs.advancedRowsRoot;
             detailsButton = refs.detailsButton;
             navigationReferenceCard = refs.navigationReferenceCard;
             depthValue = refs.depthValue;
@@ -163,6 +164,8 @@ namespace UnderwaterGliderTwin.UI
                 detailsButton.onClick.RemoveAllListeners();
                 detailsButton.onClick.AddListener(ToggleDetails);
             }
+
+            ConfigureBoundRows();
 
             playback.FrameChangedWithReason -= OnFrameChanged;
             playback.FrameChangedWithReason += OnFrameChanged;
@@ -222,22 +225,168 @@ namespace UnderwaterGliderTwin.UI
 
         private static Text AddRow(Transform panel, string label, string valueName, float topOffset)
         {
-            UiFactory.Text(label + "Label", panel, label, 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.97f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -topOffset), new Vector2(126f, 22f));
-            return UiFactory.Text(valueName, panel, "-", 13, TextAnchor.MiddleRight, new Color(0.96f, 0.99f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-16f, -topOffset), new Vector2(164f, 22f));
+            var row = CreateRow(panel, valueName + "Row", topOffset, 0);
+            var labelText = UiFactory.Text(label + "Label", row, label, 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.97f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            var valueText = UiFactory.Text(valueName, row, "-", 13, TextAnchor.MiddleRight, new Color(0.96f, 0.99f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            ConfigureKeyValueChildren(labelText, valueText);
+            return valueText;
         }
 
         private Text AddAdvancedRow(Transform parent, string label, string valueName, float topOffset, int column)
         {
-            var x = column == 0 ? 16f : 328f;
-            var labelText = UiFactory.Text(label + "Label", parent, label, 12, TextAnchor.MiddleLeft,
-                new Color(0.82f, 0.97f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(x, -topOffset), new Vector2(116f, 22f));
-            var value = UiFactory.Text(valueName, parent, "-", 13, TextAnchor.MiddleRight,
-                new Color(0.96f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(x + 118f, -topOffset), new Vector2(166f, 22f));
+            var row = CreateRow(parent, valueName + "Row", topOffset, column);
+            var labelText = UiFactory.Text(label + "Label", row, label, 12, TextAnchor.MiddleLeft,
+                new Color(0.82f, 0.97f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            var value = UiFactory.Text(valueName, row, "-", 13, TextAnchor.MiddleRight,
+                new Color(0.96f, 0.99f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            ConfigureKeyValueChildren(labelText, value);
             advancedRows.Add(labelText.gameObject);
             advancedRows.Add(value.gameObject);
             return value;
+        }
+
+        private void ConfigureBoundRows()
+        {
+            advancedRows.Clear();
+            ConfigureBoundRow("DepthRow", "深度Label", depthValue, false);
+            ConfigureBoundRow("HeadingRow", "航向Label", headingValue, false);
+            ConfigureBoundRow("PitchRow", "俯仰Label", pitchValue, false);
+            ConfigureBoundRow("RollRow", "横滚Label", rollValue, false);
+            ConfigureBoundRow("SpeedRow", "水平位移Label", speedValue, false);
+            ConfigureBoundRow("BatteryRow", "电量Label", batteryValue, false);
+
+            ConfigureBoundRow("YawRow", "偏航Label", yawValue, true);
+            ConfigureBoundRow("LatitudeRow", "纬度Label", latitudeValue, true);
+            ConfigureBoundRow("LongitudeRow", "经度Label", longitudeValue, true);
+            ConfigureBoundRow("VelocityXRow", "东向速度Label", velocityXValue, true);
+            ConfigureBoundRow("VelocityYRow", "垂向速度Label", velocityYValue, true);
+            ConfigureBoundRow("VelocityZRow", "北向速度Label", velocityZValue, true);
+            ConfigureBoundRow("VerticalSpeedRow", "升沉速度Label", verticalSpeedValue, true);
+            ConfigureBoundRow("HorizontalSpeedRow", "水平速度Label", horizontalSpeedValue, true);
+            ConfigureBoundRow("MissionTimeRow", "任务时间Label", missionTimeValue, true);
+            ConfigureBoundRow("DistanceRow", "航行距离Label", distanceValue, true);
+            ConfigureBoundRow("PredictionErrorRow", "预测误差Label", predictionErrorValue, true);
+            ConfigureBoundRow("OceanCurrentRow", "当前海流Label", oceanCurrentValue, true);
+            ConfigureBoundRow("WaterSpeedRow", "对水速度Label", waterSpeedValue, true);
+            ConfigureBoundRow("GroundSpeedRow", "对地速度Label", groundSpeedValue, true);
+            ConfigureBoundRow("SideSlipRow", "侧滑角Label", sideSlipValue, true);
+            ConfigureBoundRow("NetBuoyancyRow", "净浮力Label", netBuoyancyValue, true);
+            ConfigureBoundRow("EnergyRow", "瞬时功耗Label", energyValue, true);
+            ConfigureBoundRow("AngleOfAttackRow", "攻角Label", angleOfAttackValue, true);
+            ConfigureBoundRow("LiftForceRow", "升力Label", liftForceValue, true);
+            ConfigureBoundRow("DragForceRow", "阻力Label", dragForceValue, true);
+            ConfigureBoundRow("AngularRateRow", "角速度Label", angularRateValue, true);
+            ConfigureBoundRow("HydrodynamicMomentRow", "水动力矩Label", hydrodynamicMomentValue, true);
+            ConfigureBoundRow("InertiaRow", "转动惯量Label", inertiaValue, true);
+            ConfigureBoundRow("PistonPositionRow", "活塞位置Label", pistonPositionValue, true);
+            ConfigureBoundRow("ControlSurfaceRow", "控制面偏角Label", controlSurfaceValue, true);
+            ConfigureBoundRow("ActuatorPowerRow", "执行机构功率Label", actuatorPowerValue, true);
+        }
+
+        private void ConfigureBoundRow(string rowName, string labelName, Text value, bool advanced)
+        {
+            if (value == null || panel == null)
+            {
+                return;
+            }
+
+            var label = panel.Find(labelName)?.GetComponent<Text>();
+            if (label == null)
+            {
+                label = value.transform.parent?.Find(labelName)?.GetComponent<Text>();
+            }
+
+            if (label == null)
+            {
+                return;
+            }
+
+            var parent = advanced && refsAdvancedRowsRoot != null ? refsAdvancedRowsRoot : panel;
+            var row = EnsureRow(parent, rowName);
+            label.transform.SetParent(row, false);
+            value.transform.SetParent(row, false);
+            ConfigureKeyValueChildren(label, value);
+            if (advanced)
+            {
+                advancedRows.Add(label.gameObject);
+                advancedRows.Add(value.gameObject);
+                label.gameObject.SetActive(showingDetails);
+                value.gameObject.SetActive(showingDetails);
+            }
+        }
+
+        private RectTransform refsAdvancedRowsRoot;
+
+        private static RectTransform CreateRow(Transform parent, string name, float topOffset, int column)
+        {
+            var row = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
+            row.SetParent(parent, false);
+            row.anchorMin = column == 0 ? new Vector2(0f, 1f) : new Vector2(0.5f, 1f);
+            row.anchorMax = column == 0 ? new Vector2(0.5f, 1f) : new Vector2(1f, 1f);
+            row.pivot = new Vector2(0.5f, 1f);
+            row.anchoredPosition = new Vector2(0f, -topOffset);
+            row.sizeDelta = new Vector2(-8f, 26f);
+            return ConfigureRow(row);
+        }
+
+        private static RectTransform EnsureRow(Transform parent, string name)
+        {
+            var existing = parent.Find(name) as RectTransform;
+            return existing != null ? ConfigureRow(existing) : ConfigureRow(new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>(), parent);
+        }
+
+        private static RectTransform ConfigureRow(RectTransform row, Transform parent = null)
+        {
+            if (parent != null)
+            {
+                row.SetParent(parent, false);
+                row.anchorMin = new Vector2(0f, 1f);
+                row.anchorMax = new Vector2(1f, 1f);
+                row.pivot = new Vector2(0.5f, 1f);
+                row.anchoredPosition = Vector2.zero;
+                row.sizeDelta = new Vector2(0f, 26f);
+            }
+
+            var layout = row.GetComponent<HorizontalLayoutGroup>() ?? row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(6, 6, 2, 2);
+            layout.spacing = 4f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+            var element = row.GetComponent<LayoutElement>() ?? row.gameObject.AddComponent<LayoutElement>();
+            element.minHeight = 26f;
+            element.preferredHeight = 26f;
+            element.flexibleWidth = 1f;
+            return row;
+        }
+
+        private static void ConfigureKeyValueChildren(Text label, Text value)
+        {
+            ConfigureKeyText(label, 116f);
+            ConfigureKeyText(value, 0f);
+            value.rectTransform.anchorMin = Vector2.one;
+            value.rectTransform.anchorMax = Vector2.one;
+            value.rectTransform.pivot = Vector2.one;
+            var valueLayout = value.GetComponent<LayoutElement>() ?? value.gameObject.AddComponent<LayoutElement>();
+            valueLayout.minWidth = 64f;
+            valueLayout.flexibleWidth = 1f;
+        }
+
+        private static void ConfigureKeyText(Text text, float preferredWidth)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+            text.supportRichText = false;
+            var element = text.GetComponent<LayoutElement>() ?? text.gameObject.AddComponent<LayoutElement>();
+            element.minWidth = preferredWidth > 0f ? preferredWidth : 0f;
+            element.preferredWidth = preferredWidth;
+            element.flexibleWidth = preferredWidth > 0f ? 0f : 1f;
         }
 
         private void ToggleDetails()
