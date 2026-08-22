@@ -1636,6 +1636,65 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void UiFactory_PrimaryButton_UsesAccentPaletteAccessibleStatesAndMinimumHeight()
+        {
+            var root = new GameObject("ButtonRoot", typeof(RectTransform)).transform;
+
+            var button = UiFactory.PrimaryButton(
+                "LaunchButton",
+                root,
+                "Launch",
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                new Vector2(120f, 24f));
+
+            var label = button.GetComponentInChildren<Text>();
+            var accent = ParseColor("#5DD7E8");
+            var states = button.colors;
+
+            AssertColorClose(button.image.color, accent);
+            Assert.That(button.GetComponent<RectTransform>().sizeDelta.y, Is.GreaterThanOrEqualTo(32f));
+            Assert.That(label, Is.Not.Null);
+            Assert.That(label.color.grayscale, Is.LessThan(0.2f));
+            Assert.That(states.highlightedColor, Is.Not.EqualTo(states.normalColor));
+            Assert.That(states.pressedColor, Is.Not.EqualTo(states.highlightedColor));
+            Assert.That(states.selectedColor, Is.Not.EqualTo(states.highlightedColor));
+            Assert.That(states.disabledColor.a, Is.LessThan(states.normalColor.a));
+        }
+
+        [Test]
+        public void UiFactory_RuntimeLayoutUsesLayoutHelpersAndKeepsScrollingOutOfRoot()
+        {
+            var canvasObject = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
+            var rootLayout = uiRoot.GetComponent<VerticalLayoutGroup>();
+            var mainBody = uiRoot.Find("MainBody");
+            var bodyLayout = mainBody.GetComponent<HorizontalLayoutGroup>();
+            var viewportColumn = mainBody.Find("ViewportColumn");
+            var viewportElement = viewportColumn.GetComponent<LayoutElement>();
+            var drawerEntryLayer = uiRoot.Find("DrawerEntryLayer");
+            var drawerLayout = drawerEntryLayer.GetComponent<LayoutElement>();
+            var telemetryToggle = drawerEntryLayer.Find("TelemetryDrawerToggle").GetComponent<RectTransform>();
+            var statusToggle = drawerEntryLayer.Find("StatusDrawerToggle").GetComponent<RectTransform>();
+
+            Assert.That(rootLayout, Is.Not.Null);
+            Assert.That(uiRoot.GetComponent<ScrollRect>(), Is.Null);
+            Assert.That(bodyLayout, Is.Not.Null);
+            Assert.That(viewportElement, Is.Not.Null);
+            Assert.That(viewportElement.minWidth, Is.EqualTo(640f));
+            Assert.That(viewportElement.flexibleWidth, Is.EqualTo(1f));
+            Assert.That(drawerLayout, Is.Not.Null);
+            Assert.That(drawerLayout.ignoreLayout, Is.True);
+            Assert.That(telemetryToggle.sizeDelta.y, Is.GreaterThanOrEqualTo(36f));
+            Assert.That(statusToggle.sizeDelta.y, Is.GreaterThanOrEqualTo(36f));
+        }
+
+        [Test]
         public void PlaybackControlsView_CreatesGroupedControlLabels()
         {
             var frames = Frames(2);
@@ -1754,6 +1813,20 @@ namespace UnderwaterGliderTwin.Tests
         private static Text FindText(string name)
         {
             return GameObject.Find(name).GetComponent<Text>();
+        }
+
+        private static Color ParseColor(string html)
+        {
+            Assert.That(ColorUtility.TryParseHtmlString(html, out var color), Is.True, $"Failed to parse {html}");
+            return color;
+        }
+
+        private static void AssertColorClose(Color actual, Color expected, float tolerance = 0.001f)
+        {
+            Assert.That(actual.r, Is.EqualTo(expected.r).Within(tolerance));
+            Assert.That(actual.g, Is.EqualTo(expected.g).Within(tolerance));
+            Assert.That(actual.b, Is.EqualTo(expected.b).Within(tolerance));
+            Assert.That(actual.a, Is.EqualTo(expected.a).Within(tolerance));
         }
 
         private static void AssertRectInsideViewport(RectTransform control, RectTransform viewport, int width, int height)

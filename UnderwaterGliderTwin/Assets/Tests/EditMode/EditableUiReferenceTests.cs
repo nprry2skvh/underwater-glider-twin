@@ -469,6 +469,61 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void MainScene_DrawerTogglesUseDistinctStatesAndAccessibleHitHeight()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            try
+            {
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+
+                AssertSceneDrawerToggle("TelemetryDrawerToggle");
+                AssertSceneDrawerToggle("StatusDrawerToggle");
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    RestorePreviousScene(previous);
+                }
+            }
+        }
+
+        [TestCase("Assets/UI/Prefabs/DashboardPanel.prefab")]
+        [TestCase("Assets/UI/Prefabs/StatusPanel.prefab")]
+        [TestCase("Assets/UI/Prefabs/DataInputPanel.prefab")]
+        [TestCase("Assets/UI/Prefabs/PlaybackControlsPanel.prefab")]
+        [TestCase("Assets/UI/Prefabs/OceanCommandToolbar.prefab")]
+        [TestCase("Assets/UI/Prefabs/FlightLegDrawer.prefab")]
+        [TestCase("Assets/UI/Prefabs/OceanCurrentDrawer.prefab")]
+        public void CommandCenterPrefabs_DropLegacyBrightButtonsAndRaiseReadableFontFloor(string prefabPath)
+        {
+            var prefabRoot = UnityEditor.PrefabUtility.LoadPrefabContents(prefabPath);
+            var legacyButtonFill = new Color(0.05f, 0.42f, 0.55f, 0.95f);
+            try
+            {
+                foreach (var button in prefabRoot.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+                {
+                    var targetGraphic = button.targetGraphic as UnityEngine.UI.Graphic;
+                    Assert.That(targetGraphic, Is.Not.Null, $"{prefabPath} button {button.name} is missing a target graphic");
+                    Assert.That(targetGraphic.color, Is.Not.EqualTo(legacyButtonFill), $"{prefabPath} button {button.name} still uses the legacy bright cyan fill");
+                    Assert.That(button.colors.highlightedColor, Is.Not.EqualTo(button.colors.normalColor), $"{prefabPath} button {button.name} is missing a hover state");
+                    Assert.That(button.colors.pressedColor, Is.Not.EqualTo(button.colors.highlightedColor), $"{prefabPath} button {button.name} is missing a pressed state");
+                    Assert.That(button.colors.selectedColor, Is.Not.EqualTo(button.colors.highlightedColor), $"{prefabPath} button {button.name} is missing a focus state");
+                    Assert.That(button.colors.disabledColor.a, Is.LessThan(button.colors.normalColor.a), $"{prefabPath} button {button.name} disabled state must be dimmer than default");
+                }
+
+                foreach (var text in prefabRoot.GetComponentsInChildren<UnityEngine.UI.Text>(true))
+                {
+                    Assert.That(text.fontSize, Is.GreaterThanOrEqualTo(14), $"{prefabPath} text {text.name} must stay readable after CanvasScaler shrink");
+                }
+            }
+            finally
+            {
+                UnityEditor.PrefabUtility.UnloadPrefabContents(prefabRoot);
+            }
+        }
+
+        [Test]
         public void MainScene_PassesStrictRuntimeUiValidation()
         {
             var previous = SceneManager.GetActiveScene().path;
@@ -695,6 +750,20 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(panel.transform.parent.name, Is.EqualTo(expectedParentName));
             var source = UnityEditor.PrefabUtility.GetCorrespondingObjectFromSource(panel);
             Assert.That(UnityEditor.AssetDatabase.GetAssetPath(source), Is.EqualTo(expectedPrefabPath));
+        }
+
+        private static void AssertSceneDrawerToggle(string objectName)
+        {
+            var buttonObject = GameObject.Find(objectName);
+            Assert.That(buttonObject, Is.Not.Null);
+            var button = buttonObject.GetComponent<UnityEngine.UI.Button>();
+            var rect = buttonObject.GetComponent<RectTransform>();
+            Assert.That(button, Is.Not.Null);
+            Assert.That(rect.sizeDelta.y, Is.GreaterThanOrEqualTo(36f), $"{objectName} must expose a 36px drawer entry hit target");
+            Assert.That(button.colors.highlightedColor, Is.Not.EqualTo(button.colors.normalColor), $"{objectName} is missing a hover state");
+            Assert.That(button.colors.pressedColor, Is.Not.EqualTo(button.colors.highlightedColor), $"{objectName} is missing a pressed state");
+            Assert.That(button.colors.selectedColor, Is.Not.EqualTo(button.colors.highlightedColor), $"{objectName} is missing a focus state");
+            Assert.That(button.colors.disabledColor.a, Is.LessThan(button.colors.normalColor.a), $"{objectName} disabled state must be dimmer than default");
         }
 
         private static GameObject FindSceneObjectIncludingInactive(string objectName)

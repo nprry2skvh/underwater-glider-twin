@@ -4,16 +4,36 @@ using UnityEngine.UI;
 
 namespace UnderwaterGliderTwin.UI
 {
+    public enum UiVisualRole
+    {
+        PanelFill,
+        PanelEdge,
+        ButtonFill,
+        AccentFill,
+        AccentText,
+        InputFill,
+        Text,
+        MutedText,
+        WarningFill
+    }
+
     public static class UiFactory
     {
-        public static readonly Color CommandPanelFill = new Color(0.015f, 0.065f, 0.11f, 0.94f);
-        public static readonly Color CommandPanelEdge = new Color(0.08f, 0.68f, 0.92f, 0.62f);
-        public static readonly Color CommandAccent = new Color(0.08f, 0.84f, 1f, 1f);
-        public static readonly Color CommandText = new Color(0.87f, 0.97f, 1f, 1f);
+        public static readonly Color CommandPanelFill = new Color(0.055f, 0.118f, 0.176f, 0.96f);
+        public static readonly Color CommandPanelEdge = new Color(0.164f, 0.290f, 0.380f, 0.90f);
+        public static readonly Color CommandAccent = new Color(0.3647059f, 0.84313726f, 0.9098039f, 1f);
+        public static readonly Color CommandText = new Color(0.8784314f, 0.9490196f, 0.96862745f, 1f);
+        public static readonly Color CommandButtonFill = new Color(0.082f, 0.184f, 0.259f, 0.96f);
+        public static readonly Color CommandInputFill = new Color(0.043f, 0.106f, 0.157f, 0.98f);
+        public static readonly Color CommandMutedText = new Color(0.682f, 0.800f, 0.839f, 0.92f);
+        public static readonly Color CommandWarning = new Color(0.905f, 0.788f, 0.419f, 1f);
+        public static readonly Color CommandDarkText = new Color(0.031f, 0.090f, 0.129f, 1f);
         public const float CommandCenterHeaderHeight = 48f;
         public const float CommandCenterParameterBarHeight = 48f;
         public const float CommandCenterContentTopOffset = CommandCenterHeaderHeight + CommandCenterParameterBarHeight + 16f;
         public const float CommandCenterOperationsTopOffset = 142f;
+        public const float MinimumControlHeight = 32f;
+        public const float MinimumDrawerToggleHeight = 36f;
         private static Font font;
 
         public static Canvas EnsureCanvas(Transform parent)
@@ -83,28 +103,44 @@ namespace UnderwaterGliderTwin.UI
 
             var uiRoot = EnsureRectTransformChild(canvas.transform, "UiRoot");
             ConfigureRect(uiRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            ConfigureRootLayout(uiRoot);
 
             var systemBar = EnsureRectTransformChild(uiRoot, "SystemBar");
-            ConfigureRect(systemBar, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 48f));
+            ConfigureRect(systemBar, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, CommandCenterHeaderHeight));
+            ConfigureZoneHeight(systemBar, CommandCenterHeaderHeight);
             var configurationArea = EnsureRectTransformChild(uiRoot, "ConfigurationArea");
             ConfigureRect(configurationArea, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, 320f));
+            ConfigureVerticalContent(configurationArea, 12f);
+            ConfigureZoneHeight(configurationArea, 320f);
             var playbackBar = EnsureRectTransformChild(uiRoot, "PlaybackBar");
             ConfigureRect(playbackBar, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 320f), new Vector2(0f, 124f));
+            ConfigureVerticalContent(playbackBar, 12f);
+            ConfigureZoneHeight(playbackBar, 124f);
             var mainBody = EnsureRectTransformChild(uiRoot, "MainBody");
             mainBody.offsetMin = new Vector2(0f, 444f);
             mainBody.offsetMax = new Vector2(0f, -48f);
+            ConfigureMainBody(mainBody);
 
             var telemetryColumn = EnsureRectTransformChild(mainBody, "TelemetryColumn");
             ConfigureRect(telemetryColumn, new Vector2(0f, 0f), new Vector2(0.25f, 1f), new Vector2(0f, 0.5f), Vector2.zero, Vector2.zero);
+            ConfigureVerticalContent(telemetryColumn, 12f);
+            ConfigureHorizontalZone(telemetryColumn, 320f, 360f);
             var viewportColumn = EnsureRectTransformChild(mainBody, "ViewportColumn");
             ConfigureRect(viewportColumn, new Vector2(0.25f, 0f), new Vector2(0.75f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            ConfigureVerticalContent(viewportColumn, 12f);
+            ConfigureHorizontalZone(viewportColumn, 640f, 760f);
+            viewportColumn.GetComponent<LayoutElement>().flexibleWidth = 1f;
             var statusColumn = EnsureRectTransformChild(mainBody, "StatusColumn");
             ConfigureRect(statusColumn, new Vector2(0.75f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), Vector2.zero, Vector2.zero);
+            ConfigureVerticalContent(statusColumn, 12f);
+            ConfigureHorizontalZone(statusColumn, 320f, 360f);
 
             var drawerEntryLayer = EnsureRectTransformChild(uiRoot, "DrawerEntryLayer");
             ConfigureRect(drawerEntryLayer, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            EnsureRuntimeDrawerToggle(drawerEntryLayer, "TelemetryDrawerToggle", "遥测抽屉", new Vector2(0f, 1f));
-            EnsureRuntimeDrawerToggle(drawerEntryLayer, "StatusDrawerToggle", "状态抽屉", new Vector2(120f, 1f));
+            var drawerLayout = drawerEntryLayer.GetComponent<LayoutElement>() ?? drawerEntryLayer.gameObject.AddComponent<LayoutElement>();
+            drawerLayout.ignoreLayout = true;
+            EnsureRuntimeDrawerToggle(drawerEntryLayer, "TelemetryDrawerToggle", "遥测抽屉", new Vector2(16f, -12f));
+            EnsureRuntimeDrawerToggle(drawerEntryLayer, "StatusDrawerToggle", "状态抽屉", new Vector2(148f, -12f));
 
             var modalRoot = EnsureRectTransformChild(canvas.transform, "ModalRoot");
             ConfigureRect(modalRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
@@ -153,21 +189,24 @@ namespace UnderwaterGliderTwin.UI
 
             var header = Panel(
                 "CommandCenterHeader",
-                parent,
-                new Vector2(0f, 1f),
+                canvas != null && canvas.transform.Find("UiRoot/SystemBar") != null ? canvas.transform.Find("UiRoot/SystemBar") : parent,
+                new Vector2(0f, 0f),
                 new Vector2(1f, 1f),
-                new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 0.5f),
                 Vector2.zero,
-                new Vector2(0f, CommandCenterHeaderHeight),
-                new Color(0.005f, 0.03f, 0.07f, 0.98f));
+                Vector2.zero,
+                new Color(0.027f, 0.071f, 0.110f, 0.98f));
+            var layout = header.gameObject.GetComponent<LayoutElement>() ?? header.gameObject.AddComponent<LayoutElement>();
+            layout.minHeight = CommandCenterHeaderHeight;
+            layout.preferredHeight = CommandCenterHeaderHeight;
             var outline = header.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(0.06f, 0.62f, 0.95f, 0.72f);
+            outline.effectColor = CommandPanelEdge;
             outline.effectDistance = new Vector2(0f, -1f);
             Text("CommandCenterProductName", header, "UnderwaterGliderTwin", 18, TextAnchor.MiddleLeft, CommandText,
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(22f, 0f), new Vector2(320f, 32f));
-            Text("CommandCenterSystemHealth", header, "系统正常", 12, TextAnchor.MiddleRight, new Color(0.36f, 0.96f, 0.68f, 1f),
+            Text("CommandCenterSystemHealth", header, "系统正常", 14, TextAnchor.MiddleRight, new Color(0.52f, 0.92f, 0.70f, 1f),
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-176f, 0f), new Vector2(120f, 28f));
-            Text("CommandCenterRuntime", header, "海流任务指挥舱", 12, TextAnchor.MiddleRight, new Color(0.55f, 0.82f, 0.94f, 1f),
+            Text("CommandCenterRuntime", header, "海流任务指挥舱", 14, TextAnchor.MiddleRight, CommandMutedText,
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-24f, 0f), new Vector2(142f, 28f));
             return header;
         }
@@ -181,7 +220,7 @@ namespace UnderwaterGliderTwin.UI
             var text = textObject.AddComponent<Text>();
             text.font = GetFont();
             text.text = value;
-            text.fontSize = fontSize;
+            text.fontSize = Mathf.Max(fontSize, 14);
             text.alignment = anchor;
             text.color = color;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -206,15 +245,16 @@ namespace UnderwaterGliderTwin.UI
             var buttonObject = new GameObject(name);
             buttonObject.transform.SetParent(parent, false);
             var rect = buttonObject.AddComponent<RectTransform>();
-            ConfigureRect(rect, anchorMin, anchorMax, pivot, anchoredPosition, size);
+            ConfigureRect(rect, anchorMin, anchorMax, pivot, anchoredPosition, ClampControlSize(size, MinimumControlHeight));
             var image = buttonObject.AddComponent<Image>();
-            image.color = new Color(0.035f, 0.19f, 0.29f, 0.96f);
+            ApplyCommandPalette(image, UiVisualRole.ButtonFill);
             var outline = buttonObject.AddComponent<Outline>();
-            outline.effectColor = new Color(0.12f, 0.64f, 0.88f, 0.36f);
+            outline.effectColor = CommandPanelEdge;
             outline.effectDistance = new Vector2(1f, -1f);
             var button = buttonObject.AddComponent<Button>();
+            button.colors = CreateButtonStates();
 
-            var labelText = Text(name + "Label", buttonObject.transform, label, 14, TextAnchor.MiddleCenter, Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, size);
+            var labelText = Text(name + "Label", buttonObject.transform, label, 16, TextAnchor.MiddleCenter, CommandText, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, rect.sizeDelta);
             labelText.raycastTarget = false;
             return button;
         }
@@ -222,9 +262,15 @@ namespace UnderwaterGliderTwin.UI
         public static Button PrimaryButton(string name, Transform parent, string label, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 size)
         {
             var button = Button(name, parent, label, anchorMin, anchorMax, pivot, anchoredPosition, size);
-            button.image.color = new Color(0.0f, 0.38f, 0.64f, 0.98f);
+            ApplyCommandPalette(button.image, UiVisualRole.AccentFill);
             var outline = button.GetComponent<Outline>();
-            outline.effectColor = new Color(0.10f, 0.90f, 1f, 0.82f);
+            outline.effectColor = CommandAccent;
+            button.colors = CreateButtonStates();
+            var labelText = button.GetComponentInChildren<Text>();
+            if (labelText != null)
+            {
+                ApplyCommandPalette(labelText, UiVisualRole.AccentText);
+            }
             return button;
         }
 
@@ -245,7 +291,7 @@ namespace UnderwaterGliderTwin.UI
             var toggleObject = new GameObject(name);
             toggleObject.transform.SetParent(parent, false);
             var rect = toggleObject.AddComponent<RectTransform>();
-            ConfigureRect(rect, anchorMin, anchorMax, pivot, anchoredPosition, size);
+            ConfigureRect(rect, anchorMin, anchorMax, pivot, anchoredPosition, ClampControlSize(size, MinimumControlHeight));
 
             var background = new GameObject("Background");
             background.transform.SetParent(toggleObject.transform, false);
@@ -254,7 +300,7 @@ namespace UnderwaterGliderTwin.UI
             backgroundRect.anchorMax = new Vector2(0f, 0.5f);
             backgroundRect.anchoredPosition = new Vector2(10f, 0f);
             backgroundRect.sizeDelta = new Vector2(18f, 18f);
-            background.AddComponent<Image>().color = new Color(0.05f, 0.16f, 0.18f, 0.95f);
+            ApplyCommandPalette(background.AddComponent<Image>(), UiVisualRole.InputFill);
 
             var checkmark = new GameObject("Checkmark");
             checkmark.transform.SetParent(background.transform, false);
@@ -262,15 +308,16 @@ namespace UnderwaterGliderTwin.UI
             checkRect.anchorMin = Vector2.zero;
             checkRect.anchorMax = Vector2.one;
             checkRect.sizeDelta = new Vector2(-5f, -5f);
-            checkmark.AddComponent<Image>().color = new Color(0f, 0.85f, 1f, 1f);
+            ApplyCommandPalette(checkmark.AddComponent<Image>(), UiVisualRole.AccentFill);
 
-            var labelText = Text(name + "Label", toggleObject.transform, label, 13, TextAnchor.MiddleLeft, Color.white, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(34f, 0f), new Vector2(112f, 24f));
+            var labelText = Text(name + "Label", toggleObject.transform, label, 14, TextAnchor.MiddleLeft, CommandText, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(34f, 0f), new Vector2(132f, 24f));
             labelText.raycastTarget = false;
 
             var toggle = toggleObject.AddComponent<Toggle>();
             toggle.targetGraphic = background.GetComponent<Image>();
             toggle.graphic = checkmark.GetComponent<Image>();
             toggle.isOn = isOn;
+            toggle.colors = CreateButtonStates();
             return toggle;
         }
 
@@ -284,9 +331,9 @@ namespace UnderwaterGliderTwin.UI
             var sliderObject = new GameObject(name);
             sliderObject.transform.SetParent(parent, false);
             var rect = sliderObject.AddComponent<RectTransform>();
-            ConfigureRect(rect, anchorMin, anchorMax, pivot, anchoredPosition, size);
+            ConfigureRect(rect, anchorMin, anchorMax, pivot, anchoredPosition, ClampControlSize(size, MinimumControlHeight));
 
-            var background = Panel("Background", sliderObject.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.05f, 0.17f, 0.2f, 0.95f));
+            var background = Panel("Background", sliderObject.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, CommandInputFill);
             background.offsetMin = new Vector2(0f, 8f);
             background.offsetMax = new Vector2(0f, -8f);
 
@@ -294,10 +341,10 @@ namespace UnderwaterGliderTwin.UI
             fillArea.offsetMin = new Vector2(4f, 8f);
             fillArea.offsetMax = new Vector2(-4f, -8f);
 
-            var fill = Panel("Fill", fillArea, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0.8f, 1f, 0.9f));
+            var fill = Panel("Fill", fillArea, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, CommandAccent);
 
             var handleArea = Panel("Handle Slide Area", sliderObject.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, Color.clear);
-            var handle = Panel("Handle", handleArea, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(14f, 24f), new Color(0.9f, 0.96f, 1f, 1f));
+            var handle = Panel("Handle", handleArea, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(14f, 24f), CommandText);
 
             var slider = sliderObject.AddComponent<Slider>();
             slider.minValue = 0f;
@@ -313,18 +360,18 @@ namespace UnderwaterGliderTwin.UI
             var inputObject = new GameObject(name);
             inputObject.transform.SetParent(parent, false);
             var rect = inputObject.AddComponent<RectTransform>();
-            ConfigureRect(rect, anchorMin, anchorMax, pivot, anchoredPosition, size);
+            ConfigureRect(rect, anchorMin, anchorMax, pivot, anchoredPosition, ClampControlSize(size, MinimumControlHeight));
             var image = inputObject.AddComponent<Image>();
-            image.color = new Color(0.02f, 0.12f, 0.19f, 0.96f);
+            ApplyCommandPalette(image, UiVisualRole.InputFill);
             var outline = inputObject.AddComponent<Outline>();
-            outline.effectColor = new Color(0.10f, 0.50f, 0.70f, 0.28f);
+            outline.effectColor = CommandPanelEdge;
             outline.effectDistance = new Vector2(1f, -1f);
 
-            var text = Text(name + "Text", inputObject.transform, value, 14, TextAnchor.MiddleLeft, Color.white, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f), new Vector2(10f, 0f), new Vector2(-20f, -10f));
+            var text = Text(name + "Text", inputObject.transform, value, 14, TextAnchor.MiddleLeft, CommandText, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f), new Vector2(10f, 0f), new Vector2(-20f, -10f));
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
             text.raycastTarget = false;
 
-            var placeholderText = Text(name + "Placeholder", inputObject.transform, placeholder, 14, TextAnchor.MiddleLeft, new Color(1f, 1f, 1f, 0.45f), new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f), new Vector2(10f, 0f), new Vector2(-20f, -10f));
+            var placeholderText = Text(name + "Placeholder", inputObject.transform, placeholder, 14, TextAnchor.MiddleLeft, new Color(CommandMutedText.r, CommandMutedText.g, CommandMutedText.b, 0.58f), new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f), new Vector2(10f, 0f), new Vector2(-20f, -10f));
             placeholderText.raycastTarget = false;
 
             var inputField = inputObject.AddComponent<InputField>();
@@ -334,7 +381,77 @@ namespace UnderwaterGliderTwin.UI
             inputField.lineType = UnityEngine.UI.InputField.LineType.SingleLine;
             inputField.caretWidth = 2;
             inputField.text = value;
+            inputField.colors = CreateButtonStates();
             return inputField;
+        }
+
+        public static void ConfigureVerticalContent(RectTransform content, float spacing)
+        {
+            if (content == null)
+            {
+                return;
+            }
+
+            var layout = content.GetComponent<VerticalLayoutGroup>() ?? content.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(12, 12, 12, 12);
+            layout.spacing = spacing;
+            layout.childAlignment = TextAnchor.UpperLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = true;
+        }
+
+        public static void ConfigureHorizontalZone(RectTransform zone, float minWidth, float preferredWidth)
+        {
+            if (zone == null)
+            {
+                return;
+            }
+
+            var layoutElement = zone.GetComponent<LayoutElement>() ?? zone.gameObject.AddComponent<LayoutElement>();
+            layoutElement.minWidth = minWidth;
+            layoutElement.preferredWidth = preferredWidth;
+            layoutElement.flexibleHeight = 1f;
+        }
+
+        public static void ApplyCommandPalette(Graphic graphic, UiVisualRole role)
+        {
+            if (graphic == null)
+            {
+                return;
+            }
+
+            switch (role)
+            {
+                case UiVisualRole.PanelFill:
+                    graphic.color = CommandPanelFill;
+                    break;
+                case UiVisualRole.PanelEdge:
+                    graphic.color = CommandPanelEdge;
+                    break;
+                case UiVisualRole.ButtonFill:
+                    graphic.color = CommandButtonFill;
+                    break;
+                case UiVisualRole.AccentFill:
+                    graphic.color = CommandAccent;
+                    break;
+                case UiVisualRole.AccentText:
+                    graphic.color = CommandDarkText;
+                    break;
+                case UiVisualRole.InputFill:
+                    graphic.color = CommandInputFill;
+                    break;
+                case UiVisualRole.Text:
+                    graphic.color = CommandText;
+                    break;
+                case UiVisualRole.MutedText:
+                    graphic.color = CommandMutedText;
+                    break;
+                case UiVisualRole.WarningFill:
+                    graphic.color = CommandWarning;
+                    break;
+            }
         }
 
         private static Font GetFont()
@@ -381,7 +498,19 @@ namespace UnderwaterGliderTwin.UI
             var uiRoot = EnsureResponsiveRuntimeLayout(canvas);
             switch (name)
             {
-                case "FlightLegDrawerPanel": return canvas.transform.Find("ModalRoot");
+                case "TelemetryPanel":
+                    return uiRoot.Find("MainBody/TelemetryColumn") ?? parent;
+                case "MissionStatusPanel":
+                    return uiRoot.Find("MainBody/StatusColumn") ?? parent;
+                case "MissionConfigurationPanel":
+                    return uiRoot.Find("ConfigurationArea") ?? parent;
+                case "PlaybackControlsPanel":
+                    return uiRoot.Find("PlaybackBar") ?? parent;
+                case "OceanCommandToolbar":
+                    return uiRoot.Find("MainBody/ViewportColumn") ?? parent;
+                case "FlightLegDrawerPanel":
+                case "OceanCurrentDrawerPanel":
+                    return canvas.transform.Find("ModalRoot") ?? parent;
                 default: return parent;
             }
         }
@@ -423,10 +552,10 @@ namespace UnderwaterGliderTwin.UI
             var button = existing != null ? existing.GetComponent<Button>() : null;
             if (button == null)
             {
-                button = Button(name, parent, label, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), position, new Vector2(108f, 30f));
+                button = Button(name, parent, label, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), position, new Vector2(120f, MinimumDrawerToggleHeight));
             }
 
-            ConfigureRect(button.transform as RectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), position, new Vector2(108f, 30f));
+            ConfigureRect(button.transform as RectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), position, new Vector2(120f, MinimumDrawerToggleHeight));
         }
 
         private static void EnsureRuntimeDrawerPlaceholder(Transform parent, string name)
@@ -443,6 +572,57 @@ namespace UnderwaterGliderTwin.UI
             rect.pivot = pivot;
             rect.anchoredPosition = anchoredPosition;
             rect.sizeDelta = size;
+        }
+
+        private static Vector2 ClampControlSize(Vector2 size, float minimumHeight)
+        {
+            return new Vector2(size.x, Mathf.Max(size.y, minimumHeight));
+        }
+
+        private static void ConfigureRootLayout(RectTransform uiRoot)
+        {
+            var layout = uiRoot.GetComponent<VerticalLayoutGroup>() ?? uiRoot.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(12, 12, 12, 12);
+            layout.spacing = 12f;
+            layout.childAlignment = TextAnchor.UpperLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+        }
+
+        private static void ConfigureZoneHeight(RectTransform zone, float height)
+        {
+            var layoutElement = zone.GetComponent<LayoutElement>() ?? zone.gameObject.AddComponent<LayoutElement>();
+            layoutElement.minHeight = height;
+            layoutElement.preferredHeight = height;
+        }
+
+        private static void ConfigureMainBody(RectTransform mainBody)
+        {
+            var layout = mainBody.GetComponent<HorizontalLayoutGroup>() ?? mainBody.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(0, 0, 0, 0);
+            layout.spacing = 12f;
+            layout.childAlignment = TextAnchor.UpperLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = true;
+
+            var element = mainBody.GetComponent<LayoutElement>() ?? mainBody.gameObject.AddComponent<LayoutElement>();
+            element.flexibleHeight = 1f;
+        }
+
+        private static ColorBlock CreateButtonStates()
+        {
+            var colors = ColorBlock.defaultColorBlock;
+            colors.normalColor = new Color(1f, 1f, 1f, 1f);
+            colors.highlightedColor = new Color(0.88f, 0.96f, 0.99f, 1f);
+            colors.pressedColor = new Color(0.68f, 0.80f, 0.90f, 0.92f);
+            colors.selectedColor = new Color(0.72f, 0.95f, 0.98f, 1f);
+            colors.disabledColor = new Color(0.48f, 0.56f, 0.62f, 0.35f);
+            colors.fadeDuration = 0.12f;
+            return colors;
         }
 
         public static void SetButtonText(Button button, string label)
