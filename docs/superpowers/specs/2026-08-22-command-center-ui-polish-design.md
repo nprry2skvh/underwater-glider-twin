@@ -74,8 +74,20 @@ RuntimeCanvas
 
 ### 滞后
 
-- 抽屉退出：宽度 >= 1296 且高度 >= 656；
-- 完整模式退出：宽度 < 1584；
+默认无前态时按以下规则计算：
+
+```text
+Full       = width >= 1616 && height >= 656
+Compressed = width >= 1280 && height >= 624 && !Full
+Drawer     = width < 1280 || height < 624
+```
+
+存在上一次模式时使用以下滞后规则，所有分支均有明确结果：
+
+- 上一次为 `Drawer`：只有 `width >= 1296 && height >= 656` 才退出抽屉；退出后宽度 >= 1616 进入完整三栏，否则进入压缩三栏；
+- 上一次为 `FullThreeColumn`：`width < 1280 || height < 624` 进入抽屉；否则当 `width < 1584 || height < 640` 时进入压缩三栏，其余保持完整三栏；
+- 上一次为 `CompressedThreeColumn`：`width < 1264 || height < 620` 进入抽屉；`width >= 1616 && height >= 656` 进入完整三栏；其余保持压缩三栏；
+- 例如 `1700×640` 明确进入压缩三栏，不存在未定义区间；`1280×623` 进入抽屉；`1296×656` 可从抽屉退出到压缩三栏；
 - 模式判断只读取屏幕或 Canvas 可用宽高，不读取布局完成后的 `ViewportColumn.rect.width` 作为唯一依据；
 - 重复调用相同尺寸的刷新方法不得创建新对象或重复绑定事件。
 
@@ -168,7 +180,7 @@ Title, SectionTitle, Label, Value, Button, Auxiliary, Error
 
 - `UiTooltip` 挂在图标按钮或无文字按钮上，提供 `message`；
 - `UiTooltipController` 挂在 `RuntimeCanvas/ModalRoot/TooltipPopup` 下；
-- Tooltip 不创建 Canvas，不阻挡射线，不改变 ModalRoot 所有权；
+- Tooltip 不创建 Canvas，不改变 ModalRoot 所有权；Tooltip Popup 的 `Image.raycastTarget = false`，其 `CanvasGroup.blocksRaycasts = false`，不阻挡射线；
 - 鼠标悬停或键盘聚焦后延迟约 350ms 显示；
 - 最大宽度 280px，支持换行，自动限制在 Canvas 可见区域内；
 - 鼠标离开、焦点变化、抽屉关闭或按 Escape 时隐藏；
@@ -182,6 +194,10 @@ Title, SectionTitle, Label, Value, Button, Auxiliary, Error
 - 状态图标或几何标记；
 - 左侧色条或边框；
 - 正常、待机、预测、警告、错误五种状态。
+
+状态徽标中的装饰 Image、图标 Image 和背景装饰必须设置 `raycastTarget = false`，不得改变控件布局尺寸或拦截父级 Button/InputField。
+
+`UiFocusVisual` 的焦点描边必须使用不改变 RectTransform 尺寸的 `Outline` 或等效绘制方式；描边装饰和附属 Image 必须设置 `raycastTarget = false`。焦点状态只改变视觉，不改变控件的布局尺寸、可点击区域或兄弟节点排序。
 
 状态绑定必须保持现有业务 View 的数据来源不变，只改变显示载体。
 
@@ -255,11 +271,15 @@ Title, SectionTitle, Label, Value, Button, Auxiliary, Error
 - 当前焦点在中央视图区时打开抽屉；
 - 当前焦点在播放栏时打开抽屉；
 - 当前焦点已在抽屉内时重复打开/关闭；
+- 边界尺寸至少覆盖 `1700×640`、`1280×623`、`1296×656`，以及完整/压缩和抽屉滞后边界；
 - 关闭后焦点返回对应入口；
 - 遮罩阻止背景点击，关闭后不再拦截；
+- Tooltip Popup、焦点描边和状态徽标装饰不拦截射线；
 - Escape、遮罩点击和入口按钮关闭行为一致；
 - 无动画与有动画的最终状态一致；
 - 相同尺寸重复刷新不重复创建对象或绑定事件。
+
+Prefab 覆盖保护测试必须先给一个现有 Prefab/场景实例写入特殊颜色、位置和字体值，再运行 Builder，最后逐项比较这些值仍然保持不变。配置区折叠/展开测试必须重复执行多次，并确认按钮监听数量没有增长。
 
 ### Windows Player 视觉验收
 
