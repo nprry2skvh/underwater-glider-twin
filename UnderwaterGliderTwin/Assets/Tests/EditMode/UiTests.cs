@@ -2148,6 +2148,56 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void BoundPrefabTypography_PreservesExistingTextFontSizes()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+
+            var cameraController = new GameObject("TypographyCamera").AddComponent<TwinCameraController>();
+            var target = new GameObject("TypographyTarget");
+            cameraController.Initialize(target.transform, new[] { Vector3.zero, Vector3.one });
+            var trajectory = new GameObject("TypographyTrajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+
+            var oceanPanel = new GameObject("OceanTypographyPanel", typeof(RectTransform));
+            var oceanButton = UiFactory.Button("CameraFollowCommand", oceanPanel.transform, "跟随",
+                Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(60f, 32f));
+            var oceanText = oceanButton.GetComponentInChildren<Text>();
+            oceanText.fontSize = 7;
+            var toolbar = new GameObject("TypographyToolbar").AddComponent<OceanCommandToolbarView>();
+
+            toolbar.Bind(new OceanToolbarRefs
+            {
+                panel = oceanPanel.GetComponent<RectTransform>(),
+                cameraFollowCommand = oceanButton
+            }, cameraController, trajectory);
+
+            var playbackPanel = new GameObject("PlaybackTypographyPanel", typeof(RectTransform));
+            var playbackButton = UiFactory.Button("PlayPauseButton", playbackPanel.transform, "开始",
+                Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(80f, 32f));
+            var playbackText = playbackButton.GetComponentInChildren<Text>();
+            playbackText.fontSize = 6;
+            var playbackStatus = UiFactory.Text("PlaybackStatus", playbackPanel.transform, "状态", 12,
+                TextAnchor.MiddleLeft, UiFactory.CommandText, Vector2.zero, Vector2.zero, Vector2.zero,
+                Vector2.zero, new Vector2(120f, 24f));
+            playbackStatus.fontSize = 5;
+            var controls = new GameObject("TypographyControls").AddComponent<PlaybackControlsView>();
+
+            controls.Bind(new PlaybackControlsRefs
+            {
+                panel = playbackPanel.GetComponent<RectTransform>(),
+                playPauseButton = playbackButton,
+                statusText = playbackStatus
+            }, playback, null, null, null);
+
+            Assert.That(oceanText.fontSize, Is.EqualTo(7));
+            Assert.That(playbackText.fontSize, Is.EqualTo(6));
+            Assert.That(playbackStatus.fontSize, Is.EqualTo(5));
+        }
+
+        [Test]
         public void OceanCommandToolbarView_ResetMarksGlobalCameraMode()
         {
             var frames = Frames(2);

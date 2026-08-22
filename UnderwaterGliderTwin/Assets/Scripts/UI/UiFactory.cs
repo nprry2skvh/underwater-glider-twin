@@ -1098,7 +1098,7 @@ namespace UnderwaterGliderTwin.UI
             text.verticalOverflow = VerticalWrapMode.Overflow;
             text.supportRichText = false;
             text.raycastTarget = false;
-            ApplyTextRole(text, UiTextRole.Auxiliary, RuntimeUiLayoutMode.CompressedThreeColumn);
+            ApplyTextRoleColor(text, ResolveTextRole(text));
             var layout = text.GetComponent<LayoutElement>() ?? text.gameObject.AddComponent<LayoutElement>();
             layout.minHeight = 18f;
             layout.preferredHeight = 44f;

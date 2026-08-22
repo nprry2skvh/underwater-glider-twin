@@ -259,7 +259,6 @@ namespace UnderwaterGliderTwin.UI
                 var status = control.GetComponent<Text>();
                 if (status != null)
                 {
-                    status.fontSize = Mathf.Max(status.fontSize, 14);
                     status.verticalOverflow = VerticalWrapMode.Truncate;
                 }
 
@@ -288,7 +287,6 @@ namespace UnderwaterGliderTwin.UI
                 text.alignment = TextAnchor.MiddleCenter;
                 text.horizontalOverflow = HorizontalWrapMode.Wrap;
                 text.verticalOverflow = VerticalWrapMode.Truncate;
-                text.fontSize = Mathf.Max(text.fontSize, 14);
             }
         }
 

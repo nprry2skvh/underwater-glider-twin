@@ -240,7 +240,6 @@ namespace UnderwaterGliderTwin.UI
                 text.rectTransform.offsetMin = new Vector2(4f, 0f);
                 text.rectTransform.offsetMax = new Vector2(-4f, 0f);
                 text.alignment = TextAnchor.MiddleCenter;
-                text.fontSize = Mathf.Max(text.fontSize, 14);
             }
         }
 
