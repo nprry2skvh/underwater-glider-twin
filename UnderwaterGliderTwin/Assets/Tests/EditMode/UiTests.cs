@@ -333,6 +333,27 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void Task5_AccessibleFeedback_PreservesManualHorizontalNavigation()
+        {
+            var root = new GameObject("Task5NavigationCanvas", typeof(RectTransform), typeof(Canvas));
+            var playbackBar = new GameObject("PlaybackBar", typeof(RectTransform));
+            playbackBar.transform.SetParent(root.transform, false);
+            var speed1 = CreateNavigationButton(playbackBar.transform, "Speed1Button");
+            var speed2 = CreateNavigationButton(playbackBar.transform, "Speed2Button");
+            var toolbar = new GameObject("OceanCommandToolbar", typeof(RectTransform));
+            toolbar.transform.SetParent(root.transform, false);
+            var cameraFollow = CreateNavigationButton(toolbar.transform, "CameraFollowCommand");
+            var cameraGlobal = CreateNavigationButton(toolbar.transform, "CameraGlobalCommand");
+            SetHorizontalNavigation(speed1, speed2, Navigation.Mode.Explicit);
+            SetHorizontalNavigation(cameraFollow, cameraGlobal, Navigation.Mode.Explicit);
+
+            UiFactory.ApplyAccessibleFeedback(root.transform);
+
+            AssertHorizontalNavigationPreserved(speed1, speed2);
+            AssertHorizontalNavigationPreserved(cameraFollow, cameraGlobal);
+        }
+
+        [Test]
         public void DashboardView_CreatesNavigationReferenceCard()
         {
             var playback = CreatePlayback(Frames(2));
@@ -2297,6 +2318,33 @@ namespace UnderwaterGliderTwin.Tests
             var textObject = new GameObject(name, typeof(RectTransform), typeof(Text));
             textObject.transform.SetParent(parent, false);
             return textObject.GetComponent<Text>();
+        }
+
+        private static Button CreateNavigationButton(Transform parent, string name)
+        {
+            var buttonObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            buttonObject.transform.SetParent(parent, false);
+            return buttonObject.GetComponent<Button>();
+        }
+
+        private static void SetHorizontalNavigation(Button left, Button right, Navigation.Mode mode)
+        {
+            var leftNavigation = left.navigation;
+            leftNavigation.mode = mode;
+            leftNavigation.selectOnRight = right;
+            left.navigation = leftNavigation;
+            var rightNavigation = right.navigation;
+            rightNavigation.mode = mode;
+            rightNavigation.selectOnLeft = left;
+            right.navigation = rightNavigation;
+        }
+
+        private static void AssertHorizontalNavigationPreserved(Button left, Button right)
+        {
+            Assert.That(left.navigation.mode, Is.EqualTo(Navigation.Mode.Explicit));
+            Assert.That(left.navigation.selectOnRight, Is.SameAs(right));
+            Assert.That(right.navigation.mode, Is.EqualTo(Navigation.Mode.Explicit));
+            Assert.That(right.navigation.selectOnLeft, Is.SameAs(left));
         }
 
         private static bool RootScrollIsAbsentOrDisabled(RectTransform drawer)

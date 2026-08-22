@@ -6,6 +6,21 @@
 - ResponsiveUiLayoutPlayModeTests 焦点 RED：1 total，0 passed，1 failed。ModalRoot 外部抽屉焦点未进入目标抽屉首个 Selectable，失败断言为预期 `StatusField` 未得到。
 - GeneratedRuntimeUiPlayModeTests RED：2 total，1 passed，1 failed。`GeneratedRuntimeUi_CreatesCanonicalHierarchy_AndSameSizeRefreshDoesNotDuplicateNodes` 失败，`TooltipPopup` 尚未生成。
 
+## 审查修复 RED / GREEN
+
+本次先只加入回归断言再运行测试，保留了真实 RED：
+
+- `Task5_AccessibleFeedback_PreservesManualHorizontalNavigation`：1 total，0 passed，1 failed。现有 `ApplyAccessibleFeedback()` 将播放栏显式横向 Navigation 覆盖为空。
+- `ResponsiveUiLayoutPlayModeTests`：6 total，4 passed，2 failed。`Tooltip_HidesAfterAnimatedPublicCloseAndEscape` 暴露动画关闭后焦点回退重新显示 Tooltip；`Tooltip_StaysOutsideHostWhenTopBoundaryRequiresBelowPlacement` 暴露原定位在顶端 fallback 时与宿主重叠。
+
+实现修复后重新运行：
+
+- EditMode：431 total，431 passed，0 failed。结果文件：`TestResults/EditModeResults.xml`。
+- `Task5_AccessibleFeedback_PreservesManualHorizontalNavigation`：1 total，1 passed，0 failed。播放栏/工具条手工横向 Navigation 保留。
+- `ResponsiveUiLayoutPlayModeTests`：6 total，6 passed，0 failed。结果文件：`TestResults/Task5ReviewFinalResponsive2Results.xml`。实际调用 `Show()`（delay=0），覆盖动画 public close、动画完成后的隐藏、Immediate close、Escape hide、宿主顶部空间不足时的 below 定位、popup 与宿主不重叠及 ModalRoot 边界内。
+- `GeneratedRuntimeUiPlayModeTests`：2 total，2 passed，0 failed。结果文件：`TestResults/Task5ReviewFinalGeneratedResults.xml`。
+- `git diff --check`：通过；仅有既有工作区文件的 LF/CRLF 提示。
+
 ## GREEN
 
 - EditMode：430 total，430 passed，0 failed。结果文件：`TestResults/EditModeResults.xml`。
@@ -18,7 +33,7 @@
 - 新增 `UiTooltip`、`UiTooltipController`、`UiStateBadge`、`UiFocusVisual`。
 - TooltipPopup 复用唯一 `ModalRoot`，Image 与 CanvasGroup 均不拦截射线；仅显示时刷新位置，支持延迟、边界限制、焦点/离开/Escape 隐藏。
 - 状态徽标同时提供文字、标记图形和色条；焦点使用同层 Outline/非射线装饰，不改变宿主 RectTransform 尺寸。
-- 抽屉焦点从空焦点、中央视图、播放栏和外部抽屉内容均可进入；关闭后回到对应入口；不同 RuntimeUiRoot 不互相抢焦点；动画从 alpha 0/不可交互起始。
+- 抽屉焦点从空焦点、中央视图、播放栏和外部抽屉内容均可进入；关闭后回到对应入口；动画从 alpha 0/不可交互起始。本次复核未新增双 RuntimeUiRoot 场景的专项隔离测试，报告不将其宣称为已覆盖。
 - `RuntimeUiReferences`、`TwinBootstrap` 和 `ResponsiveUiLayoutController` 均复用现有 UI Root/Canvas/ModalRoot，没有创建第二个 Canvas、EventSystem 或 ModalRoot。
 
 ## 范围与风险

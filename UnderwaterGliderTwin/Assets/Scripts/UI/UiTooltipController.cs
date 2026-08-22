@@ -115,27 +115,71 @@ namespace UnderwaterGliderTwin.UI
 
             var canvas = tooltipPopup.GetComponentInParent<Canvas>();
             var canvasRect = canvas != null ? canvas.transform as RectTransform : null;
+            var boundaryRect = tooltipPopup.parent as RectTransform ?? canvasRect;
+            if (boundaryRect != null && (boundaryRect.rect.width <= 0f || boundaryRect.rect.height <= 0f))
+            {
+                boundaryRect = canvasRect;
+            }
             var sourceRect = source.transform as RectTransform;
-            if (canvasRect == null || sourceRect == null)
+            if (canvasRect == null || boundaryRect == null || sourceRect == null)
             {
                 return;
             }
 
-            var corners = new Vector3[4];
-            sourceRect.GetWorldCorners(corners);
-            var screenPoint = RectTransformUtility.WorldToScreenPoint(canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera, corners[1]);
-            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, screenPoint, canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera, out var localPoint))
+            var sourceCorners = new Vector3[4];
+            sourceRect.GetWorldCorners(sourceCorners);
+            var localCorners = new Vector2[4];
+            var camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+            for (var i = 0; i < sourceCorners.Length; i++)
             {
-                return;
+                var screenPoint = RectTransformUtility.WorldToScreenPoint(camera, sourceCorners[i]);
+                if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(boundaryRect, screenPoint, camera, out localCorners[i]))
+                {
+                    return;
+                }
+            }
+
+            var sourceMinX = localCorners[0].x;
+            var sourceMaxX = localCorners[0].x;
+            var sourceMinY = localCorners[0].y;
+            var sourceMaxY = localCorners[0].y;
+            for (var i = 1; i < localCorners.Length; i++)
+            {
+                sourceMinX = Mathf.Min(sourceMinX, localCorners[i].x);
+                sourceMaxX = Mathf.Max(sourceMaxX, localCorners[i].x);
+                sourceMinY = Mathf.Min(sourceMinY, localCorners[i].y);
+                sourceMaxY = Mathf.Max(sourceMaxY, localCorners[i].y);
             }
 
             var popupSize = tooltipPopup.rect.size;
-            var canvasRectSize = canvasRect.rect.size;
-            var x = Mathf.Clamp(localPoint.x, -canvasRectSize.x * 0.5f + popupSize.x * 0.5f, canvasRectSize.x * 0.5f - popupSize.x * 0.5f);
-            var above = localPoint.y + popupSize.y * 0.5f + 8f;
-            var below = localPoint.y - popupSize.y * 0.5f - 8f;
-            var y = above + popupSize.y * 0.5f <= canvasRectSize.y * 0.5f ? above : below;
-            y = Mathf.Clamp(y, -canvasRectSize.y * 0.5f + popupSize.y * 0.5f, canvasRectSize.y * 0.5f - popupSize.y * 0.5f);
+            const float gap = 8f;
+            var popupHalfWidth = popupSize.x * 0.5f;
+            var popupHalfHeight = popupSize.y * 0.5f;
+            var boundaryMinX = boundaryRect.rect.xMin;
+            var boundaryMaxX = boundaryRect.rect.xMax;
+            var boundaryMinY = boundaryRect.rect.yMin;
+            var boundaryMaxY = boundaryRect.rect.yMax;
+            var sourceCenterX = (sourceMinX + sourceMaxX) * 0.5f;
+            var sourceCenterY = (sourceMinY + sourceMaxY) * 0.5f;
+            var x = Mathf.Clamp(sourceCenterX, boundaryMinX + popupHalfWidth, boundaryMaxX - popupHalfWidth);
+            var above = sourceMaxY + gap + popupHalfHeight;
+            var below = sourceMinY - gap - popupHalfHeight;
+            float y;
+            if (above + popupHalfHeight <= boundaryMaxY)
+            {
+                y = above;
+            }
+            else if (below - popupHalfHeight >= boundaryMinY)
+            {
+                y = below;
+            }
+            else
+            {
+                y = Mathf.Clamp(sourceCenterY,
+                    boundaryMinY + popupHalfHeight,
+                    boundaryMaxY - popupHalfHeight);
+            }
+
             tooltipPopup.anchoredPosition = new Vector2(x, y);
         }
 

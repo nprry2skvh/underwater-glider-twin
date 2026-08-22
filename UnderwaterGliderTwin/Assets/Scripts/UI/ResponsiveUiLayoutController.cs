@@ -122,6 +122,7 @@ namespace UnderwaterGliderTwin.UI
 
         public void CloseSideDrawer()
         {
+            tooltipController?.Hide();
             if (!openDrawer.HasValue)
             {
                 return;
@@ -172,11 +173,16 @@ namespace UnderwaterGliderTwin.UI
 
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                tooltipController?.Hide();
-                if (openDrawer.HasValue)
-                {
-                    CloseSideDrawer();
-                }
+                HandleEscape();
+            }
+        }
+
+        public void HandleEscape()
+        {
+            tooltipController?.Hide();
+            if (openDrawer.HasValue)
+            {
+                CloseSideDrawer();
             }
         }
 
@@ -328,6 +334,7 @@ namespace UnderwaterGliderTwin.UI
             {
                 SetScrimState(false, 0f);
                 RestoreFocus();
+                tooltipController?.Hide();
             }
             else
             {
@@ -346,12 +353,12 @@ namespace UnderwaterGliderTwin.UI
         {
             openDrawer = null;
             StopTransition();
-            tooltipController?.Hide();
             SetCanvasState(telemetryGroup, false, 0f);
             SetCanvasState(statusGroup, false, 0f);
             SetActive(viewportColumn, true);
             SetScrimState(false, 0f);
             RestoreFocus();
+            tooltipController?.Hide();
         }
 
         private void ApplyThreeColumnLayoutProfile()

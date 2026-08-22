@@ -684,26 +684,6 @@ namespace UnderwaterGliderTwin.UI
                 }
             }
 
-            ApplyExplicitVerticalNavigation(selectables);
-        }
-
-        private static void ApplyExplicitVerticalNavigation(Selectable[] selectables)
-        {
-            for (var i = 0; i < selectables.Length; i++)
-            {
-                if (selectables[i] == null)
-                {
-                    continue;
-                }
-
-                var navigation = selectables[i].navigation;
-                navigation.mode = Navigation.Mode.Explicit;
-                navigation.selectOnUp = i > 0 ? selectables[i - 1] : null;
-                navigation.selectOnDown = i + 1 < selectables.Length ? selectables[i + 1] : null;
-                navigation.selectOnLeft = null;
-                navigation.selectOnRight = null;
-                selectables[i].navigation = navigation;
-            }
         }
 
         private static string BuildTooltipMessage(Selectable selectable)

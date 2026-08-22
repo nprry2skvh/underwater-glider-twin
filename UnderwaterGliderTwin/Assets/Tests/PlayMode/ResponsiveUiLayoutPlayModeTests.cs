@@ -169,6 +169,104 @@ namespace UnderwaterGliderTwin.Tests
             }
         }
 
+        [UnityTest]
+        public IEnumerator Tooltip_HidesAfterAnimatedPublicCloseAndEscape()
+        {
+            using (var scope = new ResponsiveLayoutTestScope())
+            {
+                scope.Controller.SetAnimationsEnabledForTests(true);
+                scope.Controller.RefreshForScreen(1279f, 720f);
+                yield return null;
+                var source = scope.CreateTooltipHost(new Vector2(0f, 420f), new Vector2(140f, 60f));
+                scope.TooltipController.SetShowDelayForTests(0f);
+
+                scope.TooltipController.Show(source);
+                yield return null;
+                Assert.That(scope.TooltipController.IsVisible, Is.True);
+
+                scope.Controller.OpenSideDrawer(RuntimeUiSideDrawer.Telemetry);
+                yield return new WaitForSecondsRealtime(0.2f);
+                scope.TooltipController.Show(source);
+                yield return null;
+                Assert.That(scope.TooltipController.IsVisible, Is.True);
+
+                scope.Controller.CloseSideDrawer();
+                yield return new WaitForSecondsRealtime(0.2f);
+                Assert.That(scope.TooltipController.IsVisible, Is.False);
+
+                scope.Controller.OpenSideDrawer(RuntimeUiSideDrawer.Telemetry);
+                yield return new WaitForSecondsRealtime(0.2f);
+                scope.TooltipController.Show(source);
+                yield return null;
+                var escape = typeof(ResponsiveUiLayoutController).GetMethod("HandleEscape");
+                Assert.That(escape, Is.Not.Null);
+                escape.Invoke(scope.Controller, null);
+                yield return new WaitForSecondsRealtime(0.2f);
+                Assert.That(scope.TooltipController.IsVisible, Is.False);
+                Assert.That(scope.ScrimCanvasGroup.blocksRaycasts, Is.False);
+
+                scope.Controller.SetAnimationsEnabledForTests(false);
+                scope.Controller.OpenSideDrawer(RuntimeUiSideDrawer.Telemetry);
+                scope.TooltipController.Show(source);
+                yield return null;
+                Assert.That(scope.TooltipController.IsVisible, Is.True);
+                scope.Controller.CloseSideDrawer();
+                yield return null;
+                Assert.That(scope.TooltipController.IsVisible, Is.False);
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Tooltip_StaysOutsideHostWhenTopBoundaryRequiresBelowPlacement()
+        {
+            using (var scope = new ResponsiveLayoutTestScope())
+            {
+                scope.Controller.SetAnimationsEnabledForTests(false);
+                scope.Controller.RefreshForScreen(1279f, 720f);
+                yield return null;
+                var source = scope.CreateTooltipHost(new Vector2(0f, 470f), new Vector2(160f, 120f));
+                scope.TooltipController.SetShowDelayForTests(0f);
+                scope.TooltipController.Show(source);
+                yield return null;
+
+                Assert.That(scope.TooltipController.IsVisible, Is.True);
+                Assert.That(RectanglesDoNotOverlap(scope.TooltipController.Popup, source.transform as RectTransform), Is.True);
+                Assert.That(RectangleIsInside(scope.TooltipController.Popup, scope.ModalRoot), Is.True);
+            }
+        }
+
+        private static bool RectanglesDoNotOverlap(RectTransform first, RectTransform second)
+        {
+            var firstCorners = new Vector3[4];
+            var secondCorners = new Vector3[4];
+            first.GetWorldCorners(firstCorners);
+            second.GetWorldCorners(secondCorners);
+            var firstMinY = Mathf.Min(firstCorners[0].y, firstCorners[1].y, firstCorners[2].y, firstCorners[3].y);
+            var firstMaxY = Mathf.Max(firstCorners[0].y, firstCorners[1].y, firstCorners[2].y, firstCorners[3].y);
+            var secondMinY = Mathf.Min(secondCorners[0].y, secondCorners[1].y, secondCorners[2].y, secondCorners[3].y);
+            var secondMaxY = Mathf.Max(secondCorners[0].y, secondCorners[1].y, secondCorners[2].y, secondCorners[3].y);
+            return firstMinY >= secondMaxY || secondMinY >= firstMaxY;
+        }
+
+        private static bool RectangleIsInside(RectTransform child, RectTransform parent)
+        {
+            var childCorners = new Vector3[4];
+            var parentCorners = new Vector3[4];
+            child.GetWorldCorners(childCorners);
+            parent.GetWorldCorners(parentCorners);
+            var childMinX = Mathf.Min(childCorners[0].x, childCorners[1].x, childCorners[2].x, childCorners[3].x);
+            var childMaxX = Mathf.Max(childCorners[0].x, childCorners[1].x, childCorners[2].x, childCorners[3].x);
+            var childMinY = Mathf.Min(childCorners[0].y, childCorners[1].y, childCorners[2].y, childCorners[3].y);
+            var childMaxY = Mathf.Max(childCorners[0].y, childCorners[1].y, childCorners[2].y, childCorners[3].y);
+            var parentMinX = Mathf.Min(parentCorners[0].x, parentCorners[1].x, parentCorners[2].x, parentCorners[3].x);
+            var parentMaxX = Mathf.Max(parentCorners[0].x, parentCorners[1].x, parentCorners[2].x, parentCorners[3].x);
+            var parentMinY = Mathf.Min(parentCorners[0].y, parentCorners[1].y, parentCorners[2].y, parentCorners[3].y);
+            var parentMaxY = Mathf.Max(parentCorners[0].y, parentCorners[1].y, parentCorners[2].y, parentCorners[3].y);
+            const float tolerance = 0.01f;
+            return childMinX >= parentMinX - tolerance && childMaxX <= parentMaxX + tolerance
+                && childMinY >= parentMinY - tolerance && childMaxY <= parentMaxY + tolerance;
+        }
+
         private static void AssertColumnWidth(RectTransform column, float minWidth, float preferredWidth, float flexibleWidth = 0f)
         {
             var layout = column.GetComponent<LayoutElement>();
@@ -223,6 +321,10 @@ namespace UnderwaterGliderTwin.Tests
                 references.layout.statusDrawerToggle = CreateButton("StatusDrawerToggle", references.layout.drawerEntryLayer, out _);
 
                 var modalRoot = CreateRect("ModalRoot", canvasObject.transform);
+                modalRoot.anchorMin = Vector2.zero;
+                modalRoot.anchorMax = Vector2.one;
+                modalRoot.offsetMin = Vector2.zero;
+                modalRoot.offsetMax = Vector2.zero;
                 references.layout.drawerScrim = CreateImage("DrawerScrim", modalRoot);
                 var oceanCurrentDrawer = CreateRect("OceanCurrentDrawer", modalRoot);
                 CreateRect("FlightLegDrawer", modalRoot);
@@ -246,10 +348,16 @@ namespace UnderwaterGliderTwin.Tests
                 var controllerObject = uiRoot.gameObject;
                 Controller = controllerObject.AddComponent<ResponsiveUiLayoutController>();
                 Controller.Bind(runtimeRoot, null);
+                Canvas = canvas;
+                ModalRoot = modalRoot;
+                TooltipController = modalRoot.Find("TooltipPopup")?.GetComponent<UiTooltipController>();
 
             }
 
             public ResponsiveUiLayoutController Controller { get; }
+            public Canvas Canvas { get; }
+            public RectTransform ModalRoot { get; }
+            public UiTooltipController TooltipController { get; }
             public Button TelemetryToggle { get; }
             public Button StatusToggle { get; }
             public RectTransform MainBody { get; }
@@ -265,6 +373,22 @@ namespace UnderwaterGliderTwin.Tests
             public CanvasGroup TelemetryCanvasGroup => EnsureCanvasGroup(TelemetryColumn != null ? TelemetryColumn.gameObject : null);
             public CanvasGroup StatusCanvasGroup => EnsureCanvasGroup(StatusColumn != null ? StatusColumn.gameObject : null);
             public CanvasGroup ScrimCanvasGroup => EnsureCanvasGroup(ScrimImage != null ? ScrimImage.gameObject : null);
+
+            public UiTooltip CreateTooltipHost(Vector2 anchoredPosition, Vector2 size)
+            {
+                var hostObject = new GameObject("TooltipHost", typeof(RectTransform), typeof(Image), typeof(Button));
+                hostObject.transform.SetParent(Canvas.transform, false);
+                var rect = hostObject.GetComponent<RectTransform>();
+                rect.anchorMin = new Vector2(0.5f, 0.5f);
+                rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.anchoredPosition = anchoredPosition;
+                rect.sizeDelta = size;
+                var tooltip = hostObject.AddComponent<UiTooltip>();
+                tooltip.SetController(TooltipController);
+                tooltip.SetMessage("边界定位测试");
+                return tooltip;
+            }
 
             public void Dispose()
             {
