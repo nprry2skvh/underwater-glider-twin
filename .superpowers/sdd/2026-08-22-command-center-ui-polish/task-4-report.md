@@ -12,41 +12,55 @@
 
 ## TDD 证据
 
-### RED
+### CHANGES_REQUESTED 修复 RED
 
-命令：
+先只加入审查回归断言，未改生产代码。
+
+EditMode 命令：
 
 ```text
-E:\upan\digital twin\.worktrees\responsive-command-center-ui\scripts\test-editmode.cmd
+cmd /c scripts\test-editmode.cmd
 ```
 
-真实结果：`425` 个 EditMode 用例中 `422` 通过、`3` 失败。失败断言为：
+精确结果：命令以退出码 `1` 结束；`TestResults/EditModeResults.xml` 为 `total=428 passed=425 failed=3 skipped=0`。失败断言为：
 
-- `UiFactory_UsesApprovedCommandCenterPaletteAndButtonStates`：旧面板色值不是 `#0B2430`。
-- `PlaybackControlsView_UsesThreeVisualSegmentsWithoutCameraDuplicates`：三段播放行尚未存在。
-- `OceanCommandToolbarView_MarksCurrentCameraWithAccentEdge`：点击视角后仍为普通边线色。
+- `OceanCommandToolbarView_BindMarksExistingGlobalCameraMode`
+- `OceanCommandToolbarView_ResetMarksGlobalCameraMode`
+- `UiFactory_ApplyRuntimePalettePreservesCustomButtonStateColors`
+
+随后首次全量 PlayMode 命令也保留了真实 RED：
+
+```text
+C:\Program Files\Unity\Hub\Editor\2022.3.62f3c1\Editor\Unity.exe -batchmode -nographics -projectPath E:\upan\digital twin\.worktrees\responsive-command-center-ui\UnderwaterGliderTwin -runTests -testPlatform PlayMode -testResults E:\upan\digital twin\.worktrees\responsive-command-center-ui\TestResults\Task4ReviewPlayModeResults.xml -logFile E:\upan\digital twin\.worktrees\responsive-command-center-ui\TestResults\Task4ReviewPlayMode.log
+```
+
+精确结果：`total=12 passed=11 failed=1 skipped=0`；失败为 `MainScene_CommandToolbarSelectionFollowsGlobalInitialization`，证明外部 bootstrap 在 Bind 后切换到 Global 时 UI 未跟随。
 
 ### GREEN
 
-命令：
+EditMode 命令：
 
 ```text
-E:\upan\digital twin\.worktrees\responsive-command-center-ui\scripts\test-editmode.cmd
+cmd /c scripts\test-editmode.cmd
 ```
 
-精确结果：`EditMode tests passed: 425/425`，结果文件为：
+精确结果：`EditMode tests passed: 428/428`，结果文件为：
 
 ```text
 E:\upan\digital twin\.worktrees\responsive-command-center-ui\TestResults\EditModeResults.xml
 ```
 
-命令：
+全量 PlayMode 命令：
 
 ```text
-C:\Program Files\Unity\Hub\Editor\2022.3.62f3c1\Editor\Unity.exe -batchmode -nographics -projectPath E:\upan\digital twin\.worktrees\responsive-command-center-ui\UnderwaterGliderTwin -runTests -testPlatform PlayMode -testResults E:\upan\digital twin\.worktrees\responsive-command-center-ui\TestResults\PlayModeResults.xml -logFile E:\upan\digital twin\.worktrees\responsive-command-center-ui\TestResults\PlayMode.log -quit
+C:\Program Files\Unity\Hub\Editor\2022.3.62f3c1\Editor\Unity.exe -batchmode -nographics -projectPath E:\upan\digital twin\.worktrees\responsive-command-center-ui\UnderwaterGliderTwin -runTests -testPlatform PlayMode -testResults E:\upan\digital twin\.worktrees\responsive-command-center-ui\TestResults\Task4ReviewPlayModeGreenResults.xml -logFile E:\upan\digital twin\.worktrees\responsive-command-center-ui\TestResults\Task4ReviewPlayModeGreen.log
 ```
 
-精确结果：`RESULT=Passed TOTAL=7 PASSED=7 FAILED=0`。
+精确结果：`result=Passed total=12 passed=12 failed=0 skipped=0`，不是旧的 7 项结果；结果文件为：
+
+```text
+E:\upan\digital twin\.worktrees\responsive-command-center-ui\TestResults\Task4ReviewPlayModeGreenResults.xml
+```
 
 最终检查：
 
@@ -58,7 +72,7 @@ git diff --check
 
 ## 视觉检查说明
 
-已对两个 Task 4 Prefab 做静态 YAML 检查：面板/控件状态色已切换到批准 token，工具条覆盖层 alpha 为 `0.2` 且 `raycastTarget = false`，播放栏重复相机按钮为 inactive；运行时 EditMode/PlayMode 断言覆盖了顶栏文本、三段播放层级、活动相机入口、选中边线、禁用态和覆盖层射线行为。
+已对两个 Task 4 Prefab 做静态 YAML 检查：面板/控件状态色已切换到批准 token，工具条覆盖层 alpha 为 `0.2` 且 `raycastTarget = false`，播放栏重复相机按钮为 inactive；运行时 EditMode/PlayMode 断言覆盖了顶栏文本、三段播放层级、活动相机入口、初始化/外部模式切换/reset 后的选中边线、禁用态、完整按钮状态色保护和覆盖层射线行为。未新增 Canvas、EventSystem 或 ModalRoot。
 
 本 Task 未生成四分辨率 Windows Player 截图；实际 Player 截图与构建验收留给计划中的 Task 7，因此剩余风险是不同 CanvasScaler/字体环境下的最终像素级可读性仍需 Player 证据确认。
 

@@ -8,6 +8,9 @@ namespace UnderwaterGliderTwin.UI
     {
         private Text visibleArrowCountText;
         private OceanVolumeView oceanVolume;
+        private TwinCameraController boundCameraController;
+        private OceanToolbarRefs boundRefs;
+        private Transform boundToolbarParent;
 
         [System.Obsolete("Use Bind(...) with editable UI references.")]
         public void Initialize(TwinCameraController cameraController, TrajectoryView trajectoryView)
@@ -34,6 +37,9 @@ namespace UnderwaterGliderTwin.UI
                 new Vector2(0.5f, 1f),
                 new Vector2(0f, -320f),
                 new Vector2(880f, 58f));
+            boundCameraController = cameraController;
+            boundRefs = null;
+            boundToolbarParent = panel;
 
             UiFactory.Text("OceanToolbarTitle", panel, "3D \u6d77\u6d41\u573a\u53ef\u89c6\u5316", 16, TextAnchor.MiddleLeft, UiFactory.CommandText,
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(18f, 0f), new Vector2(166f, 32f));
@@ -55,8 +61,9 @@ namespace UnderwaterGliderTwin.UI
             {
                 cameraController.ResetView();
                 trajectoryView.SetCameraMode(CameraMode.Global);
+                SetCameraSelection(panel, CameraMode.Global);
             });
-            UiFactory.SetButtonSelected(panel.Find("CameraFollowCommand")?.GetComponent<Button>(), true);
+            SetCameraSelection(panel, cameraController != null ? cameraController.CurrentMode : CameraMode.Follow);
         }
 
         public void Bind(OceanToolbarRefs refs, TwinCameraController cameraController, TrajectoryView trajectoryView)
@@ -66,13 +73,16 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            boundCameraController = cameraController;
+            boundRefs = refs;
+            boundToolbarParent = null;
             visibleArrowCountText = refs.visibleArrowCount;
             BindCameraButton(refs.cameraFollowCommand, cameraController, trajectoryView, CameraMode.Follow);
             BindCameraButton(refs.cameraGlobalCommand, cameraController, trajectoryView, CameraMode.Global);
             BindCameraButton(refs.cameraTopCommand, cameraController, trajectoryView, CameraMode.Top);
             BindCameraButton(refs.cameraSideCommand, cameraController, trajectoryView, CameraMode.Side);
             BindCameraButton(refs.cameraOrbitCommand, cameraController, trajectoryView, CameraMode.Orbit);
-            UiFactory.SetButtonSelected(refs.cameraFollowCommand, true);
+            SetCameraSelection(refs, cameraController != null ? cameraController.CurrentMode : CameraMode.Follow);
             if (refs.cameraResetCommand != null)
             {
                 refs.cameraResetCommand.onClick.RemoveAllListeners();
@@ -80,12 +90,25 @@ namespace UnderwaterGliderTwin.UI
                 {
                     cameraController?.ResetView();
                     trajectoryView?.SetCameraMode(CameraMode.Global);
+                    SetCameraSelection(refs, CameraMode.Global);
                 });
             }
         }
 
         private void Update()
         {
+            if (boundCameraController != null)
+            {
+                if (boundRefs != null)
+                {
+                    SetCameraSelection(boundRefs, boundCameraController.CurrentMode);
+                }
+                else if (boundToolbarParent != null)
+                {
+                    SetCameraSelection(boundToolbarParent, boundCameraController.CurrentMode);
+                }
+            }
+
             if (visibleArrowCountText == null)
             {
                 return;
@@ -144,6 +167,53 @@ namespace UnderwaterGliderTwin.UI
                 }
 
                 UiFactory.SetButtonSelected(button, button == selected);
+            }
+        }
+
+        private static void SetCameraSelection(Transform parent, CameraMode mode)
+        {
+            if (parent == null)
+            {
+                return;
+            }
+
+            var selectedName = CameraCommandName(mode);
+            foreach (var button in parent.GetComponentsInChildren<Button>(true))
+            {
+                if (button.name.IndexOf("Camera", System.StringComparison.OrdinalIgnoreCase) < 0
+                    || button.name.IndexOf("Command", System.StringComparison.OrdinalIgnoreCase) < 0
+                    || button.name.IndexOf("Reset", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    continue;
+                }
+
+                UiFactory.SetButtonSelected(button, button.name == selectedName);
+            }
+        }
+
+        private static void SetCameraSelection(OceanToolbarRefs refs, CameraMode mode)
+        {
+            if (refs == null)
+            {
+                return;
+            }
+
+            UiFactory.SetButtonSelected(refs.cameraFollowCommand, mode == CameraMode.Follow);
+            UiFactory.SetButtonSelected(refs.cameraGlobalCommand, mode == CameraMode.Global);
+            UiFactory.SetButtonSelected(refs.cameraTopCommand, mode == CameraMode.Top);
+            UiFactory.SetButtonSelected(refs.cameraSideCommand, mode == CameraMode.Side);
+            UiFactory.SetButtonSelected(refs.cameraOrbitCommand, mode == CameraMode.Orbit);
+        }
+
+        private static string CameraCommandName(CameraMode mode)
+        {
+            switch (mode)
+            {
+                case CameraMode.Global: return "CameraGlobalCommand";
+                case CameraMode.Top: return "CameraTopCommand";
+                case CameraMode.Side: return "CameraSideCommand";
+                case CameraMode.Orbit: return "CameraOrbitCommand";
+                default: return "CameraFollowCommand";
             }
         }
 

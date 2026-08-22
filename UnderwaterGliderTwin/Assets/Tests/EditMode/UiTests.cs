@@ -1806,6 +1806,34 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void UiFactory_ApplyRuntimePalettePreservesCustomButtonStateColors()
+        {
+            var canvas = new GameObject("PaletteCanvas", typeof(RectTransform), typeof(Canvas));
+            var panel = new GameObject("PlaybackControlsPanel", typeof(RectTransform), typeof(Image));
+            panel.transform.SetParent(canvas.transform, false);
+            var button = new GameObject("UserStyledButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            button.transform.SetParent(panel.transform, false);
+            var component = button.GetComponent<Button>();
+            var colors = component.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(0.91f, 0.24f, 0.32f, 1f);
+            colors.pressedColor = new Color(0.14f, 0.72f, 0.41f, 1f);
+            colors.selectedColor = new Color(0.96f, 0.71f, 0.16f, 1f);
+            colors.disabledColor = new Color(0.31f, 0.18f, 0.62f, 0.77f);
+            component.colors = colors;
+            var before = component.colors;
+
+            UiFactory.ApplyRuntimePalette(canvas.transform);
+
+            var after = component.colors;
+            Assert.That(after.normalColor, Is.EqualTo(before.normalColor));
+            Assert.That(after.highlightedColor, Is.EqualTo(before.highlightedColor));
+            Assert.That(after.pressedColor, Is.EqualTo(before.pressedColor));
+            Assert.That(after.selectedColor, Is.EqualTo(before.selectedColor));
+            Assert.That(after.disabledColor, Is.EqualTo(before.disabledColor));
+        }
+
+        [Test]
         public void UiFactory_UsesApprovedCommandCenterPaletteAndButtonStates()
         {
             AssertColorClose(UiFactory.CommandPanelFill, ParseColor("#0B2430"));
@@ -1940,6 +1968,58 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(top.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandAccent));
             Assert.That(GameObject.Find("CameraFollowCommand").GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandPanelEdge));
+        }
+
+        [Test]
+        public void OceanCommandToolbarView_BindMarksExistingGlobalCameraMode()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("ToolbarCamera").AddComponent<TwinCameraController>();
+            var target = new GameObject("ToolbarTarget");
+            cameraController.Initialize(target.transform, new[] { Vector3.zero, Vector3.one });
+            cameraController.SetMissionVolumeView(80f);
+            var trajectory = new GameObject("ToolbarTrajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            trajectory.SetCameraMode(CameraMode.Global);
+            var panel = new GameObject("OceanCommandToolbar", typeof(RectTransform));
+            var follow = UiFactory.Button("CameraFollowCommand", panel.transform, "跟随", Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(60f, 32f));
+            var global = UiFactory.Button("CameraGlobalCommand", panel.transform, "全局", Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(60f, 32f));
+            var toolbar = new GameObject("Toolbar").AddComponent<OceanCommandToolbarView>();
+
+            toolbar.Bind(new OceanToolbarRefs
+            {
+                panel = panel.GetComponent<RectTransform>(),
+                cameraFollowCommand = follow,
+                cameraGlobalCommand = global
+            }, cameraController, trajectory);
+
+            Assert.That(global.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandAccent));
+            Assert.That(follow.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandPanelEdge));
+        }
+
+        [Test]
+        public void OceanCommandToolbarView_ResetMarksGlobalCameraMode()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("ToolbarCamera").AddComponent<TwinCameraController>();
+            var target = new GameObject("ToolbarTarget");
+            cameraController.Initialize(target.transform, new[] { Vector3.zero, Vector3.one });
+            var trajectory = new GameObject("ToolbarTrajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            var toolbar = new GameObject("Toolbar").AddComponent<OceanCommandToolbarView>();
+
+            toolbar.Initialize(cameraController, trajectory);
+            GameObject.Find("CameraTopCommand").GetComponent<Button>().onClick.Invoke();
+            GameObject.Find("CameraResetCommand").GetComponent<Button>().onClick.Invoke();
+
+            Assert.That(GameObject.Find("CameraGlobalCommand").GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandAccent));
+            Assert.That(GameObject.Find("CameraTopCommand").GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandPanelEdge));
         }
 
         [Test]

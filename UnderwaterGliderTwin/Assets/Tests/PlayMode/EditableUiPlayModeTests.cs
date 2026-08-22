@@ -222,6 +222,49 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(FindSceneObject(scene, "CommandCenterExit"), Is.Not.Null);
         }
 
+        [UnityTest]
+        public IEnumerator MainScene_CommandToolbarSelectionFollowsGlobalInitialization()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var scene = SceneManager.GetActiveScene();
+            var global = FindSceneComponent<Button>(scene, "CameraGlobalCommand");
+            var follow = FindSceneComponent<Button>(scene, "CameraFollowCommand");
+            Assert.That(global, Is.Not.Null);
+            Assert.That(follow, Is.Not.Null);
+            Assert.That(global.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandAccent));
+            Assert.That(follow.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandPanelEdge));
+        }
+
+        [UnityTest]
+        public IEnumerator MainScene_CommandToolbarResetKeepsGlobalSelection()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var scene = SceneManager.GetActiveScene();
+            var top = FindSceneComponent<Button>(scene, "CameraTopCommand");
+            var reset = FindSceneComponent<Button>(scene, "CameraResetCommand");
+            var global = FindSceneComponent<Button>(scene, "CameraGlobalCommand");
+            var follow = FindSceneComponent<Button>(scene, "CameraFollowCommand");
+            Assert.That(top, Is.Not.Null);
+            Assert.That(reset, Is.Not.Null);
+            Assert.That(global, Is.Not.Null);
+            Assert.That(follow, Is.Not.Null);
+
+            top.onClick.Invoke();
+            reset.onClick.Invoke();
+            yield return null;
+
+            Assert.That(global.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandAccent));
+            Assert.That(follow.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandPanelEdge));
+        }
+
         private static GameObject FindSceneObject(Scene scene, string objectName)
         {
             foreach (var transform in Object.FindObjectsOfType<Transform>(true))

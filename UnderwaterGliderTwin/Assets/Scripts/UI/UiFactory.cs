@@ -681,8 +681,19 @@ namespace UnderwaterGliderTwin.UI
 
         private static bool IsDefaultButtonStates(ColorBlock colors)
         {
-            return colors.normalColor == Color.white
-                && colors.fadeDuration == ColorBlock.defaultColorBlock.fadeDuration;
+            return AreButtonStatesEqual(colors, ColorBlock.defaultColorBlock)
+                || AreButtonStatesEqual(colors, CreateButtonStates());
+        }
+
+        private static bool AreButtonStatesEqual(ColorBlock left, ColorBlock right)
+        {
+            return left.normalColor == right.normalColor
+                && left.highlightedColor == right.highlightedColor
+                && left.pressedColor == right.pressedColor
+                && left.selectedColor == right.selectedColor
+                && left.disabledColor == right.disabledColor
+                && left.colorMultiplier == right.colorMultiplier
+                && left.fadeDuration == right.fadeDuration;
         }
 
         private static bool IsPrimaryButton(Button button)
