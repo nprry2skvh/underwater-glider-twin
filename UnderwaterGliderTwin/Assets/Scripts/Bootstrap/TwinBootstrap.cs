@@ -301,6 +301,9 @@ namespace UnderwaterGliderTwin.Bootstrap
                 return;
             }
 
+            UiFactory.ApplyResponsivePanelRoots(canvas);
+            UiFactory.ApplyRuntimeLabels(canvas.transform);
+
             var modalRoot = canvas.transform.Find("ModalRoot") as RectTransform;
             var runtimeRoot = canvasRoot.GetComponent<RuntimeUiRoot>() ?? canvasRoot.AddComponent<RuntimeUiRoot>();
             runtimeRoot.ConfigureRuntimeReferences(canvas, modalRoot, new RuntimeUiReferences(), RuntimeUiPanelFlags.None);
@@ -325,6 +328,9 @@ namespace UnderwaterGliderTwin.Bootstrap
             {
                 return;
             }
+
+            UiFactory.ApplyResponsivePanelRoots(root.RuntimeCanvas);
+            UiFactory.ApplyRuntimeLabels(root.RuntimeCanvas.transform);
 
             var controller = uiRoot.GetComponent<ResponsiveUiLayoutController>() ?? uiRoot.gameObject.AddComponent<ResponsiveUiLayoutController>();
             controller.Bind(root, root.References);

@@ -636,5 +636,134 @@ namespace UnderwaterGliderTwin.UI
                 text.text = label;
             }
         }
+
+        public static void ApplyResponsivePanelRoots(Canvas canvas)
+        {
+            if (canvas == null)
+            {
+                return;
+            }
+
+            var panelNames = new[]
+            {
+                "DashboardPanel",
+                "StatusPanel",
+                "DataInputPanel",
+                "PlaybackControlsPanel",
+                "OceanCommandToolbar"
+            };
+
+            foreach (var panelName in panelNames)
+            {
+                var panel = FindDescendant(canvas.transform, panelName) as RectTransform;
+                if (panel == null)
+                {
+                    continue;
+                }
+
+                ConfigureRect(panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-24f, -24f));
+                var layout = panel.GetComponent<LayoutElement>() ?? panel.gameObject.AddComponent<LayoutElement>();
+                layout.minWidth = 0f;
+                layout.preferredWidth = 0f;
+                layout.flexibleWidth = 1f;
+                layout.minHeight = 0f;
+                layout.preferredHeight = 0f;
+                layout.flexibleHeight = 1f;
+            }
+        }
+
+        public static void ApplyRuntimeLabels(Transform root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            foreach (var text in root.GetComponentsInChildren<Text>(true))
+            {
+                var hasLabel = TryGetRuntimeLabel(text.name, out var label)
+                    || TryGetRuntimeLabel(text.text, out label);
+                if (!hasLabel && text.GetComponentInParent<Button>() != null && text.transform.parent != null)
+                {
+                    hasLabel = TryGetRuntimeLabel(text.transform.parent.name, out label);
+                }
+
+                if (hasLabel)
+                {
+                    text.text = label;
+                }
+            }
+        }
+
+        private static bool TryGetRuntimeLabel(string name, out string label)
+        {
+            switch (name)
+            {
+                case "DashboardPanel": label = "遥测数据"; return true;
+                case "StatusPanel": label = "任务状态"; return true;
+                case "DataInputPanel": label = "任务配置"; return true;
+                case "PlaybackControlsPanel": label = "播放控制"; return true;
+                case "OceanCommandToolbar": label = "三维海流视图"; return true;
+                case "CameraFollowCommand":
+                case "CameraFollowButton": label = "跟随"; return true;
+                case "CameraGlobalCommand":
+                case "CameraGlobalButton": label = "全局"; return true;
+                case "CameraTopCommand": label = "俯视"; return true;
+                case "CameraSideCommand": label = "侧视"; return true;
+                case "CameraOrbitCommand":
+                case "CameraOrbitButton": label = "环绕"; return true;
+                case "CameraResetCommand": label = "复位视角"; return true;
+                case "PlayPauseButton": label = "开始"; return true;
+                case "ReverseButton": label = "倒放"; return true;
+                case "ReplayButton": label = "回放"; return true;
+                case "ResetButton": label = "重置"; return true;
+                case "ExportButton": label = "导出"; return true;
+                case "ExitButton": label = "退出"; return true;
+                case "MissionVolumeButton": label = "海域"; return true;
+                case "FogToggle": label = "雾效"; return true;
+                case "ParticlesToggle": label = "粒子"; return true;
+                case "TrajectoryToggle": label = "航迹"; return true;
+                case "Speed05Button": label = "0.5x"; return true;
+                case "Speed1Button": label = "1x"; return true;
+                case "Speed2Button": label = "2x"; return true;
+                case "Speed5Button": label = "5x"; return true;
+                case "Speed10Button": label = "10x"; return true;
+                case "LoadCsvButton": label = "加载 CSV"; return true;
+                case "ApplyButton": label = "运行仿真"; return true;
+                case "ApplyPredictionConfigButton": label = "应用预测"; return true;
+                case "PredictionToggleButton": label = "开始预测"; return true;
+                case "FlightLegSettingsButton": label = "航段参数"; return true;
+                case "LookupButton": label = "查询海流"; return true;
+                case "PreviousLayerButton": label = "上一层"; return true;
+                case "NextLayerButton": label = "下一层"; return true;
+                case "AddLayerButton": label = "添加层"; return true;
+                case "SaveLayerButton": label = "保存层"; return true;
+                case "DeleteLayerButton": label = "删除层"; return true;
+                case "CsvSourceLabel": label = "CSV 文件"; return true;
+                case "ModelLabel": label = "预测模型"; return true;
+                case "StatusText": label = "状态"; return true;
+                default:
+                    label = null;
+                    return false;
+            }
+        }
+
+        private static Transform FindDescendant(Transform root, string name)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            foreach (var child in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name == name)
+                {
+                    return child;
+                }
+            }
+
+            return null;
+        }
     }
 }

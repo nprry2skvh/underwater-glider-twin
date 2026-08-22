@@ -68,10 +68,12 @@ namespace UnderwaterGliderTwin.UI
                 openDrawer = null;
                 StopTransition();
                 ApplyThreeColumnState();
+                ApplyTypography(width, height);
                 return;
             }
 
             ApplyDrawerModeState();
+            ApplyTypography(width, height);
         }
 
         public void OpenSideDrawer(RuntimeUiSideDrawer drawer)
@@ -188,6 +190,43 @@ namespace UnderwaterGliderTwin.UI
             telemetryGroup = EnsureCanvasGroup(telemetryColumn);
             statusGroup = EnsureCanvasGroup(statusColumn);
             scrimGroup = drawerScrim != null ? EnsureCanvasGroup(drawerScrim.gameObject) : null;
+        }
+
+        private void ApplyTypography(float width, float height)
+        {
+            var canvas = runtimeRoot != null ? runtimeRoot.RuntimeCanvas : null;
+            if (canvas == null)
+            {
+                return;
+            }
+
+            var profile = ResponsiveUiTypography.ForMode(currentMode, width, height);
+            var logicalScale = canvas.scaleFactor > 0f ? canvas.scaleFactor : 1f;
+            foreach (var text in canvas.GetComponentsInChildren<Text>(true))
+            {
+                var isButtonText = text.GetComponentInParent<Button>() != null;
+                var isTitle = text.name.IndexOf("Title", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                var desiredSize = isTitle
+                    ? profile.sectionTitleSize
+                    : isButtonText
+                        ? profile.buttonSize
+                        : text.name.IndexOf("Label", System.StringComparison.OrdinalIgnoreCase) >= 0
+                            ? profile.labelSize
+                            : profile.valueSize;
+                text.fontSize = Mathf.Max(text.fontSize, desiredSize);
+                text.horizontalOverflow = HorizontalWrapMode.Wrap;
+                text.verticalOverflow = VerticalWrapMode.Truncate;
+                text.supportRichText = false;
+            }
+
+            var actualMinimum = ResponsiveUiTypography.GetActualPixelSize(profile.labelSize, logicalScale);
+            if (actualMinimum < profile.minimumReadablePixelSize && currentMode == RuntimeUiLayoutMode.Drawer)
+            {
+                foreach (var text in canvas.GetComponentsInChildren<Text>(true))
+                {
+                    text.fontSize = Mathf.Max(text.fontSize, Mathf.CeilToInt(profile.minimumReadablePixelSize / logicalScale));
+                }
+            }
         }
 
         private void WireDrawerButtons()

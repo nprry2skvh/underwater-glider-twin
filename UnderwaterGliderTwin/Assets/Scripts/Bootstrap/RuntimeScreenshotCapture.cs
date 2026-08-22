@@ -7,7 +7,7 @@ namespace UnderwaterGliderTwin.Bootstrap
 {
     public sealed class RuntimeScreenshotCapture : MonoBehaviour
     {
-        public const int WarmupFrameCount = 2;
+        public const int WarmupFrameCount = 30;
 
         private RuntimeScreenshotOptions options;
 
@@ -19,7 +19,7 @@ namespace UnderwaterGliderTwin.Bootstrap
                 return;
             }
 
-            Screen.SetResolution(RuntimeScreenshotOptions.CaptureWidth, RuntimeScreenshotOptions.CaptureHeight, FullScreenMode.Windowed);
+            Screen.SetResolution(options.Width, options.Height, FullScreenMode.Windowed);
             StartCoroutine(CaptureAtEndOfFrame(options.OutputPath, options.QuitAfterCapture));
         }
 

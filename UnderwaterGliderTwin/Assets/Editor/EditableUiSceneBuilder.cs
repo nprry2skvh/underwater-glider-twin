@@ -415,6 +415,8 @@ namespace UnderwaterGliderTwin.Editor
                     existing.transform.SetParent(runtimeCanvas, false);
                 }
 
+                MigrateLegacyPanelLayout(existing.transform as RectTransform, panelName);
+
                 return;
             }
 
@@ -782,21 +784,62 @@ namespace UnderwaterGliderTwin.Editor
             switch (panelName)
             {
                 case "DashboardPanel":
-                    ConfigureRect(rect, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-48f, -208f));
+                    ConfigureResponsivePanelRect(rect);
                     break;
                 case "StatusPanel":
-                    ConfigureRect(rect, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(-48f, 96f));
+                    ConfigureResponsivePanelRect(rect);
                     break;
                 case "DataInputPanel":
-                    ConfigureRect(rect, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 158f), new Vector2(-48f, 48f));
+                    ConfigureResponsivePanelRect(rect);
                     break;
                 case "PlaybackControlsPanel":
-                    ConfigureRect(rect, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 18f), new Vector2(-48f, 124f));
+                    ConfigureResponsivePanelRect(rect);
                     break;
                 case "OceanCommandToolbar":
-                    ConfigureRect(rect, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-24f, -112f), new Vector2(360f, 48f));
+                    ConfigureResponsivePanelRect(rect);
                     break;
             }
+        }
+
+        private static void MigrateLegacyPanelLayout(RectTransform rect, string panelName)
+        {
+            if (rect == null || !HasLegacyPanelLayout(rect, panelName))
+            {
+                return;
+            }
+
+            ConfigureResponsivePanelRect(rect);
+        }
+
+        private static bool HasLegacyPanelLayout(RectTransform rect, string panelName)
+        {
+            switch (panelName)
+            {
+                case "DashboardPanel":
+                    return rect.sizeDelta.y < -100f;
+                case "StatusPanel":
+                    return rect.anchorMin.y > 0.9f && rect.sizeDelta.y > 60f;
+                case "DataInputPanel":
+                    return rect.anchorMax.y < 0.1f && rect.sizeDelta.y < 100f;
+                case "PlaybackControlsPanel":
+                    return rect.anchorMax.y < 0.1f && rect.sizeDelta.y >= 100f;
+                case "OceanCommandToolbar":
+                    return rect.anchorMin.x > 0.9f && rect.sizeDelta.x > 100f;
+                default:
+                    return false;
+            }
+        }
+
+        private static void ConfigureResponsivePanelRect(RectTransform rect)
+        {
+            ConfigureRect(rect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-24f, -24f));
+            var layout = rect.GetComponent<LayoutElement>() ?? rect.gameObject.AddComponent<LayoutElement>();
+            layout.minWidth = 0f;
+            layout.preferredWidth = 0f;
+            layout.flexibleWidth = 1f;
+            layout.minHeight = 0f;
+            layout.preferredHeight = 0f;
+            layout.flexibleHeight = 1f;
         }
 
         private static GameObject EnsureSceneChild(Transform parent, string name, Type firstComponent, Type secondComponent, out bool wasCreated)

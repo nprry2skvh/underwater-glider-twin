@@ -69,6 +69,7 @@ namespace UnderwaterGliderTwin.UI
             trajectoryView.SetCameraMode(CameraMode.Follow);
             trajectoryView.SetVisible(true);
             HideLegacyCameraControls(panel);
+            ConfigureResponsiveLayout(panel);
 
             playback.FrameChanged += OnFrameChanged;
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01);
@@ -96,6 +97,7 @@ namespace UnderwaterGliderTwin.UI
             BindButton(refs.exitButton, OnExitClicked);
             BindButton(refs.missionVolumeButton, OnMissionViewClicked);
             HideLegacyCameraControls(refs.panel);
+            ConfigureResponsiveLayout(refs.panel);
             BindCameraButton(refs.cameraFollowButton, cameraController, trajectoryView, CameraMode.Follow);
             BindCameraButton(refs.cameraGlobalButton, cameraController, trajectoryView, CameraMode.Global);
             BindCameraButton(refs.cameraOrbitButton, cameraController, trajectoryView, CameraMode.Orbit);
@@ -159,6 +161,80 @@ namespace UnderwaterGliderTwin.UI
                     legacyControl.gameObject.SetActive(false);
                 }
             }
+        }
+
+        private static void ConfigureResponsiveLayout(Transform panel)
+        {
+            if (panel == null)
+            {
+                return;
+            }
+
+            var primary = EnsureLayoutRow(panel, "PlaybackPrimaryRow", new Vector2(0f, 0.52f), Vector2.one);
+            var secondary = EnsureLayoutRow(panel, "PlaybackSecondaryRow", Vector2.zero, new Vector2(1f, 0.48f));
+            MoveToRow(panel, primary, "PlayPauseButton", 82f);
+            MoveToRow(panel, primary, "ReverseButton", 82f);
+            MoveToRow(panel, primary, "ReplayButton", 82f);
+            MoveToRow(panel, primary, "ResetButton", 82f);
+            MoveToRow(panel, primary, "ExportButton", 82f);
+            MoveToRow(panel, primary, "ProgressSlider", 0f, true);
+            MoveToRow(panel, primary, "ExitButton", 76f);
+
+            MoveToRow(panel, secondary, "MissionVolumeButton", 76f);
+            MoveToRow(panel, secondary, "FogToggle", 76f);
+            MoveToRow(panel, secondary, "ParticlesToggle", 76f);
+            MoveToRow(panel, secondary, "TrajectoryToggle", 76f);
+            MoveToRow(panel, secondary, "Speed05Button", 48f);
+            MoveToRow(panel, secondary, "Speed1Button", 48f);
+            MoveToRow(panel, secondary, "Speed2Button", 48f);
+            MoveToRow(panel, secondary, "Speed5Button", 48f);
+            MoveToRow(panel, secondary, "Speed10Button", 48f);
+            MoveToRow(panel, secondary, "PlaybackStatus", 0f, true);
+
+        }
+
+        private static RectTransform EnsureLayoutRow(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax)
+        {
+            var row = parent.Find(name) as RectTransform;
+            if (row == null)
+            {
+                row = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
+                row.SetParent(parent, false);
+            }
+
+            row.anchorMin = anchorMin;
+            row.anchorMax = anchorMax;
+            row.offsetMin = new Vector2(12f, 4f);
+            row.offsetMax = new Vector2(-12f, -4f);
+            row.pivot = new Vector2(0.5f, 0.5f);
+            var layout = row.GetComponent<HorizontalLayoutGroup>() ?? row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.spacing = 8f;
+            layout.childAlignment = TextAnchor.MiddleLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = true;
+            return row;
+        }
+
+        private static void MoveToRow(Transform panel, Transform row, string name, float preferredWidth, bool flexible = false)
+        {
+            var control = panel.Find(name) as RectTransform;
+            if (control == null || row == null)
+            {
+                return;
+            }
+
+            control.SetParent(row, false);
+            control.anchorMin = Vector2.one;
+            control.anchorMax = Vector2.one;
+            control.offsetMin = Vector2.zero;
+            control.offsetMax = Vector2.zero;
+            var element = control.GetComponent<LayoutElement>() ?? control.gameObject.AddComponent<LayoutElement>();
+            element.minHeight = 30f;
+            element.preferredWidth = preferredWidth;
+            element.minWidth = flexible ? 80f : preferredWidth;
+            element.flexibleWidth = flexible ? 1f : 0f;
         }
 
         private void AddSpeedButton(Transform panel, string name, string label, float x, float speed)
