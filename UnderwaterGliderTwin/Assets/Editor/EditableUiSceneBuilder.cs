@@ -154,8 +154,8 @@ namespace UnderwaterGliderTwin.Editor
             var drawerEntryLayer = EnsureLayoutContainer(uiRoot, "DrawerEntryLayer");
             ConfigureRect(drawerEntryLayer, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             drawerEntryLayer.SetAsLastSibling();
-            EnsureDrawerEntryToggle(drawerEntryLayer, "TelemetryDrawerToggle", "遥测抽屉", new Vector2(0f, 1f), new Vector2(0f, 1f));
-            EnsureDrawerEntryToggle(drawerEntryLayer, "StatusDrawerToggle", "状态抽屉", new Vector2(0f, 1f), new Vector2(120f, 1f));
+            EnsureDrawerEntryToggle(drawerEntryLayer, "TelemetryDrawerToggle", "遥测抽屉", new Vector2(16f, -12f), new Vector2(120f, UiFactory.MinimumDrawerToggleHeight));
+            EnsureDrawerEntryToggle(drawerEntryLayer, "StatusDrawerToggle", "状态抽屉", new Vector2(148f, -12f), new Vector2(120f, UiFactory.MinimumDrawerToggleHeight));
 
             EnsurePanelPrefabInstance(scene, telemetryColumn, "DashboardPanel");
             EnsurePanelPrefabInstance(scene, statusColumn, "StatusPanel");

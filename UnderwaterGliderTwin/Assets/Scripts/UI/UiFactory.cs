@@ -498,18 +498,7 @@ namespace UnderwaterGliderTwin.UI
             var uiRoot = EnsureResponsiveRuntimeLayout(canvas);
             switch (name)
             {
-                case "TelemetryPanel":
-                    return uiRoot.Find("MainBody/TelemetryColumn") ?? parent;
-                case "MissionStatusPanel":
-                    return uiRoot.Find("MainBody/StatusColumn") ?? parent;
-                case "MissionConfigurationPanel":
-                    return uiRoot.Find("ConfigurationArea") ?? parent;
-                case "PlaybackControlsPanel":
-                    return uiRoot.Find("PlaybackBar") ?? parent;
-                case "OceanCommandToolbar":
-                    return uiRoot.Find("MainBody/ViewportColumn") ?? parent;
                 case "FlightLegDrawerPanel":
-                case "OceanCurrentDrawerPanel":
                     return canvas.transform.Find("ModalRoot") ?? parent;
                 default: return parent;
             }
