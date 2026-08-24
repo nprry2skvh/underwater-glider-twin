@@ -122,6 +122,120 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void Reenable_CapturesTargetsInstalledBetweenOwnershipCycles()
+        {
+            var canvas = CreateCanvas();
+            var host = CreateRect("ViewportSurfaceHost", canvas.transform, new Vector2(256f, 144f));
+            var surface = CreateSurface(host);
+            var camera = CreateCamera();
+            var firstCameraTarget = CreateExternalTexture("FirstCameraTarget");
+            var firstSurfaceTexture = CreateExternalTexture("FirstSurfaceTexture");
+            camera.targetTexture = firstCameraTarget;
+            surface.texture = firstSurfaceTexture;
+            var controller = host.gameObject.AddComponent<ViewportSurfaceController>();
+
+            controller.Bind(camera, host, surface);
+            controller.enabled = false;
+            Assert.That(camera.targetTexture, Is.SameAs(firstCameraTarget));
+            Assert.That(surface.texture, Is.SameAs(firstSurfaceTexture));
+
+            var secondCameraTarget = CreateExternalTexture("SecondCameraTarget");
+            var secondSurfaceTexture = CreateExternalTexture("SecondSurfaceTexture");
+            camera.targetTexture = secondCameraTarget;
+            surface.texture = secondSurfaceTexture;
+
+            controller.enabled = true;
+            Assert.That(camera.targetTexture, Is.SameAs(controller.OwnedTexture));
+            Assert.That(surface.texture, Is.SameAs(controller.OwnedTexture));
+
+            controller.enabled = false;
+
+            Assert.That(camera.targetTexture, Is.SameAs(secondCameraTarget));
+            Assert.That(surface.texture, Is.SameAs(secondSurfaceTexture));
+        }
+
+        [Test]
+        public void DestroyWhileActive_RestoresTargetsCapturedForCurrentOwnershipCycle()
+        {
+            var canvas = CreateCanvas();
+            var host = CreateRect("ViewportSurfaceHost", canvas.transform, new Vector2(256f, 144f));
+            var surface = CreateSurface(host);
+            var camera = CreateCamera();
+            var previousCameraTarget = CreateExternalTexture("PreviousCameraTarget");
+            var previousSurfaceTexture = CreateExternalTexture("PreviousSurfaceTexture");
+            camera.targetTexture = previousCameraTarget;
+            surface.texture = previousSurfaceTexture;
+            var controller = host.gameObject.AddComponent<ViewportSurfaceController>();
+            controller.Bind(camera, host, surface);
+
+            Object.DestroyImmediate(controller);
+
+            Assert.That(camera.targetTexture, Is.SameAs(previousCameraTarget));
+            Assert.That(surface.texture, Is.SameAs(previousSurfaceTexture));
+        }
+
+        [Test]
+        public void RebindWhileActive_RestoresEachBindingsOwnPreExistingTargets()
+        {
+            var canvas = CreateCanvas();
+            var firstHost = CreateRect("FirstViewportSurfaceHost", canvas.transform, new Vector2(256f, 144f));
+            var firstSurface = CreateSurface(firstHost);
+            var firstCamera = CreateCamera();
+            var firstCameraTarget = CreateExternalTexture("FirstCameraTarget");
+            var firstSurfaceTexture = CreateExternalTexture("FirstSurfaceTexture");
+            firstCamera.targetTexture = firstCameraTarget;
+            firstSurface.texture = firstSurfaceTexture;
+
+            var secondHost = CreateRect("SecondViewportSurfaceHost", canvas.transform, new Vector2(320f, 180f));
+            var secondSurface = CreateSurface(secondHost);
+            var secondCamera = CreateAuxiliaryCamera("SecondViewportCamera");
+            var secondCameraTarget = CreateExternalTexture("SecondCameraTarget");
+            var secondSurfaceTexture = CreateExternalTexture("SecondSurfaceTexture");
+            secondCamera.targetTexture = secondCameraTarget;
+            secondSurface.texture = secondSurfaceTexture;
+
+            var controller = firstHost.gameObject.AddComponent<ViewportSurfaceController>();
+            controller.Bind(firstCamera, firstHost, firstSurface);
+            controller.Bind(secondCamera, secondHost, secondSurface);
+
+            Assert.That(firstCamera.targetTexture, Is.SameAs(firstCameraTarget));
+            Assert.That(firstSurface.texture, Is.SameAs(firstSurfaceTexture));
+            Assert.That(secondCamera.targetTexture, Is.SameAs(controller.OwnedTexture));
+            Assert.That(secondSurface.texture, Is.SameAs(controller.OwnedTexture));
+
+            Object.DestroyImmediate(controller);
+
+            Assert.That(secondCamera.targetTexture, Is.SameAs(secondCameraTarget));
+            Assert.That(secondSurface.texture, Is.SameAs(secondSurfaceTexture));
+        }
+
+        [Test]
+        public void ResizeWithinOwnershipCycle_DoesNotOverwriteInitialTargetSnapshots()
+        {
+            var canvas = CreateCanvas();
+            var host = CreateRect("ViewportSurfaceHost", canvas.transform, new Vector2(256f, 144f));
+            var surface = CreateSurface(host);
+            var camera = CreateCamera();
+            var previousCameraTarget = CreateExternalTexture("PreviousCameraTarget");
+            var previousSurfaceTexture = CreateExternalTexture("PreviousSurfaceTexture");
+            camera.targetTexture = previousCameraTarget;
+            surface.texture = previousSurfaceTexture;
+            var controller = host.gameObject.AddComponent<ViewportSurfaceController>();
+
+            controller.Bind(camera, host, surface);
+            controller.Bind(camera, host, surface);
+            host.sizeDelta = new Vector2(512f, 288f);
+            controller.RefreshForCurrentSize();
+            Assert.That(camera.targetTexture.width, Is.EqualTo(512));
+            Assert.That(camera.targetTexture.height, Is.EqualTo(288));
+
+            controller.enabled = false;
+
+            Assert.That(camera.targetTexture, Is.SameAs(previousCameraTarget));
+            Assert.That(surface.texture, Is.SameAs(previousSurfaceTexture));
+        }
+
+        [Test]
         public void Disable_PreservesExternalTargets_WhenControllerNoLongerOwnsAssignments()
         {
             var canvas = CreateCanvas();

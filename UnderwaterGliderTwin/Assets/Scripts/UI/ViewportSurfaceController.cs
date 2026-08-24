@@ -27,8 +27,6 @@ namespace UnderwaterGliderTwin.UI
                 host = boundHost;
                 surface = boundSurface;
                 hostCanvas = host != null ? host.GetComponentInParent<Canvas>() : null;
-                previousCameraTarget = sourceCamera != null ? sourceCamera.targetTexture : null;
-                previousSurfaceTexture = surface != null ? surface.texture : null;
             }
 
             ConfigureSurface();
@@ -59,7 +57,18 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            if (ownedTexture == null)
+            {
+                CapturePreviousTargets();
+            }
+
             ReplaceOwnedTexture(width, height);
+        }
+
+        private void CapturePreviousTargets()
+        {
+            previousCameraTarget = sourceCamera != null ? sourceCamera.targetTexture : null;
+            previousSurfaceTexture = surface != null ? surface.texture : null;
         }
 
         private void OnEnable()
