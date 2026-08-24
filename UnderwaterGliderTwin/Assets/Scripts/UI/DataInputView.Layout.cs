@@ -155,6 +155,7 @@ namespace UnderwaterGliderTwin.UI
                 MoveToSection(oceanSection, "OceanCurrentDrawerButton");
 
             HideLegacyTextChild("MissionConfigurationTitle");
+            HideLegacyTextChild("TitleText");
             HideLegacyTextChild("SimulationLabel");
             HideLegacyTextChild("OceanCurrentLabel");
             MoveToSectionFooter(missionSection, "MissionConfigurationStatus");
@@ -576,6 +577,7 @@ namespace UnderwaterGliderTwin.UI
         {
             switch (childName)
             {
+                case "PredictionModelLabel": return new[] { "ModelLabel" };
                 case "SimulationCyclesInputField": return new[] { "SimulationCyclesInput" };
                 case "SimulationDurationInputField": return new[] { "SimulationDurationInput" };
                 case "SimulationDepthInputField": return new[] { "SimulationDepthInput", "TargetDepthInput" };

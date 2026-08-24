@@ -1062,6 +1062,73 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void DataInputView_MigratesLegacyModelLabelIntoExpandedContent()
+        {
+            var panel = new GameObject("DataInputPanel", typeof(RectTransform)).GetComponent<RectTransform>();
+            var legacyModelLabel = CreateText(panel, "ModelLabel");
+            var refs = new DataInputPanelRefs { panel = panel };
+            var view = panel.gameObject.AddComponent<DataInputView>();
+
+            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            var expanded = panel.Find("ConfigurationExpandedContent");
+            Assert.That(legacyModelLabel.transform.IsChildOf(expanded), Is.True);
+            Assert.That(legacyModelLabel.transform.IsChildOf(panel.Find("MissionSectionCard")), Is.True);
+        }
+
+        [Test]
+        public void DataInputView_CollapsedConfigurationKeepsViewActiveAndHidesExpandedContent()
+        {
+            var panel = new GameObject("DataInputPanel", typeof(RectTransform)).GetComponent<RectTransform>();
+            var legacyTitle = CreateText(panel, "TitleText");
+            var refs = new DataInputPanelRefs { panel = panel, titleText = legacyTitle };
+            var dataInput = panel.gameObject.AddComponent<DataInputView>();
+            dataInput.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            dataInput.SetConfigurationExpanded(false);
+
+            var drawer = panel.gameObject;
+            var summary = drawer.transform.Find("ConfigurationSummaryBar");
+            var expanded = drawer.transform.Find("ConfigurationExpandedContent");
+            Assert.That(dataInput.gameObject.activeInHierarchy, Is.True);
+            Assert.That(drawer.activeInHierarchy, Is.True);
+            Assert.That(summary.gameObject.activeInHierarchy, Is.True);
+            Assert.That(legacyTitle.transform.IsChildOf(expanded), Is.True);
+            Assert.That(expanded.GetComponent<CanvasGroup>().alpha, Is.EqualTo(0f));
+            Assert.That(expanded.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
+        }
+
+        [Test]
+        public void DataInputPanel_RemainsUnderConfigurationAreaAfterConfigurationSetup()
+        {
+            var canvas = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas)).GetComponent<Canvas>();
+            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
+            var configurationArea = uiRoot.Find("ConfigurationArea");
+            var panel = new GameObject("DataInputPanel", typeof(RectTransform)).GetComponent<RectTransform>();
+            panel.SetParent(configurationArea, false);
+            var refs = new DataInputPanelRefs { panel = panel };
+            var view = panel.gameObject.AddComponent<DataInputView>();
+
+            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            Assert.That(panel.parent, Is.SameAs(configurationArea));
+        }
+
+        [Test]
+        public void DataInputView_RepeatedConfigurationSetupDoesNotDuplicateContainers()
+        {
+            var panel = new GameObject("DataInputPanel", typeof(RectTransform)).GetComponent<RectTransform>();
+            var refs = new DataInputPanelRefs { panel = panel };
+            var view = panel.gameObject.AddComponent<DataInputView>();
+
+            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
+            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
+
+            Assert.That(CountDirectChildrenNamed(panel, "ConfigurationSummaryBar"), Is.EqualTo(1));
+            Assert.That(CountDirectChildrenNamed(panel, "ConfigurationExpandedContent"), Is.EqualTo(1));
+        }
+
+        [Test]
         public void MissionConfigurationStatusDoesNotOverlapOceanConfigurationButton()
         {
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
@@ -2472,6 +2539,20 @@ namespace UnderwaterGliderTwin.Tests
         {
             var rootScroll = drawer != null ? drawer.GetComponent<ScrollRect>() : null;
             return rootScroll == null || !rootScroll.enabled;
+        }
+
+        private static int CountDirectChildrenNamed(Transform parent, string name)
+        {
+            var count = 0;
+            foreach (Transform child in parent)
+            {
+                if (child.name == name)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static TypographyProbe CreateTypographyProbe(string canvasName, bool createFallbackContent)
