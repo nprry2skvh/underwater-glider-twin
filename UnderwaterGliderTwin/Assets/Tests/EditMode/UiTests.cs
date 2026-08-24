@@ -1974,6 +1974,44 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void ResponsiveUiLayoutController_RefreshForScreenKeepsNarrowModeStableWithoutCreatingObjects()
+        {
+            var controller = CreateResponsiveLayoutController(out var canvas);
+            controller.RefreshForScreen(1280f, 720f);
+            var countAfterFirstRefresh = Object.FindObjectsOfType<GameObject>(true).Length;
+
+            for (var i = 0; i < 4; i++)
+            {
+                controller.RefreshForScreen(1280f, 720f);
+                Assert.That(controller.CurrentMode, Is.EqualTo(RuntimeUiLayoutMode.Drawer));
+            }
+
+            Assert.That(Object.FindObjectsOfType<GameObject>(true).Length, Is.EqualTo(countAfterFirstRefresh));
+            Assert.That(canvas.transform.Find("UiRoot/DrawerEntryLayer/TelemetryDrawerToggle").gameObject.activeSelf, Is.True);
+            Assert.That(canvas.transform.Find("UiRoot/DrawerEntryLayer/StatusDrawerToggle").gameObject.activeSelf, Is.True);
+        }
+
+        [Test]
+        public void ResponsiveUiLayoutController_KeepsDrawerTogglesOutsideHiddenColumns()
+        {
+            var controller = CreateResponsiveLayoutController(out var canvas);
+            controller.RefreshForScreen(1280f, 720f);
+
+            var mainBody = canvas.transform.Find("UiRoot/MainBody");
+            var telemetryColumn = mainBody.Find("TelemetryColumn");
+            var statusColumn = mainBody.Find("StatusColumn");
+            var telemetryToggle = canvas.transform.Find("UiRoot/DrawerEntryLayer/TelemetryDrawerToggle");
+            var statusToggle = canvas.transform.Find("UiRoot/DrawerEntryLayer/StatusDrawerToggle");
+
+            Assert.That(telemetryColumn.gameObject.activeSelf, Is.False);
+            Assert.That(statusColumn.gameObject.activeSelf, Is.False);
+            Assert.That(telemetryToggle.IsChildOf(telemetryColumn), Is.False);
+            Assert.That(statusToggle.IsChildOf(statusColumn), Is.False);
+            Assert.That(telemetryToggle.gameObject.activeSelf, Is.True);
+            Assert.That(statusToggle.gameObject.activeSelf, Is.True);
+        }
+
+        [Test]
         public void UiFactory_RuntimeLayoutUsesLayoutHelpersAndKeepsScrollingOutOfRoot()
         {
             var canvasObject = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -2666,6 +2704,20 @@ namespace UnderwaterGliderTwin.Tests
             }
 
             return new TypographyProbe(canvas, title, label, value, button);
+        }
+
+        private static ResponsiveUiLayoutController CreateResponsiveLayoutController(out Canvas canvas)
+        {
+            var canvasObject = new GameObject("ResponsiveLayoutCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            UiFactory.EnsureResponsiveRuntimeLayout(canvas);
+            var runtimeRoot = canvasObject.AddComponent<RuntimeUiRoot>();
+            runtimeRoot.ConfigureRuntimeReferences(canvas, canvas.transform.Find("ModalRoot") as RectTransform, new RuntimeUiReferences(), 0);
+            var controller = canvasObject.AddComponent<ResponsiveUiLayoutController>();
+            controller.SetAnimationsEnabledForTests(false);
+            controller.Bind(runtimeRoot, runtimeRoot.References);
+            return controller;
         }
 
         private static void ApplyTypography(Canvas canvas, float width, float height)

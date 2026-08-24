@@ -15,22 +15,22 @@ namespace UnderwaterGliderTwin.UI
         {
             if (previousMode == RuntimeUiLayoutMode.Drawer)
             {
-                if (width >= 1296f && height >= 656f)
-                {
-                    return width >= 1616f ? RuntimeUiLayoutMode.FullThreeColumn : RuntimeUiLayoutMode.CompressedThreeColumn;
-                }
-
-                return RuntimeUiLayoutMode.Drawer;
-            }
-
-            if (previousMode == RuntimeUiLayoutMode.FullThreeColumn)
-            {
-                if (width < 1280f || height < 624f)
+                if (width < 1456f || height < 656f)
                 {
                     return RuntimeUiLayoutMode.Drawer;
                 }
 
-                if (width <= 1584f || height <= 640f)
+                return width >= 1616f ? RuntimeUiLayoutMode.FullThreeColumn : RuntimeUiLayoutMode.CompressedThreeColumn;
+            }
+
+            if (previousMode == RuntimeUiLayoutMode.FullThreeColumn)
+            {
+                if (width < 1400f || height < 624f)
+                {
+                    return RuntimeUiLayoutMode.Drawer;
+                }
+
+                if (width < 1600f || height < 640f)
                 {
                     return RuntimeUiLayoutMode.CompressedThreeColumn;
                 }
@@ -40,7 +40,7 @@ namespace UnderwaterGliderTwin.UI
 
             if (previousMode == RuntimeUiLayoutMode.CompressedThreeColumn)
             {
-                if (width < 1280f || height < 624f)
+                if (width < 1400f || height < 624f)
                 {
                     return RuntimeUiLayoutMode.Drawer;
                 }
@@ -53,7 +53,7 @@ namespace UnderwaterGliderTwin.UI
                 return RuntimeUiLayoutMode.CompressedThreeColumn;
             }
 
-            if (width < 1280f || height < 624f)
+            if (width < 1400f || height < 624f)
             {
                 return RuntimeUiLayoutMode.Drawer;
             }

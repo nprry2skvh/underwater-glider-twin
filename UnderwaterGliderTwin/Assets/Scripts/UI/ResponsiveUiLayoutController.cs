@@ -298,7 +298,9 @@ namespace UnderwaterGliderTwin.UI
 
             SetActive(telemetryToggle, true);
             SetActive(statusToggle, true);
+            SetActive(telemetryColumn, openDrawer == RuntimeUiSideDrawer.Telemetry);
             SetActive(viewportColumn, true);
+            SetActive(statusColumn, openDrawer == RuntimeUiSideDrawer.Status);
             SetCanvasState(telemetryGroup, openDrawer == RuntimeUiSideDrawer.Telemetry, openDrawer == RuntimeUiSideDrawer.Telemetry ? 1f : 0f);
             SetCanvasState(statusGroup, openDrawer == RuntimeUiSideDrawer.Status, openDrawer == RuntimeUiSideDrawer.Status ? 1f : 0f);
             if (!openDrawer.HasValue)
