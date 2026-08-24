@@ -146,11 +146,6 @@ namespace UnderwaterGliderTwin.UI
             var texture = ownedTexture;
             if (texture == null)
             {
-                if (restorePreviousTargets)
-                {
-                    RestorePreviousTargets(null);
-                }
-
                 return;
             }
 
@@ -185,12 +180,17 @@ namespace UnderwaterGliderTwin.UI
 
         private void RestorePreviousTargets(RenderTexture expectedTexture)
         {
-            if (sourceCamera != null && (expectedTexture == null || sourceCamera.targetTexture == expectedTexture))
+            if (expectedTexture == null)
+            {
+                return;
+            }
+
+            if (sourceCamera != null && sourceCamera.targetTexture == expectedTexture)
             {
                 sourceCamera.targetTexture = previousCameraTarget;
             }
 
-            if (surface != null && (expectedTexture == null || surface.texture == expectedTexture))
+            if (surface != null && surface.texture == expectedTexture)
             {
                 surface.texture = previousSurfaceTexture;
             }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,10 +10,21 @@ namespace UnderwaterGliderTwin.Tests
     {
         private GameObject canvasObject;
         private GameObject cameraObject;
+        private readonly List<GameObject> auxiliaryObjects = new List<GameObject>();
+        private readonly List<RenderTexture> externalTextures = new List<RenderTexture>();
 
         [TearDown]
         public void TearDown()
         {
+            for (var index = auxiliaryObjects.Count - 1; index >= 0; index--)
+            {
+                if (auxiliaryObjects[index] != null)
+                {
+                    Object.DestroyImmediate(auxiliaryObjects[index]);
+                }
+            }
+            auxiliaryObjects.Clear();
+
             if (cameraObject != null)
             {
                 Object.DestroyImmediate(cameraObject);
@@ -22,6 +34,18 @@ namespace UnderwaterGliderTwin.Tests
             {
                 Object.DestroyImmediate(canvasObject);
             }
+
+            for (var index = externalTextures.Count - 1; index >= 0; index--)
+            {
+                if (externalTextures[index] == null)
+                {
+                    continue;
+                }
+
+                externalTextures[index].Release();
+                Object.DestroyImmediate(externalTextures[index]);
+            }
+            externalTextures.Clear();
         }
 
         [Test]
@@ -75,6 +99,129 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void Disable_RestoresPreExistingTargets_WhenControllerStillOwnsAssignments()
+        {
+            var canvas = CreateCanvas();
+            var host = CreateRect("ViewportSurfaceHost", canvas.transform, new Vector2(256f, 144f));
+            var surface = CreateSurface(host);
+            var camera = CreateCamera();
+            var previousCameraTarget = CreateExternalTexture("PreviousCameraTarget");
+            var previousSurfaceTexture = CreateExternalTexture("PreviousSurfaceTexture");
+            camera.targetTexture = previousCameraTarget;
+            surface.texture = previousSurfaceTexture;
+            var controller = host.gameObject.AddComponent<ViewportSurfaceController>();
+
+            controller.Bind(camera, host, surface);
+            Assert.That(camera.targetTexture, Is.SameAs(controller.OwnedTexture));
+            Assert.That(surface.texture, Is.SameAs(controller.OwnedTexture));
+
+            controller.enabled = false;
+
+            Assert.That(camera.targetTexture, Is.SameAs(previousCameraTarget));
+            Assert.That(surface.texture, Is.SameAs(previousSurfaceTexture));
+        }
+
+        [Test]
+        public void Disable_PreservesExternalTargets_WhenControllerNoLongerOwnsAssignments()
+        {
+            var canvas = CreateCanvas();
+            var host = CreateRect("ViewportSurfaceHost", canvas.transform, new Vector2(256f, 144f));
+            var surface = CreateSurface(host);
+            var camera = CreateCamera();
+            camera.targetTexture = CreateExternalTexture("PreviousCameraTarget");
+            surface.texture = CreateExternalTexture("PreviousSurfaceTexture");
+            var controller = host.gameObject.AddComponent<ViewportSurfaceController>();
+            controller.Bind(camera, host, surface);
+            var externalCameraTarget = CreateExternalTexture("ExternalCameraTarget");
+            var externalSurfaceTexture = CreateExternalTexture("ExternalSurfaceTexture");
+            camera.targetTexture = externalCameraTarget;
+            surface.texture = externalSurfaceTexture;
+
+            controller.enabled = false;
+
+            Assert.That(camera.targetTexture, Is.SameAs(externalCameraTarget));
+            Assert.That(surface.texture, Is.SameAs(externalSurfaceTexture));
+        }
+
+        [Test]
+        public void DestroyAfterDisable_DoesNotRestoreStaleTargets_WhenControllerOwnsNoTexture()
+        {
+            var canvas = CreateCanvas();
+            var host = CreateRect("ViewportSurfaceHost", canvas.transform, new Vector2(256f, 144f));
+            var surface = CreateSurface(host);
+            var camera = CreateCamera();
+            camera.targetTexture = CreateExternalTexture("PreviousCameraTarget");
+            surface.texture = CreateExternalTexture("PreviousSurfaceTexture");
+            var controller = host.gameObject.AddComponent<ViewportSurfaceController>();
+            controller.Bind(camera, host, surface);
+            controller.enabled = false;
+            var externalCameraTarget = CreateExternalTexture("ExternalCameraTarget");
+            var externalSurfaceTexture = CreateExternalTexture("ExternalSurfaceTexture");
+            camera.targetTexture = externalCameraTarget;
+            surface.texture = externalSurfaceTexture;
+
+            Object.DestroyImmediate(controller);
+
+            Assert.That(camera.targetTexture, Is.SameAs(externalCameraTarget));
+            Assert.That(surface.texture, Is.SameAs(externalSurfaceTexture));
+        }
+
+        [Test]
+        public void RebindAfterDisable_DoesNotRestoreStaleTargets_WhenControllerOwnsNoTexture()
+        {
+            var canvas = CreateCanvas();
+            var host = CreateRect("ViewportSurfaceHost", canvas.transform, new Vector2(256f, 144f));
+            var surface = CreateSurface(host);
+            var camera = CreateCamera();
+            camera.targetTexture = CreateExternalTexture("PreviousCameraTarget");
+            surface.texture = CreateExternalTexture("PreviousSurfaceTexture");
+            var controller = host.gameObject.AddComponent<ViewportSurfaceController>();
+            controller.Bind(camera, host, surface);
+            controller.enabled = false;
+            var externalCameraTarget = CreateExternalTexture("ExternalCameraTarget");
+            var externalSurfaceTexture = CreateExternalTexture("ExternalSurfaceTexture");
+            camera.targetTexture = externalCameraTarget;
+            surface.texture = externalSurfaceTexture;
+
+            var replacementHost = CreateRect("ReplacementViewportSurfaceHost", canvas.transform, new Vector2(320f, 180f));
+            var replacementSurface = CreateSurface(replacementHost);
+            var replacementCamera = CreateAuxiliaryCamera("ReplacementViewportCamera");
+            var replacementCameraTarget = CreateExternalTexture("ReplacementCameraTarget");
+            var replacementSurfaceTexture = CreateExternalTexture("ReplacementSurfaceTexture");
+            replacementCamera.targetTexture = replacementCameraTarget;
+            replacementSurface.texture = replacementSurfaceTexture;
+            controller.Bind(replacementCamera, replacementHost, replacementSurface);
+
+            Assert.That(camera.targetTexture, Is.SameAs(externalCameraTarget));
+            Assert.That(surface.texture, Is.SameAs(externalSurfaceTexture));
+            Assert.That(replacementCamera.targetTexture, Is.SameAs(replacementCameraTarget));
+            Assert.That(replacementSurface.texture, Is.SameAs(replacementSurfaceTexture));
+        }
+
+        [Test]
+        public void ZeroSizeAndNullBinding_UseSafeMinimumAndRestoreOwnedTargetsOnce()
+        {
+            var canvas = CreateCanvas();
+            var host = CreateRect("ViewportSurfaceHost", canvas.transform, Vector2.zero);
+            var surface = CreateSurface(host);
+            var camera = CreateCamera();
+            var previousCameraTarget = CreateExternalTexture("PreviousCameraTarget");
+            var previousSurfaceTexture = CreateExternalTexture("PreviousSurfaceTexture");
+            camera.targetTexture = previousCameraTarget;
+            surface.texture = previousSurfaceTexture;
+            var controller = host.gameObject.AddComponent<ViewportSurfaceController>();
+
+            Assert.DoesNotThrow(() => controller.Bind(camera, host, surface));
+            Assert.That(controller.OwnedTexture.width, Is.EqualTo(1));
+            Assert.That(controller.OwnedTexture.height, Is.EqualTo(1));
+
+            Assert.DoesNotThrow(() => controller.Bind(null, null, null));
+            Assert.That(camera.targetTexture, Is.SameAs(previousCameraTarget));
+            Assert.That(surface.texture, Is.SameAs(previousSurfaceTexture));
+            Assert.DoesNotThrow(() => controller.Bind(null, null, null));
+        }
+
+        [Test]
         public void EnsureViewportSurface_KeepsOneCanvasOneModalRootAndToolbarAboveSurface()
         {
             var canvas = CreateCanvas();
@@ -108,6 +255,20 @@ namespace UnderwaterGliderTwin.Tests
         {
             cameraObject = new GameObject("ViewportCamera", typeof(Camera));
             return cameraObject.GetComponent<Camera>();
+        }
+
+        private Camera CreateAuxiliaryCamera(string name)
+        {
+            var created = new GameObject(name, typeof(Camera));
+            auxiliaryObjects.Add(created);
+            return created.GetComponent<Camera>();
+        }
+
+        private RenderTexture CreateExternalTexture(string name)
+        {
+            var texture = new RenderTexture(8, 8, 0) { name = name };
+            externalTextures.Add(texture);
+            return texture;
         }
 
         private static RectTransform CreateRect(string name, Transform parent, Vector2 size)
