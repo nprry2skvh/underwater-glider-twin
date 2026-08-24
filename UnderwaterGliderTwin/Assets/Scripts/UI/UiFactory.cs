@@ -380,6 +380,7 @@ namespace UnderwaterGliderTwin.UI
             text.color = color;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Truncate;
+            ApplyGeneratedTextRole(text, ResolveTextRole(text), RuntimeUiLayoutMode.CompressedThreeColumn);
             return text;
         }
 
@@ -455,8 +456,10 @@ namespace UnderwaterGliderTwin.UI
             var label = button.GetComponentInChildren<Text>(true);
             if (label != null)
             {
-                var profile = ResponsiveUiTypography.ForMode(RuntimeUiLayoutMode.CompressedThreeColumn, 0f, 0f);
-                label.fontSize = Mathf.Max(label.fontSize, ResponsiveUiTypography.GetLogicalSize(profile, UiTextRole.Button));
+                if (!preserveAuthoredValues)
+                {
+                    ApplyGeneratedTextRole(label, UiTextRole.Button, RuntimeUiLayoutMode.CompressedThreeColumn);
+                }
                 var canApplyTextColor = !preserveAuthoredValues
                     || IsDefaultGraphicColor(label.color)
                     || IsCommandThemeColor(label.color)
@@ -1247,6 +1250,16 @@ namespace UnderwaterGliderTwin.UI
         }
 
         public static void ApplyTextRole(Text text, UiTextRole role, RuntimeUiLayoutMode mode)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            ApplyTextRoleColor(text, role);
+        }
+
+        public static void ApplyGeneratedTextRole(Text text, UiTextRole role, RuntimeUiLayoutMode mode)
         {
             if (text == null)
             {

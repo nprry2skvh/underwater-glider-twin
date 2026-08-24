@@ -175,6 +175,21 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void DestroyedController_DoesNotThrowOnSubsequentCanvasRender()
+        {
+            var canvas = CreateCanvas();
+            var host = CreateRect("ViewportSurfaceHost", canvas.transform, new Vector2(256f, 144f));
+            var surface = CreateSurface(host);
+            var camera = CreateCamera();
+            var controller = host.gameObject.AddComponent<ViewportSurfaceController>();
+            controller.Bind(camera, host, surface);
+
+            Object.DestroyImmediate(host.gameObject);
+
+            Assert.DoesNotThrow(Canvas.ForceUpdateCanvases);
+        }
+
+        [Test]
         public void RebindWhileActive_RestoresEachBindingsOwnPreExistingTargets()
         {
             var canvas = CreateCanvas();

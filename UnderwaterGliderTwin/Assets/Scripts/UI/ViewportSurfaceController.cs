@@ -12,6 +12,7 @@ namespace UnderwaterGliderTwin.UI
         private RenderTexture ownedTexture;
         private RenderTexture previousCameraTarget;
         private Texture previousSurfaceTexture;
+        private Canvas.WillRenderCanvases canvasRenderCallback;
         private bool subscribedToCanvasRender;
 
         public RectTransform Host => host;
@@ -39,6 +40,12 @@ namespace UnderwaterGliderTwin.UI
 
         public void RefreshForCurrentSize()
         {
+            if (this == null)
+            {
+                UnsubscribeFromCanvasRender();
+                return;
+            }
+
             if (!isActiveAndEnabled || sourceCamera == null || host == null || surface == null)
             {
                 return;
@@ -212,7 +219,12 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            Canvas.willRenderCanvases += RefreshForCurrentSize;
+            if (canvasRenderCallback == null)
+            {
+                canvasRenderCallback = RefreshForCurrentSize;
+            }
+
+            Canvas.willRenderCanvases += canvasRenderCallback;
             subscribedToCanvasRender = true;
         }
 
@@ -223,7 +235,7 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            Canvas.willRenderCanvases -= RefreshForCurrentSize;
+            Canvas.willRenderCanvases -= canvasRenderCallback;
             subscribedToCanvasRender = false;
         }
     }
