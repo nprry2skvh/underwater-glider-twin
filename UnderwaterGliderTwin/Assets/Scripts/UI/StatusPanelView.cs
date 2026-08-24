@@ -39,6 +39,7 @@ namespace UnderwaterGliderTwin.UI
         private UiStateBadge missionHealthBadge;
         private string lastAlarmMessage;
         private readonly List<GameObject> predictionMetricRows = new List<GameObject>();
+        private readonly List<Text> predictionMetricUnits = new List<Text>();
         private bool minimalBoundReferences;
         private RectTransform panel;
 
@@ -75,6 +76,8 @@ namespace UnderwaterGliderTwin.UI
             confidenceValue = AddRow(panel, "置信度", "ConfidenceValue", 454f);
             predictionTimeValue = AddRow(panel, "预测耗时", "PredictionTimeValue", 486f);
             engineeringValidationValue = AddRow(panel, "工程校核", "EngineeringValidationValue", 518f);
+            predictionMetricRows.Clear();
+            predictionMetricUnits.Clear();
             RegisterPredictionMetric(panel, "漂移Label", driftValue);
             RegisterPredictionMetric(panel, "均方根误差Label", rmseValue);
             RegisterPredictionMetric(panel, "平均绝对误差Label", maeValue);
@@ -134,6 +137,7 @@ namespace UnderwaterGliderTwin.UI
                 alarmBackground.gameObject.SetActive(false);
             }
             predictionMetricRows.Clear();
+            predictionMetricUnits.Clear();
             ConfigureBoundRows();
             EnsureVisualHierarchy();
             RegisterPredictionMetric(refs.panel, "漂移Label", driftValue);
@@ -626,6 +630,13 @@ namespace UnderwaterGliderTwin.UI
             if (value != null)
             {
                 predictionMetricRows.Add(value.gameObject);
+                var unit = value.transform.parent != null
+                    ? value.transform.parent.Find(value.name + "Unit")?.GetComponent<Text>()
+                    : null;
+                if (unit != null)
+                {
+                    predictionMetricUnits.Add(unit);
+                }
             }
         }
 
@@ -634,6 +645,14 @@ namespace UnderwaterGliderTwin.UI
             foreach (var row in predictionMetricRows)
             {
                 row.SetActive(visible);
+            }
+
+            foreach (var unit in predictionMetricUnits)
+            {
+                if (unit != null)
+                {
+                    unit.canvasRenderer.SetAlpha(visible ? 1f : 0f);
+                }
             }
         }
 

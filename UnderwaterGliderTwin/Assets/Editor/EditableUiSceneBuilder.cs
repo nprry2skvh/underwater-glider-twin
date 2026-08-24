@@ -253,7 +253,7 @@ namespace UnderwaterGliderTwin.Editor
             {
                 var bootstrapSerialized = new SerializedObject(twinBootstrap);
                 bootstrapSerialized.FindProperty("runtimeUiRoot").objectReferenceValue = runtimeRoot;
-                bootstrapSerialized.FindProperty("useGeneratedRuntimeUi").boolValue = false;
+                bootstrapSerialized.FindProperty("useGeneratedRuntimeUi").boolValue = true;
                 bootstrapSerialized.FindProperty("allowRuntimeFallback").boolValue = false;
                 bootstrapSerialized.FindProperty("strictUiValidation").boolValue = true;
                 bootstrapSerialized.ApplyModifiedPropertiesWithoutUndo();

@@ -88,7 +88,7 @@ namespace UnderwaterGliderTwin.UI
         public static Canvas EnsureCanvas(Transform parent, string fallbackPanelName, Canvas explicitFallbackCanvas = null)
         {
             EnsureEventSystem();
-            if (explicitFallbackCanvas != null)
+            if (explicitFallbackCanvas != null && explicitFallbackCanvas.gameObject.activeInHierarchy)
             {
                 RuntimeUiFallback.RememberLegacyCanvas(explicitFallbackCanvas);
                 return explicitFallbackCanvas;
@@ -792,14 +792,14 @@ namespace UnderwaterGliderTwin.UI
                 return parent;
             }
 
-            var uiRoot = EnsureResponsiveRuntimeLayout(canvas);
+            EnsureResponsiveRuntimeLayout(canvas);
             switch (name)
             {
                 case "FlightLegDrawerPanel":
                     return canvas.transform.Find("ModalRoot") ?? parent;
                 case "OceanViewportFrame":
                 case "OceanCommandToolbar":
-                    return uiRoot != null ? uiRoot.Find("MainBody/ViewportColumn") ?? parent : parent;
+                    return canvas.transform.Find("UiRoot/MainBody/ViewportColumn") ?? parent;
                 default: return parent;
             }
         }

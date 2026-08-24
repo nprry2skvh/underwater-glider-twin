@@ -261,6 +261,23 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void UiFactory_DoesNotUseInactiveExplicitFallbackCanvas()
+        {
+            RuntimeUiFallback.AllowRuntimeFallback = true;
+            var inactiveRoot = scope.CreateRoot("InactiveRuntimeUiRoot");
+            var inactiveCanvas = new GameObject("RuntimeCanvas", typeof(Canvas)).GetComponent<Canvas>();
+            inactiveCanvas.transform.SetParent(inactiveRoot.transform, false);
+            inactiveRoot.SetActive(false);
+            var owner = scope.CreateRoot("GeneratedRuntimeUI").transform;
+
+            var canvas = UiFactory.EnsureCanvas(owner, "GeneratedRuntimeUI", inactiveCanvas);
+
+            Assert.That(canvas, Is.Not.SameAs(inactiveCanvas));
+            Assert.That(canvas.gameObject.activeInHierarchy, Is.True);
+            Assert.That(canvas.transform.parent, Is.EqualTo(owner));
+        }
+
+        [Test]
         public void ClearDynamicRuntimeUi_DoesNotDestroyRowTemplate()
         {
             var view = scope.CreateRoot("DataInput").AddComponent<DataInputView>();
@@ -654,6 +671,29 @@ namespace UnderwaterGliderTwin.Tests
                 Assert.That(FindSceneObjectIncludingInactive("StatusDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
                 Assert.That(FindObjectsNamed("OceanCurrentDrawer"), Is.EqualTo(1));
                 Assert.That(FindObjectsNamed("FlightLegDrawer"), Is.EqualTo(1));
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
+                }
+            }
+        }
+
+        [Test]
+        public void EditableUiSceneBuilder_BuildMainScenePreservesGeneratedRuntimeUiDefault()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            try
+            {
+                EditableUiSceneBuilder.BuildMainScene();
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+
+                var bootstrap = Object.FindObjectOfType<TwinBootstrap>();
+                Assert.That(bootstrap, Is.Not.Null);
+                var serialized = new UnityEditor.SerializedObject(bootstrap);
+                Assert.That(serialized.FindProperty("useGeneratedRuntimeUi").boolValue, Is.True);
             }
             finally
             {

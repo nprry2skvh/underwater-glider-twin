@@ -198,7 +198,7 @@ namespace UnderwaterGliderTwin.Bootstrap
                 // has the canonical editable canvas. Reuse it so the fallback
                 // path remains a single-Canvas/single-ModalRoot architecture.
                 var existingCanvas = FindCanonicalCanvas();
-                if (existingCanvas != null)
+                if (existingCanvas != null && existingCanvas.gameObject.activeInHierarchy)
                 {
                     RuntimeUiFallback.RememberLegacyCanvas(existingCanvas);
                 }
@@ -295,13 +295,13 @@ namespace UnderwaterGliderTwin.Bootstrap
             }
 
             var canvas = UiFactory.EnsureCanvas(canvasRoot.transform);
-            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
-            if (canvas == null || uiRoot == null)
+            if (canvas == null)
             {
                 return;
             }
 
-            UiFactory.ApplyResponsivePanelRoots(canvas);
+            UiFactory.EnsureCommandCenterHeader(canvas.transform);
+            HideGeneratedResponsiveScaffoldForLegacyLayout(canvas);
             UiFactory.ApplyRuntimePalette(canvas.transform);
             UiFactory.ApplyRuntimeLabels(canvas.transform);
 
@@ -309,16 +309,38 @@ namespace UnderwaterGliderTwin.Bootstrap
             var tooltipController = UiFactory.EnsureTooltipPopup(modalRoot);
             var runtimeRoot = canvasRoot.GetComponent<RuntimeUiRoot>() ?? canvasRoot.AddComponent<RuntimeUiRoot>();
             var references = new RuntimeUiReferences();
-            BindViewportSurface(uiRoot, sourceCamera, references.layout);
             references.layout.tooltipPopup = tooltipController != null ? tooltipController.Popup : null;
             references.layout.tooltipController = tooltipController;
             runtimeRoot.ConfigureRuntimeReferences(canvas, modalRoot, references, RuntimeUiPanelFlags.None);
-            var controller = uiRoot.GetComponent<ResponsiveUiLayoutController>() ?? uiRoot.gameObject.AddComponent<ResponsiveUiLayoutController>();
-            controller.Bind(runtimeRoot, null);
-            controller.RefreshForScreen(Screen.width, Screen.height);
             if (canvasRoot.name == "RuntimeUI")
             {
                 RuntimeUiFallback.RememberGeneratedRuntimeRoot(canvasRoot);
+            }
+        }
+
+        private static void HideGeneratedResponsiveScaffoldForLegacyLayout(Canvas canvas)
+        {
+            if (canvas == null)
+            {
+                return;
+            }
+
+            var uiRoot = canvas.transform.Find("UiRoot") as RectTransform;
+            if (uiRoot == null)
+            {
+                return;
+            }
+
+            var viewportSurfaceHost = uiRoot.Find("MainBody/ViewportColumn/ViewportSurfaceHost");
+            if (viewportSurfaceHost != null)
+            {
+                viewportSurfaceHost.gameObject.SetActive(false);
+            }
+
+            var drawerEntryLayer = uiRoot.Find("DrawerEntryLayer");
+            if (drawerEntryLayer != null)
+            {
+                drawerEntryLayer.gameObject.SetActive(false);
             }
         }
 

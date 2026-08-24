@@ -258,6 +258,11 @@ namespace UnderwaterGliderTwin.UI
             ConfigureKeyValueChildren(labelText, value);
             advancedRows.Add(labelText.gameObject);
             advancedRows.Add(value.gameObject);
+            var unit = row.Find(valueName + "Unit")?.gameObject;
+            if (unit != null)
+            {
+                advancedRows.Add(unit);
+            }
             return value;
         }
 
@@ -637,7 +642,11 @@ namespace UnderwaterGliderTwin.UI
         {
             foreach (var row in advancedRows)
             {
-                row.GetComponent<Text>().enabled = showingDetails;
+                var text = row != null ? row.GetComponent<Text>() : null;
+                if (text != null)
+                {
+                    text.enabled = showingDetails;
+                }
             }
 
             if (panel != null)
