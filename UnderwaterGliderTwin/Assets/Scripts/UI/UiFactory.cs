@@ -149,6 +149,7 @@ namespace UnderwaterGliderTwin.UI
             ConfigureVerticalContent(viewportColumn, 12f);
             ConfigureHorizontalZone(viewportColumn, 640f, 0f);
             viewportColumn.GetComponent<LayoutElement>().flexibleWidth = 1f;
+            EnsureViewportSurface(viewportColumn, null);
             var statusColumn = EnsureRectTransformChild(mainBody, "StatusColumn");
             ConfigureRect(statusColumn, new Vector2(0.75f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), Vector2.zero, Vector2.zero);
             ConfigureVerticalContent(statusColumn, 12f);
@@ -169,6 +170,78 @@ namespace UnderwaterGliderTwin.UI
             EnsureRuntimeDrawerPlaceholder(modalRoot, "FlightLegDrawer");
             EnsureTooltipPopup(modalRoot);
             return uiRoot;
+        }
+
+        public static ViewportSurfaceController EnsureViewportSurface(RectTransform viewportColumn, Camera sourceCamera)
+        {
+            if (viewportColumn == null)
+            {
+                return null;
+            }
+
+            var host = viewportColumn.Find("ViewportSurfaceHost") as RectTransform;
+            if (host == null)
+            {
+                host = EnsureRectTransformChild(viewportColumn, "ViewportSurfaceHost");
+            }
+
+            ConfigureRect(host, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            var hostLayout = host.GetComponent<LayoutElement>() ?? host.gameObject.AddComponent<LayoutElement>();
+            hostLayout.ignoreLayout = true;
+            host.SetAsFirstSibling();
+
+            var surfaceTransform = host.Find("ViewportSurface") as RectTransform;
+            if (surfaceTransform == null)
+            {
+                surfaceTransform = EnsureRectTransformChild(host, "ViewportSurface");
+            }
+
+            ConfigureRect(surfaceTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            var surface = surfaceTransform.GetComponent<RawImage>() ?? surfaceTransform.gameObject.AddComponent<RawImage>();
+            surface.raycastTarget = false;
+            surface.color = Color.white;
+            surfaceTransform.SetAsFirstSibling();
+
+            var canvas = viewportColumn.GetComponentInParent<Canvas>();
+            if (canvas != null)
+            {
+                var legacyFrame = FindDescendant(canvas.transform, "OceanViewportFrame") as RectTransform;
+                if (legacyFrame != null)
+                {
+                    if (legacyFrame.parent != viewportColumn)
+                    {
+                        legacyFrame.SetParent(viewportColumn, false);
+                    }
+
+                    ConfigureRect(legacyFrame, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+                    var legacyLayout = legacyFrame.GetComponent<LayoutElement>() ?? legacyFrame.gameObject.AddComponent<LayoutElement>();
+                    legacyLayout.ignoreLayout = true;
+                    var legacyImage = legacyFrame.GetComponent<Image>();
+                    if (legacyImage != null)
+                    {
+                        legacyImage.raycastTarget = false;
+                    }
+                    legacyFrame.SetSiblingIndex(Mathf.Min(1, viewportColumn.childCount - 1));
+                }
+
+                var toolbar = FindDescendant(canvas.transform, "OceanCommandToolbar") as RectTransform;
+                if (toolbar != null)
+                {
+                    if (toolbar.parent != viewportColumn)
+                    {
+                        toolbar.SetParent(viewportColumn, false);
+                    }
+
+                    toolbar.SetAsLastSibling();
+                }
+            }
+
+            var controller = host.GetComponent<ViewportSurfaceController>() ?? host.gameObject.AddComponent<ViewportSurfaceController>();
+            if (sourceCamera != null || controller.Host == null || controller.Surface != surface)
+            {
+                controller.Bind(sourceCamera, host, surface);
+            }
+            return controller;
         }
 
         public static RectTransform Panel(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 size, Color color)
@@ -601,6 +674,9 @@ namespace UnderwaterGliderTwin.UI
             {
                 case "FlightLegDrawerPanel":
                     return canvas.transform.Find("ModalRoot") ?? parent;
+                case "OceanViewportFrame":
+                case "OceanCommandToolbar":
+                    return uiRoot != null ? uiRoot.Find("MainBody/ViewportColumn") ?? parent : parent;
                 default: return parent;
             }
         }

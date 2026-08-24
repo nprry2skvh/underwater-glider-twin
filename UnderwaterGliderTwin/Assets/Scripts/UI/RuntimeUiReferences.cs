@@ -36,6 +36,8 @@ namespace UnderwaterGliderTwin.UI
         public RectTransform mainBody;
         public RectTransform telemetryColumn;
         public RectTransform viewportColumn;
+        [OptionalUiReference] public RectTransform viewportSurfaceHost;
+        [OptionalUiReference] public RawImage viewportSurface;
         public RectTransform statusColumn;
         public RectTransform playbackBar;
         public Image drawerScrim;

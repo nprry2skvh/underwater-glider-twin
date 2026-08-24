@@ -61,6 +61,17 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(FindSceneObjects(scene, "DrawerLayer").Count, Is.EqualTo(0));
             Assert.That(FindSceneObject(scene, "RuntimeUI"), Is.Null);
             Assert.That(Object.FindObjectsOfType<Button>(true).Length, Is.GreaterThan(0));
+
+            var viewportColumn = FindSceneObject(scene, "ViewportColumn").GetComponent<RectTransform>();
+            var viewportController = FindSceneComponent<ViewportSurfaceController>(scene, "ViewportSurfaceHost");
+            var viewportSurface = FindSceneComponent<RawImage>(scene, "ViewportSurface");
+            var toolbar = FindSceneObject(scene, "OceanCommandToolbar").GetComponent<RectTransform>();
+            Assert.That(viewportController, Is.Not.Null);
+            Assert.That(viewportController.Host.parent, Is.SameAs(viewportColumn));
+            Assert.That(viewportSurface, Is.SameAs(viewportController.Surface));
+            Assert.That(viewportSurface.texture, Is.SameAs(Camera.main.targetTexture));
+            Assert.That(viewportSurface.raycastTarget, Is.False);
+            Assert.That(toolbar.GetSiblingIndex(), Is.GreaterThan(viewportController.Host.GetSiblingIndex()));
         }
 
         [UnityTest]

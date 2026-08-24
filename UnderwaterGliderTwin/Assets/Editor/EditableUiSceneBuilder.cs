@@ -157,6 +157,7 @@ namespace UnderwaterGliderTwin.Editor
             ConfigureColumnWidth(telemetryColumn, 280f, 280f, 0f);
             ConfigureColumnWidth(viewportColumn, 640f, 0f, 1f);
             ConfigureColumnWidth(statusColumn, 320f, 320f, 0f);
+            UiFactory.EnsureViewportSurface(viewportColumn, null);
             var drawerEntryLayer = EnsureLayoutContainer(uiRoot, "DrawerEntryLayer");
             ConfigureRect(drawerEntryLayer, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             drawerEntryLayer.SetAsLastSibling();

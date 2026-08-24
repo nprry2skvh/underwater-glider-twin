@@ -268,11 +268,11 @@ namespace UnderwaterGliderTwin.Bootstrap
 
             if (useGeneratedUi)
             {
-                BindGeneratedResponsiveUi(canvasRoot);
+                BindGeneratedResponsiveUi(canvasRoot, camera);
             }
             else if (runtimeUiRoot != null)
             {
-                BindConfiguredResponsiveUi(runtimeUiRoot);
+                BindConfiguredResponsiveUi(runtimeUiRoot, camera);
             }
 
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
@@ -287,7 +287,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             }
         }
 
-        private static void BindGeneratedResponsiveUi(GameObject canvasRoot)
+        private static void BindGeneratedResponsiveUi(GameObject canvasRoot, Camera sourceCamera)
         {
             if (canvasRoot == null)
             {
@@ -309,6 +309,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             var tooltipController = UiFactory.EnsureTooltipPopup(modalRoot);
             var runtimeRoot = canvasRoot.GetComponent<RuntimeUiRoot>() ?? canvasRoot.AddComponent<RuntimeUiRoot>();
             var references = new RuntimeUiReferences();
+            BindViewportSurface(uiRoot, sourceCamera, references.layout);
             references.layout.tooltipPopup = tooltipController != null ? tooltipController.Popup : null;
             references.layout.tooltipController = tooltipController;
             runtimeRoot.ConfigureRuntimeReferences(canvas, modalRoot, references, RuntimeUiPanelFlags.None);
@@ -321,7 +322,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             }
         }
 
-        private static void BindConfiguredResponsiveUi(RuntimeUiRoot root)
+        private static void BindConfiguredResponsiveUi(RuntimeUiRoot root, Camera sourceCamera)
         {
             if (root == null || root.RuntimeCanvas == null)
             {
@@ -337,6 +338,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             UiFactory.ApplyResponsivePanelRoots(root.RuntimeCanvas);
             UiFactory.ApplyRuntimePalette(root.RuntimeCanvas.transform);
             UiFactory.ApplyRuntimeLabels(root.RuntimeCanvas.transform);
+            BindViewportSurface(uiRoot, sourceCamera, root.References != null ? root.References.layout : null);
             var tooltipController = UiFactory.EnsureTooltipPopup(root.ModalRoot);
             if (root.References != null && root.References.layout != null)
             {
@@ -347,6 +349,25 @@ namespace UnderwaterGliderTwin.Bootstrap
             var controller = uiRoot.GetComponent<ResponsiveUiLayoutController>() ?? uiRoot.gameObject.AddComponent<ResponsiveUiLayoutController>();
             controller.Bind(root, root.References);
             controller.RefreshForScreen(Screen.width, Screen.height);
+        }
+
+        private static void BindViewportSurface(RectTransform uiRoot, Camera sourceCamera, ResponsiveLayoutRefs layoutReferences)
+        {
+            var viewportColumn = layoutReferences != null ? layoutReferences.viewportColumn : null;
+            if (viewportColumn == null && uiRoot != null)
+            {
+                viewportColumn = uiRoot.Find("MainBody/ViewportColumn") as RectTransform;
+            }
+
+            var controller = UiFactory.EnsureViewportSurface(viewportColumn, sourceCamera);
+            if (layoutReferences == null || controller == null)
+            {
+                return;
+            }
+
+            layoutReferences.viewportColumn = viewportColumn;
+            layoutReferences.viewportSurfaceHost = controller.Host;
+            layoutReferences.viewportSurface = controller.Surface;
         }
 
         private static Canvas FindCanonicalCanvas()

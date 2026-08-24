@@ -47,6 +47,16 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(runtimeRoot, Is.Not.Null);
             Assert.That(runtimeRoot.DrawerLayer, Is.SameAs(runtimeRoot.ModalRoot));
 
+            var viewportColumn = GameObject.Find("ViewportColumn").GetComponent<RectTransform>();
+            var viewportController = GameObject.Find("ViewportSurfaceHost").GetComponent<ViewportSurfaceController>();
+            var viewportSurface = GameObject.Find("ViewportSurface").GetComponent<UnityEngine.UI.RawImage>();
+            var toolbar = GameObject.Find("OceanCommandToolbar").GetComponent<RectTransform>();
+            Assert.That(viewportController.Host.parent, Is.SameAs(viewportColumn));
+            Assert.That(viewportSurface, Is.SameAs(viewportController.Surface));
+            Assert.That(viewportSurface.texture, Is.SameAs(Camera.main.targetTexture));
+            Assert.That(viewportSurface.raycastTarget, Is.False);
+            Assert.That(toolbar.GetSiblingIndex(), Is.GreaterThan(viewportController.Host.GetSiblingIndex()));
+
             var controller = Object.FindObjectOfType<ResponsiveUiLayoutController>(true);
             Assert.That(controller, Is.Not.Null);
 
