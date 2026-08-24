@@ -86,7 +86,9 @@ namespace UnderwaterGliderTwin.UI
 
             var alarmRect = UiFactory.Panel("AlarmPanel", panel, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(-32f, 72f), new Color(0.02f, 0.16f, 0.15f, 0.8f));
             alarmBackground = alarmRect.GetComponent<Image>();
+            alarmBackground.raycastTarget = false;
             alarmValue = UiFactory.Text("AlarmValue", alarmRect, "运行正常", 13, TextAnchor.MiddleCenter, Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(260f, 56f));
+            EnsureVisualHierarchy();
 
             playback.FrameChangedWithReason += OnFrameChanged;
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
@@ -133,6 +135,7 @@ namespace UnderwaterGliderTwin.UI
             }
             predictionMetricRows.Clear();
             ConfigureBoundRows();
+            EnsureVisualHierarchy();
             RegisterPredictionMetric(refs.panel, "漂移Label", driftValue);
             RegisterPredictionMetric(refs.panel, "均方根误差Label", rmseValue);
             RegisterPredictionMetric(refs.panel, "平均绝对误差Label", maeValue);
@@ -220,6 +223,67 @@ namespace UnderwaterGliderTwin.UI
             ConfigureBoundRow("ConfidenceRow", "置信度Label", confidenceValue);
             ConfigureBoundRow("PredictionTimeRow", "预测耗时Label", predictionTimeValue);
             ConfigureBoundRow("EngineeringValidationRow", "工程校核Label", engineeringValidationValue);
+        }
+
+        private void EnsureVisualHierarchy()
+        {
+            if (panel == null)
+            {
+                return;
+            }
+
+            UiFactory.EnsureCardSurface(
+                panel,
+                "MissionStatusCard",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(12f, -176f),
+                new Vector2(-12f, -48f));
+            var progressCard = UiFactory.EnsureCardSurface(
+                panel,
+                "MissionProgressCard",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(12f, -232f),
+                new Vector2(-12f, -182f),
+                UiVisualRole.ControlFill);
+            UiFactory.EnsureDivider(
+                progressCard,
+                "MissionPredictionDivider",
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(10f, 0f),
+                new Vector2(-10f, 1f));
+
+            var predictionCard = UiFactory.EnsureCardSurface(
+                panel,
+                "PredictionQualityCard",
+                Vector2.zero,
+                Vector2.one,
+                new Vector2(12f, 82f),
+                new Vector2(-12f, -238f));
+            UiFactory.EnsureDivider(
+                predictionCard,
+                "PredictionAlarmDivider",
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(10f, 0f),
+                new Vector2(-10f, 1f));
+
+            UiFactory.EnsureCardSurface(
+                panel,
+                "AlarmStateCard",
+                Vector2.zero,
+                new Vector2(1f, 0f),
+                new Vector2(12f, 12f),
+                new Vector2(-12f, 74f),
+                UiVisualRole.ControlFill);
+
+            var title = FindText(panel, "MissionStatusTitle") ?? FindText(panel, "TitleText");
+            UiFactory.ApplyTextRole(title, UiTextRole.Title, RuntimeUiLayoutMode.CompressedThreeColumn);
+            UiFactory.ApplyTextRole(FindText(panel, "MissionProgressLabel"), UiTextRole.SectionTitle, RuntimeUiLayoutMode.CompressedThreeColumn);
+            UiFactory.ApplyTextRole(predictionStatusValue, UiTextRole.Value, RuntimeUiLayoutMode.CompressedThreeColumn);
+            UiFactory.ApplyTextRole(alarmValue, UiTextRole.Error, RuntimeUiLayoutMode.CompressedThreeColumn);
         }
 
         private void ConfigureBoundRow(string rowName, string labelName, Text value)

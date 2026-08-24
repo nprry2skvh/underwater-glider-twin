@@ -108,6 +108,7 @@ namespace UnderwaterGliderTwin.UI
             actuatorPowerValue = AddAdvancedRow(panel, "\u6267\u884c\u673a\u6784\u529f\u7387", "ActuatorPowerValue", 588f, 1);
 
             dynamicsSummaryValue = UiFactory.Text("DynamicsSummaryValue", panel, "6DOF", 10, TextAnchor.MiddleRight, new Color(0.96f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(150f, -252f), new Vector2(162f, 22f));
+            EnsureVisualHierarchy();
             EnsureTelemetryEmptyState();
 
             playback.FrameChangedWithReason += OnFrameChanged;
@@ -172,6 +173,7 @@ namespace UnderwaterGliderTwin.UI
             }
 
             ConfigureBoundRows();
+            EnsureVisualHierarchy();
 
             playback.FrameChangedWithReason -= OnFrameChanged;
             playback.FrameChangedWithReason += OnFrameChanged;
@@ -295,6 +297,43 @@ namespace UnderwaterGliderTwin.UI
             ConfigureBoundRow("PistonPositionRow", "活塞位置Label", pistonPositionValue, true);
             ConfigureBoundRow("ControlSurfaceRow", "控制面偏角Label", controlSurfaceValue, true);
             ConfigureBoundRow("ActuatorPowerRow", "执行机构功率Label", actuatorPowerValue, true);
+        }
+
+        private void EnsureVisualHierarchy()
+        {
+            if (panel == null)
+            {
+                return;
+            }
+
+            var telemetryCard = UiFactory.EnsureCardSurface(
+                panel,
+                "TelemetrySnapshotCard",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(12f, -286f),
+                new Vector2(-12f, -48f));
+            UiFactory.EnsureDivider(
+                telemetryCard,
+                "TelemetrySectionDivider",
+                new Vector2(0f, 0.36f),
+                new Vector2(1f, 0.36f),
+                new Vector2(12f, -0.5f),
+                new Vector2(-12f, 0.5f));
+
+            UiFactory.EnsureCardSurface(
+                panel,
+                "TelemetryDynamicsCard",
+                Vector2.zero,
+                new Vector2(1f, 0f),
+                new Vector2(12f, 12f),
+                new Vector2(-12f, 72f));
+
+            var title = FindTextByNameOrValue(panel, "TelemetryTitle")
+                ?? FindTextByNameOrValue(panel, "TitleText");
+            UiFactory.ApplyTextRole(title, UiTextRole.Title, RuntimeUiLayoutMode.CompressedThreeColumn);
+            UiFactory.ApplyTextRole(dynamicsSummaryValue, UiTextRole.Auxiliary, RuntimeUiLayoutMode.CompressedThreeColumn);
+            UiFactory.ApplyButtonRole(detailsButton, UiButtonRole.Secondary);
         }
 
         private void ConfigureBoundRow(string rowName, string labelName, Text value, bool advanced)
@@ -608,6 +647,8 @@ namespace UnderwaterGliderTwin.UI
                 new Vector2(0f, 0f),
                 new Vector2(18f, 160f),
                 new Vector2(328f, 172f));
+            UiFactory.ApplyCommandPalette(card.GetComponent<Image>(), UiVisualRole.CardFill);
+            card.GetComponent<Image>().raycastTarget = false;
             UiFactory.Text("NavigationCardTitle", card, "\u59ff\u6001\u4e0e\u5bfc\u822a", 15, TextAnchor.MiddleLeft, UiFactory.CommandText,
                 new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -20f), new Vector2(168f, 24f));
             UiFactory.Text("NavigationCardNorth", card, "N", 12, TextAnchor.MiddleCenter, UiFactory.CommandText, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 36f), new Vector2(24f, 20f));

@@ -179,9 +179,9 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            var operations = EnsureLayoutRow(panel, "PlaybackOperationsRow", new Vector2(0f, 0.66f), Vector2.one);
-            var timeline = EnsureLayoutRow(panel, "PlaybackTimelineRow", new Vector2(0f, 0.34f), new Vector2(1f, 0.66f));
-            var options = EnsureLayoutRow(panel, "PlaybackOptionsRow", Vector2.zero, new Vector2(1f, 0.34f));
+            var operations = EnsureLayoutRow(panel, "PlaybackOperationsRow", new Vector2(0f, 0.66f), Vector2.one, UiVisualRole.CardFill);
+            var timeline = EnsureLayoutRow(panel, "PlaybackTimelineRow", new Vector2(0f, 0.34f), new Vector2(1f, 0.66f), UiVisualRole.InputFill);
+            var options = EnsureLayoutRow(panel, "PlaybackOptionsRow", Vector2.zero, new Vector2(1f, 0.34f), UiVisualRole.CardFill);
 
             MoveToRow(panel, operations, "PlaybackGroupLabel", 86f, false, "TitleText");
             MoveToRow(panel, operations, "PlayPauseButton", 82f);
@@ -208,9 +208,19 @@ namespace UnderwaterGliderTwin.UI
             MoveToRow(panel, options, "LegendPredicted", 96f);
             MoveToRow(panel, options, "LegendPlanned", 66f);
 
+            UiFactory.EnsureDivider(operations, "PlaybackOperationsDivider", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(8f, 0f), new Vector2(-8f, 1f));
+            UiFactory.EnsureDivider(timeline, "PlaybackTimelineDivider", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(8f, 0f), new Vector2(-8f, 1f));
+
+            ApplyButtonRole(panel, "PlayPauseButton", UiButtonRole.Primary);
+            ApplyButtonRole(panel, "ReverseButton", UiButtonRole.Secondary);
+            ApplyButtonRole(panel, "ReplayButton", UiButtonRole.Secondary);
+            ApplyButtonRole(panel, "ResetButton", UiButtonRole.Secondary);
+            ApplyButtonRole(panel, "ExportButton", UiButtonRole.Secondary);
+            ApplyButtonRole(panel, "ExitButton", UiButtonRole.Quiet);
+            ApplyButtonRole(panel, "MissionVolumeButton", UiButtonRole.Secondary);
         }
 
-        private static RectTransform EnsureLayoutRow(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax)
+        private static RectTransform EnsureLayoutRow(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, UiVisualRole surfaceRole)
         {
             var row = parent.Find(name) as RectTransform;
             if (row == null)
@@ -224,6 +234,13 @@ namespace UnderwaterGliderTwin.UI
             row.offsetMin = new Vector2(12f, 0f);
             row.offsetMax = new Vector2(-12f, 0f);
             row.pivot = new Vector2(0.5f, 0.5f);
+            var rowImage = row.GetComponent<Image>();
+            if (rowImage == null)
+            {
+                rowImage = row.gameObject.AddComponent<Image>();
+                UiFactory.ApplyCommandPalette(rowImage, surfaceRole);
+            }
+            rowImage.raycastTarget = false;
             var layout = row.GetComponent<HorizontalLayoutGroup>() ?? row.gameObject.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = 8f;
             layout.childAlignment = TextAnchor.MiddleLeft;
@@ -232,6 +249,12 @@ namespace UnderwaterGliderTwin.UI
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = true;
             return row;
+        }
+
+        private static void ApplyButtonRole(Transform panel, string name, UiButtonRole role)
+        {
+            var control = FindDescendant(panel, name);
+            UiFactory.ApplyButtonRole(control != null ? control.GetComponent<Button>() : null, role);
         }
 
         private static void MoveToRow(Transform panel, Transform row, string name, float preferredWidth, bool flexible = false, string alias = null)
@@ -287,6 +310,7 @@ namespace UnderwaterGliderTwin.UI
                 text.alignment = TextAnchor.MiddleCenter;
                 text.horizontalOverflow = HorizontalWrapMode.Wrap;
                 text.verticalOverflow = VerticalWrapMode.Truncate;
+                UiFactory.ApplyTextRole(text, UiTextRole.Button, RuntimeUiLayoutMode.CompressedThreeColumn);
             }
         }
 

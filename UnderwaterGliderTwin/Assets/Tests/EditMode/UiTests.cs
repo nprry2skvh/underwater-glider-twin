@@ -2447,6 +2447,148 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(depthRect.pivot, Is.EqualTo(new Vector2(1f, 1f)));
         }
 
+        [Test]
+        public void DashboardView_BuildsLayeredTelemetryCardsWithReadableNumericRoles()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var prediction = CreatePrediction(playback, Frames(2));
+            var dashboard = new GameObject("DashboardHierarchy").AddComponent<DashboardView>();
+
+            dashboard.Initialize(playback, prediction);
+
+            var telemetryCard = GameObject.Find("TelemetrySnapshotCard");
+            var dynamicsCard = GameObject.Find("TelemetryDynamicsCard");
+            var navigationCard = GameObject.Find("NavigationReferenceCard");
+            var divider = GameObject.Find("TelemetrySectionDivider");
+            Assert.That(telemetryCard, Is.Not.Null);
+            Assert.That(dynamicsCard, Is.Not.Null);
+            Assert.That(navigationCard, Is.Not.Null);
+            Assert.That(divider, Is.Not.Null);
+            Assert.That(telemetryCard.GetComponent<Image>().raycastTarget, Is.False);
+            AssertColorClose(telemetryCard.GetComponent<Image>().color, UiFactory.CommandCardFill);
+            Assert.That(divider.GetComponent<Image>().raycastTarget, Is.False);
+
+            var depth = FindText("DepthValue");
+            var depthLayout = depth.GetComponent<LayoutElement>();
+            Assert.That(depth.fontSize, Is.GreaterThanOrEqualTo(18));
+            Assert.That(depth.alignment, Is.EqualTo(TextAnchor.MiddleRight));
+            Assert.That(depthLayout.preferredWidth, Is.EqualTo(UiFactory.FixedValueColumnWidth));
+            AssertColorClose(depth.color, UiFactory.CommandText);
+            AssertColorClose(FindText("深度Label").color, UiFactory.CommandMutedText);
+        }
+
+        [Test]
+        public void StatusPanelView_GroupsMissionProgressPredictionAndAlarmSurfaces()
+        {
+            var frames = Frames(2);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var status = new GameObject("StatusHierarchy").AddComponent<StatusPanelView>();
+
+            status.Initialize(playback, new AlarmEvaluator(1000f, 0f, 180f), null, prediction);
+
+            var cardNames = new[]
+            {
+                "MissionStatusCard",
+                "MissionProgressCard",
+                "PredictionQualityCard",
+                "AlarmStateCard"
+            };
+            foreach (var cardName in cardNames)
+            {
+                var card = GameObject.Find(cardName);
+                Assert.That(card, Is.Not.Null, cardName);
+                Assert.That(card.GetComponent<Image>(), Is.Not.Null, cardName);
+                Assert.That(card.GetComponent<Image>().raycastTarget, Is.False, cardName);
+            }
+
+            var predictionValue = FindText("PredictionStatusValue");
+            Assert.That(predictionValue.fontSize, Is.GreaterThanOrEqualTo(18));
+            Assert.That(predictionValue.GetComponent<LayoutElement>().preferredWidth,
+                Is.EqualTo(UiFactory.FixedValueColumnWidth));
+            Assert.That(GameObject.Find("MissionPredictionDivider"), Is.Not.Null);
+            Assert.That(GameObject.Find("PredictionAlarmDivider"), Is.Not.Null);
+        }
+
+        [Test]
+        public void PlaybackControlsView_UsesThreeStyledRowsAndDistinctButtonRoles()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("PlaybackHierarchyCamera").AddComponent<TwinCameraController>();
+            var environment = new GameObject("PlaybackHierarchyEnvironment").AddComponent<UnderwaterEnvironmentBuilder>();
+            var trajectory = new GameObject("PlaybackHierarchyTrajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            var controls = new GameObject("PlaybackHierarchyControls").AddComponent<PlaybackControlsView>();
+
+            controls.Initialize(playback, cameraController, environment, trajectory);
+
+            var operations = GameObject.Find("PlaybackOperationsRow").transform;
+            var timeline = GameObject.Find("PlaybackTimelineRow").transform;
+            var options = GameObject.Find("PlaybackOptionsRow").transform;
+            Assert.That(operations.GetComponent<Image>().raycastTarget, Is.False);
+            Assert.That(timeline.GetComponent<Image>().raycastTarget, Is.False);
+            Assert.That(options.GetComponent<Image>().raycastTarget, Is.False);
+            Assert.That(GameObject.Find("PlayPauseButton").transform.parent, Is.SameAs(operations));
+            Assert.That(GameObject.Find("ProgressSlider").transform.parent, Is.SameAs(timeline));
+            Assert.That(GameObject.Find("FogToggle").transform.parent, Is.SameAs(options));
+            Assert.That(GameObject.Find("PlaybackOperationsDivider"), Is.Not.Null);
+            Assert.That(GameObject.Find("PlaybackTimelineDivider"), Is.Not.Null);
+
+            var primary = GameObject.Find("PlayPauseButton").GetComponent<Button>();
+            var secondary = GameObject.Find("ReverseButton").GetComponent<Button>();
+            AssertColorClose(primary.image.color, UiFactory.CommandAccent);
+            AssertColorClose(secondary.image.color, UiFactory.CommandButtonFill);
+            Assert.That(primary.GetComponentInChildren<Text>().fontSize, Is.GreaterThanOrEqualTo(18));
+            Assert.That(GameObject.Find("CameraFollowButton").activeSelf, Is.False);
+            Assert.That(GameObject.Find("CameraGlobalButton").activeSelf, Is.False);
+            Assert.That(GameObject.Find("CameraOrbitButton").activeSelf, Is.False);
+        }
+
+        [Test]
+        public void VisualHierarchySetup_PreservesExistingAuthoredCardValues()
+        {
+            var root = new GameObject("DashboardPanel", typeof(RectTransform));
+            var card = new GameObject("TelemetrySnapshotCard", typeof(RectTransform), typeof(Image));
+            card.transform.SetParent(root.transform, false);
+            var authoredColor = new Color(0.41f, 0.12f, 0.32f, 0.77f);
+            var authoredPosition = new Vector2(37f, -91f);
+            card.GetComponent<Image>().color = authoredColor;
+            card.GetComponent<RectTransform>().anchoredPosition = authoredPosition;
+            var depth = CreateText(root.transform, "DepthValue");
+            var dashboard = new GameObject("DashboardPreservation").AddComponent<DashboardView>();
+
+            dashboard.Bind(new DashboardPanelRefs
+            {
+                panel = root.GetComponent<RectTransform>(),
+                depthValue = depth
+            }, CreatePlayback(Frames(2)), null);
+
+            Assert.That(CountDirectChildrenNamed(root.transform, "TelemetrySnapshotCard"), Is.EqualTo(1));
+            AssertColorClose(card.GetComponent<Image>().color, authoredColor);
+            Assert.That(card.GetComponent<RectTransform>().anchoredPosition, Is.EqualTo(authoredPosition));
+        }
+
+        [Test]
+        public void ShippedPanelPrefabs_ContainVisualGroupingRoots()
+        {
+            var dashboard = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/UI/Prefabs/DashboardPanel.prefab");
+            var status = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/UI/Prefabs/StatusPanel.prefab");
+            var playback = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/UI/Prefabs/PlaybackControlsPanel.prefab");
+
+            Assert.That(dashboard.transform.Find("TelemetrySnapshotCard"), Is.Not.Null);
+            Assert.That(dashboard.transform.Find("TelemetryDynamicsCard"), Is.Not.Null);
+            Assert.That(status.transform.Find("MissionStatusCard"), Is.Not.Null);
+            Assert.That(status.transform.Find("MissionProgressCard"), Is.Not.Null);
+            Assert.That(status.transform.Find("PredictionQualityCard"), Is.Not.Null);
+            Assert.That(status.transform.Find("AlarmStateCard"), Is.Not.Null);
+            Assert.That(playback.transform.Find("PlaybackOperationsRow"), Is.Not.Null);
+            Assert.That(playback.transform.Find("PlaybackTimelineRow"), Is.Not.Null);
+            Assert.That(playback.transform.Find("PlaybackOptionsRow"), Is.Not.Null);
+        }
+
         private static Text FindText(string name)
         {
             return GameObject.Find(name).GetComponent<Text>();

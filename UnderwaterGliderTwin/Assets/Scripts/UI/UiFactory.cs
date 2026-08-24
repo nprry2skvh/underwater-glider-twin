@@ -23,23 +23,30 @@ namespace UnderwaterGliderTwin.UI
         ErrorFill
     }
 
+    public enum UiButtonRole
+    {
+        Primary,
+        Secondary,
+        Quiet
+    }
+
     public static class UiFactory
     {
-        public static readonly Color CommandPageBackground = new Color(0.027451f, 0.094118f, 0.129412f, 1f);
-        public static readonly Color CommandPanelFill = new Color(0.043137f, 0.141176f, 0.188235f, 1f);
-        public static readonly Color CommandCardFill = new Color(0.062745f, 0.184314f, 0.235294f, 1f);
-        public static readonly Color CommandControlFill = new Color(0.082353f, 0.231373f, 0.290196f, 1f);
-        public static readonly Color CommandPanelEdge = new Color(0.086275f, 0.266667f, 0.329412f, 1f);
-        public static readonly Color CommandDivider = new Color(0.086275f, 0.266667f, 0.329412f, 1f);
-        public static readonly Color CommandAccent = new Color(0.3647059f, 0.84313726f, 0.9098039f, 1f);
-        public static readonly Color CommandText = new Color(0.898039f, 0.949020f, 0.952941f, 1f);
-        public static readonly Color CommandButtonFill = new Color(0.082353f, 0.231373f, 0.290196f, 1f);
-        public static readonly Color CommandInputFill = new Color(0.027451f, 0.094118f, 0.129412f, 1f);
+        public static readonly Color CommandPageBackground = new Color(0.019608f, 0.070588f, 0.101961f, 1f);
+        public static readonly Color CommandPanelFill = new Color(0.031373f, 0.125490f, 0.172549f, 1f);
+        public static readonly Color CommandCardFill = new Color(0.047059f, 0.180392f, 0.231373f, 1f);
+        public static readonly Color CommandControlFill = new Color(0.062745f, 0.239216f, 0.301961f, 1f);
+        public static readonly Color CommandPanelEdge = new Color(0.094118f, 0.352941f, 0.419608f, 1f);
+        public static readonly Color CommandDivider = new Color(0.117647f, 0.423529f, 0.494118f, 0.92f);
+        public static readonly Color CommandAccent = new Color(0.223529f, 0.854902f, 0.956863f, 1f);
+        public static readonly Color CommandText = new Color(0.925490f, 0.976471f, 0.984314f, 1f);
+        public static readonly Color CommandButtonFill = new Color(0.070588f, 0.278431f, 0.349020f, 1f);
+        public static readonly Color CommandInputFill = new Color(0.019608f, 0.090196f, 0.125490f, 1f);
         public static readonly Color CommandViewportOverlay = new Color(0.027451f, 0.094118f, 0.129412f, 0.20f);
-        public static readonly Color CommandMutedText = new Color(0.568627f, 0.709804f, 0.745098f, 1f);
-        public static readonly Color CommandSuccess = new Color(0.254902f, 0.776471f, 0.654902f, 1f);
-        public static readonly Color CommandWarning = new Color(0.905f, 0.788f, 0.419f, 1f);
-        public static readonly Color CommandError = new Color(0.949020f, 0.482353f, 0.482353f, 1f);
+        public static readonly Color CommandMutedText = new Color(0.619608f, 0.768627f, 0.803922f, 1f);
+        public static readonly Color CommandSuccess = new Color(0.235294f, 0.850980f, 0.686275f, 1f);
+        public static readonly Color CommandWarning = new Color(0.960784f, 0.749020f, 0.301961f, 1f);
+        public static readonly Color CommandError = new Color(1f, 0.431373f, 0.454902f, 1f);
         public static readonly Color CommandDarkText = new Color(0.031f, 0.090f, 0.129f, 1f);
         public const float CommandCenterHeaderHeight = 48f;
         public const float CommandCenterParameterBarHeight = 48f;
@@ -408,16 +415,99 @@ namespace UnderwaterGliderTwin.UI
         public static Button PrimaryButton(string name, Transform parent, string label, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 size)
         {
             var button = Button(name, parent, label, anchorMin, anchorMax, pivot, anchoredPosition, size);
-            ApplyCommandPalette(button.image, UiVisualRole.AccentFill);
-            var outline = button.GetComponent<Outline>();
-            outline.effectColor = CommandAccent;
-            button.colors = CreateButtonStates();
-            var labelText = button.GetComponentInChildren<Text>();
-            if (labelText != null)
-            {
-                ApplyCommandPalette(labelText, UiVisualRole.AccentText);
-            }
+            ApplyButtonRole(button, UiButtonRole.Primary, false);
             return button;
+        }
+
+        public static void ApplyButtonRole(Button button, UiButtonRole role, bool preserveAuthoredValues = true)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            var image = button.image;
+            var canApplyFill = !preserveAuthoredValues
+                || image == null
+                || IsDefaultGraphicColor(image.color)
+                || IsCommandThemeColor(image.color);
+            if (image != null && canApplyFill)
+            {
+                ApplyCommandPalette(image, role == UiButtonRole.Primary ? UiVisualRole.AccentFill : UiVisualRole.ButtonFill);
+            }
+
+            var outline = button.GetComponent<Outline>() ?? button.gameObject.AddComponent<Outline>();
+            if (!preserveAuthoredValues || outline.effectColor == Color.white || IsCommandThemeColor(outline.effectColor))
+            {
+                outline.effectColor = role == UiButtonRole.Primary ? CommandAccent : CommandPanelEdge;
+                outline.effectDistance = role == UiButtonRole.Primary ? new Vector2(2f, -2f) : new Vector2(1f, -1f);
+                outline.useGraphicAlpha = true;
+            }
+
+            if (!preserveAuthoredValues || IsDefaultButtonStates(button.colors))
+            {
+                button.colors = CreateButtonStates();
+            }
+
+            var label = button.GetComponentInChildren<Text>(true);
+            if (label != null)
+            {
+                ApplyTextRole(label, UiTextRole.Button, RuntimeUiLayoutMode.CompressedThreeColumn);
+                if (role == UiButtonRole.Primary && (!preserveAuthoredValues || IsDefaultGraphicColor(label.color) || IsCommandThemeColor(label.color)))
+                {
+                    ApplyCommandPalette(label, UiVisualRole.AccentText);
+                }
+            }
+        }
+
+        public static RectTransform EnsureCardSurface(
+            Transform parent,
+            string name,
+            Vector2 anchorMin,
+            Vector2 anchorMax,
+            Vector2 offsetMin,
+            Vector2 offsetMax,
+            UiVisualRole role = UiVisualRole.CardFill)
+        {
+            if (parent == null)
+            {
+                return null;
+            }
+
+            var existing = parent.Find(name) as RectTransform;
+            var created = existing == null;
+            var card = existing ?? new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
+            if (created)
+            {
+                card.SetParent(parent, false);
+                card.anchorMin = anchorMin;
+                card.anchorMax = anchorMax;
+                card.pivot = new Vector2(0.5f, 0.5f);
+                card.offsetMin = offsetMin;
+                card.offsetMax = offsetMax;
+                card.SetAsFirstSibling();
+            }
+
+            var image = card.GetComponent<Image>();
+            var imageCreated = image == null;
+            if (imageCreated)
+            {
+                image = card.gameObject.AddComponent<Image>();
+            }
+            if (created || imageCreated || IsDefaultGraphicColor(image.color))
+            {
+                ApplyCommandPalette(image, role);
+            }
+            image.raycastTarget = false;
+
+            var layout = card.GetComponent<LayoutElement>() ?? card.gameObject.AddComponent<LayoutElement>();
+            layout.ignoreLayout = true;
+            return card;
+        }
+
+        public static RectTransform EnsureDivider(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
+        {
+            return EnsureCardSurface(parent, name, anchorMin, anchorMax, offsetMin, offsetMax, UiVisualRole.Divider);
         }
 
         public static Image ProgressBar(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 size)
@@ -901,6 +991,21 @@ namespace UnderwaterGliderTwin.UI
             return color == Color.white || color.a <= 0.001f;
         }
 
+        private static bool IsCommandThemeColor(Color color)
+        {
+            return color == CommandPanelFill
+                || color == CommandCardFill
+                || color == CommandControlFill
+                || color == CommandPanelEdge
+                || color == CommandDivider
+                || color == CommandButtonFill
+                || color == CommandAccent
+                || color == CommandInputFill
+                || color == CommandText
+                || color == CommandMutedText
+                || color == CommandDarkText;
+        }
+
         private static bool IsDefaultButtonStates(ColorBlock colors)
         {
             return AreButtonStatesEqual(colors, ColorBlock.defaultColorBlock)
@@ -937,9 +1042,9 @@ namespace UnderwaterGliderTwin.UI
             {
                 case UiTextRole.Title:
                 case UiTextRole.Value:
-                case UiTextRole.Label:
                     ApplyCommandPalette(text, UiVisualRole.Text);
                     break;
+                case UiTextRole.Label:
                 case UiTextRole.SectionTitle:
                 case UiTextRole.Auxiliary:
                     ApplyCommandPalette(text, UiVisualRole.MutedText);
