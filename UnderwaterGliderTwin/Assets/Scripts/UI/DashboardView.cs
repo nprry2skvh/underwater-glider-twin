@@ -334,6 +334,7 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.ApplyTextRole(title, UiTextRole.Title, RuntimeUiLayoutMode.CompressedThreeColumn);
             UiFactory.ApplyTextRole(dynamicsSummaryValue, UiTextRole.Auxiliary, RuntimeUiLayoutMode.CompressedThreeColumn);
             UiFactory.ApplyButtonRole(detailsButton, UiButtonRole.Secondary);
+            UiFactory.ApplyRuntimePalette(panel);
         }
 
         private void ConfigureBoundRow(string rowName, string labelName, Text value, bool advanced)

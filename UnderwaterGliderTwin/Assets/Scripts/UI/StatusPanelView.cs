@@ -284,6 +284,7 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.ApplyTextRole(FindText(panel, "MissionProgressLabel"), UiTextRole.SectionTitle, RuntimeUiLayoutMode.CompressedThreeColumn);
             UiFactory.ApplyTextRole(predictionStatusValue, UiTextRole.Value, RuntimeUiLayoutMode.CompressedThreeColumn);
             UiFactory.ApplyTextRole(alarmValue, UiTextRole.Error, RuntimeUiLayoutMode.CompressedThreeColumn);
+            UiFactory.ApplyRuntimePalette(panel);
         }
 
         private void ConfigureBoundRow(string rowName, string labelName, Text value)

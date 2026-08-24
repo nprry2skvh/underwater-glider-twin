@@ -218,6 +218,7 @@ namespace UnderwaterGliderTwin.UI
             ApplyButtonRole(panel, "ExportButton", UiButtonRole.Secondary);
             ApplyButtonRole(panel, "ExitButton", UiButtonRole.Quiet);
             ApplyButtonRole(panel, "MissionVolumeButton", UiButtonRole.Secondary);
+            UiFactory.ApplyRuntimePalette(panel);
         }
 
         private static RectTransform EnsureLayoutRow(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, UiVisualRole surfaceRole)
@@ -472,9 +473,20 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.SetButtonText(playPauseButton, playback != null && playback.Model.IsPlaying ? "暂停" : "开始");
             foreach (var entry in speedButtons)
             {
-                entry.Value.image.color = playback != null && Mathf.Approximately(playback.Model.Speed, entry.Key)
-                    ? new Color(0.08f, 0.56f, 0.72f, 0.96f)
-                    : new Color(0.12f, 0.28f, 0.34f, 0.9f);
+                UiFactory.ApplyCommandPalette(
+                    entry.Value.image,
+                    playback != null && Mathf.Approximately(playback.Model.Speed, entry.Key)
+                        ? UiVisualRole.AccentFill
+                        : UiVisualRole.ButtonFill);
+                var label = entry.Value.GetComponentInChildren<Text>(true);
+                if (label != null)
+                {
+                    UiFactory.ApplyCommandPalette(
+                        label,
+                        playback != null && Mathf.Approximately(playback.Model.Speed, entry.Key)
+                            ? UiVisualRole.AccentText
+                            : UiVisualRole.Text);
+                }
             }
         }
 

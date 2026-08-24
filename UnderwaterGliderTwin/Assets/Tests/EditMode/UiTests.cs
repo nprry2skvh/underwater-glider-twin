@@ -1960,7 +1960,7 @@ namespace UnderwaterGliderTwin.Tests
                 new Vector2(120f, 24f));
 
             var label = button.GetComponentInChildren<Text>();
-            var accent = ParseColor("#5DD7E8");
+            var accent = ParseColor("#39DAF4");
             var states = button.colors;
 
             AssertColorClose(button.image.color, accent);
@@ -2114,13 +2114,16 @@ namespace UnderwaterGliderTwin.Tests
         [Test]
         public void UiFactory_UsesApprovedCommandCenterPaletteAndButtonStates()
         {
-            AssertColorClose(UiFactory.CommandPanelFill, ParseColor("#0B2430"));
-            AssertColorClose(UiFactory.CommandInputFill, ParseColor("#071821"));
-            AssertColorClose(UiFactory.CommandButtonFill, ParseColor("#153B4A"));
-            AssertColorClose(UiFactory.CommandPanelEdge, ParseColor("#164454"));
-            AssertColorClose(UiFactory.CommandAccent, ParseColor("#5DD7E8"));
-            AssertColorClose(UiFactory.CommandText, ParseColor("#E5F2F3"));
-            AssertColorClose(UiFactory.CommandMutedText, ParseColor("#91B5BE"));
+            AssertColorClose(UiFactory.CommandPageBackground, ParseColor("#05121A"));
+            AssertColorClose(UiFactory.CommandPanelFill, ParseColor("#08202C"));
+            AssertColorClose(UiFactory.CommandCardFill, ParseColor("#0C2E3B"));
+            AssertColorClose(UiFactory.CommandControlFill, ParseColor("#103D4D"));
+            AssertColorClose(UiFactory.CommandInputFill, ParseColor("#051720"));
+            AssertColorClose(UiFactory.CommandButtonFill, ParseColor("#124759"));
+            AssertColorClose(UiFactory.CommandPanelEdge, ParseColor("#185A6B"));
+            AssertColorClose(UiFactory.CommandAccent, ParseColor("#39DAF4"));
+            AssertColorClose(UiFactory.CommandText, ParseColor("#ECF9FB"));
+            AssertColorClose(UiFactory.CommandMutedText, ParseColor("#9EC4CD"));
 
             var canvas = new GameObject("PaletteCanvas", typeof(RectTransform), typeof(Canvas));
             var panel = new GameObject("PlaybackControlsPanel", typeof(RectTransform), typeof(Image));
@@ -2589,9 +2592,160 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(playback.transform.Find("PlaybackOptionsRow"), Is.Not.Null);
         }
 
+        [Test]
+        public void UiFactory_RuntimePaletteMigratesKnownLegacyColorsWithoutReplacingCustomOverrides()
+        {
+            var panel = new GameObject("PlaybackControlsPanel", typeof(RectTransform), typeof(Image));
+            panel.GetComponent<Image>().color = new Color(0.025f, 0.12f, 0.18f, 0.92f);
+            var primary = UiFactory.Button("PlayPauseButton", panel.transform, "开始", Vector2.zero, new Vector2(80f, 32f));
+            primary.image.color = new Color(0.082f, 0.184f, 0.259f, 0.96f);
+            var custom = UiFactory.Button("ExportButton", panel.transform, "导出", Vector2.zero, new Vector2(80f, 32f));
+            var customColor = new Color(0.48f, 0.11f, 0.36f, 0.83f);
+            custom.image.color = customColor;
+
+            UiFactory.ApplyRuntimePalette(panel.transform);
+
+            AssertColorClose(panel.GetComponent<Image>().color, UiFactory.CommandPanelFill);
+            AssertColorClose(primary.image.color, UiFactory.CommandAccent);
+            AssertColorClose(custom.image.color, customColor);
+        }
+
+        [Test]
+        public void PlaybackControlsView_BindsShippedPrefabWithThemeRolesAndNonBlockingRows()
+        {
+            var panel = InstantiateShippedPanelPrefab("Assets/UI/Prefabs/PlaybackControlsPanel.prefab");
+            var refs = new PlaybackControlsRefs
+            {
+                panel = panel,
+                playPauseButton = FindChildNamed(panel, "PlayPauseButton").GetComponent<Button>(),
+                reverseButton = FindChildNamed(panel, "ReverseButton").GetComponent<Button>(),
+                replayButton = FindChildNamed(panel, "ReplayButton").GetComponent<Button>(),
+                resetButton = FindChildNamed(panel, "ResetButton").GetComponent<Button>(),
+                exportButton = FindChildNamed(panel, "ExportButton").GetComponent<Button>(),
+                exitButton = FindChildNamed(panel, "ExitButton").GetComponent<Button>(),
+                missionVolumeButton = FindChildNamed(panel, "MissionVolumeButton").GetComponent<Button>(),
+                fogToggle = FindChildNamed(panel, "FogToggle").GetComponent<Toggle>(),
+                particlesToggle = FindChildNamed(panel, "ParticlesToggle").GetComponent<Toggle>(),
+                trajectoryToggle = FindChildNamed(panel, "TrajectoryToggle").GetComponent<Toggle>(),
+                speed05Button = FindChildNamed(panel, "Speed05Button").GetComponent<Button>(),
+                speed1Button = FindChildNamed(panel, "Speed1Button").GetComponent<Button>(),
+                speed2Button = FindChildNamed(panel, "Speed2Button").GetComponent<Button>(),
+                speed5Button = FindChildNamed(panel, "Speed5Button").GetComponent<Button>(),
+                speed10Button = FindChildNamed(panel, "Speed10Button").GetComponent<Button>(),
+                progressSlider = FindChildNamed(panel, "ProgressSlider").GetComponent<Slider>(),
+                statusText = FindChildNamed(panel, "StatusText").GetComponent<Text>()
+            };
+            var view = new GameObject("ShippedPlaybackView").AddComponent<PlaybackControlsView>();
+
+            view.Bind(refs, CreatePlayback(Frames(2)), null, null, null);
+
+            AssertColorClose(refs.panel.GetComponent<Image>().color, UiFactory.CommandPanelFill);
+            AssertColorClose(refs.playPauseButton.image.color, UiFactory.CommandAccent);
+            AssertColorClose(refs.reverseButton.image.color, UiFactory.CommandButtonFill);
+            AssertColorClose(refs.speed1Button.image.color, UiFactory.CommandAccent);
+            foreach (var rowName in new[] { "PlaybackOperationsRow", "PlaybackTimelineRow", "PlaybackOptionsRow" })
+            {
+                var image = panel.Find(rowName).GetComponent<Image>();
+                Assert.That(image, Is.Not.Null, rowName);
+                Assert.That(image.raycastTarget, Is.False, rowName);
+            }
+        }
+
+        [TestCase(236f, TestName = "DashboardValueRows_FitResponsiveSidebarWidth_At1280")]
+        [TestCase(280f, TestName = "DashboardValueRows_FitResponsiveSidebarWidth_At1366")]
+        public void DashboardValueRows_FitResponsiveSidebarWidth(float sidebarWidth)
+        {
+            var root = new GameObject("DashboardPanel", typeof(RectTransform));
+            root.GetComponent<RectTransform>().sizeDelta = new Vector2(sidebarWidth, 600f);
+            var depth = CreateText(root.transform, "DepthValue");
+            var view = new GameObject("SidebarWidthDashboard").AddComponent<DashboardView>();
+
+            view.Bind(new DashboardPanelRefs
+            {
+                panel = root.GetComponent<RectTransform>(),
+                depthValue = depth
+            }, CreatePlayback(Frames(2)), null);
+
+            var row = root.transform.Find("DepthRow").GetComponent<RectTransform>();
+            AssertRowWidthBudgetFits(row, sidebarWidth - 8f);
+        }
+
+        [TestCase(236f, TestName = "DashboardAndStatusViews_BindShippedPrefabsWithoutOverflow_At1280")]
+        [TestCase(280f, TestName = "DashboardAndStatusViews_BindShippedPrefabsWithoutOverflow_At1366")]
+        public void DashboardAndStatusViews_BindShippedPrefabsWithCompactNonBlockingCards(float sidebarWidth)
+        {
+            var playback = CreatePlayback(Frames(2));
+            var dashboardPanel = InstantiateShippedPanelPrefab("Assets/UI/Prefabs/DashboardPanel.prefab");
+            dashboardPanel.sizeDelta = new Vector2(sidebarWidth, 600f);
+            var dashboard = new GameObject("ShippedDashboardView").AddComponent<DashboardView>();
+            dashboard.Bind(new DashboardPanelRefs
+            {
+                panel = dashboardPanel,
+                depthValue = FindChildNamed(dashboardPanel, "DepthValue").GetComponent<Text>(),
+                detailsButton = FindChildNamed(dashboardPanel, "DetailsButton").GetComponent<Button>(),
+                navigationReferenceCard = FindChildNamed(dashboardPanel, "NavigationReferenceCard").gameObject
+            }, playback, null);
+
+            var statusPanel = InstantiateShippedPanelPrefab("Assets/UI/Prefabs/StatusPanel.prefab");
+            statusPanel.sizeDelta = new Vector2(sidebarWidth, 600f);
+            var status = new GameObject("ShippedStatusView").AddComponent<StatusPanelView>();
+            status.Bind(new StatusPanelRefs
+            {
+                panel = statusPanel,
+                missionValue = FindChildNamed(statusPanel, "MissionValue").GetComponent<Text>()
+            }, playback, null, null, null);
+
+            AssertColorClose(dashboardPanel.GetComponent<Image>().color, UiFactory.CommandPanelFill);
+            AssertColorClose(statusPanel.GetComponent<Image>().color, UiFactory.CommandPanelFill);
+            Assert.That(dashboardPanel.Find("TelemetrySnapshotCard").GetComponent<Image>().raycastTarget, Is.False);
+            Assert.That(statusPanel.Find("MissionStatusCard").GetComponent<Image>().raycastTarget, Is.False);
+            AssertRowWidthBudgetFits(dashboardPanel.Find("DepthRow").GetComponent<RectTransform>(), sidebarWidth - 8f);
+            AssertRowWidthBudgetFits(statusPanel.Find("MissionRow").GetComponent<RectTransform>(), sidebarWidth - 8f);
+        }
+
         private static Text FindText(string name)
         {
             return GameObject.Find(name).GetComponent<Text>();
+        }
+
+        private static RectTransform InstantiateShippedPanelPrefab(string assetPath)
+        {
+            var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+            Assert.That(prefab, Is.Not.Null, assetPath);
+            var instance = UnityEditor.PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+            Assert.That(instance, Is.Not.Null, assetPath);
+            return instance.GetComponent<RectTransform>();
+        }
+
+        private static void AssertRowWidthBudgetFits(RectTransform row, float availableWidth)
+        {
+            var layout = row.GetComponent<HorizontalLayoutGroup>();
+            Assert.That(layout, Is.Not.Null, row.name);
+            var activeElements = new List<LayoutElement>();
+            foreach (Transform child in row)
+            {
+                if (child.gameObject.activeSelf)
+                {
+                    var element = child.GetComponent<LayoutElement>();
+                    if (element != null && !element.ignoreLayout)
+                    {
+                        activeElements.Add(element);
+                    }
+                }
+            }
+
+            var requiredWidth = (float)layout.padding.horizontal;
+            if (activeElements.Count > 1)
+            {
+                requiredWidth += layout.spacing * (activeElements.Count - 1);
+            }
+            foreach (var element in activeElements)
+            {
+                requiredWidth += element.minWidth;
+            }
+
+            Assert.That(requiredWidth, Is.LessThanOrEqualTo(availableWidth),
+                $"{row.name} requires {requiredWidth:0.#} px but only {availableWidth:0.#} px is available");
         }
 
         private static GameObject FindObjectIncludingInactive(string name)

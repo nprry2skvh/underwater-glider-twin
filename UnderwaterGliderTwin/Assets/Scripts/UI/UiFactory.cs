@@ -57,8 +57,10 @@ namespace UnderwaterGliderTwin.UI
         public const float CommandCenterOperationsTopOffset = 142f;
         public const float MinimumControlHeight = 32f;
         public const float MinimumDrawerToggleHeight = 36f;
-        public const float FixedValueColumnWidth = 112f;
-        public const float FixedUnitColumnWidth = 52f;
+        public const float MinimumLabelColumnWidth = 80f;
+        public const float PreferredLabelColumnWidth = 100f;
+        public const float FixedValueColumnWidth = 86f;
+        public const float FixedUnitColumnWidth = 42f;
         private static Font font;
 
         public static Canvas EnsureCanvas(Transform parent)
@@ -430,14 +432,15 @@ namespace UnderwaterGliderTwin.UI
             var canApplyFill = !preserveAuthoredValues
                 || image == null
                 || IsDefaultGraphicColor(image.color)
-                || IsCommandThemeColor(image.color);
+                || IsCommandThemeColor(image.color)
+                || IsKnownLegacyCommandColor(image.color);
             if (image != null && canApplyFill)
             {
                 ApplyCommandPalette(image, role == UiButtonRole.Primary ? UiVisualRole.AccentFill : UiVisualRole.ButtonFill);
             }
 
             var outline = button.GetComponent<Outline>() ?? button.gameObject.AddComponent<Outline>();
-            if (!preserveAuthoredValues || outline.effectColor == Color.white || IsCommandThemeColor(outline.effectColor))
+            if (!preserveAuthoredValues || outline.effectColor == Color.white || IsCommandThemeColor(outline.effectColor) || IsKnownLegacyCommandColor(outline.effectColor))
             {
                 outline.effectColor = role == UiButtonRole.Primary ? CommandAccent : CommandPanelEdge;
                 outline.effectDistance = role == UiButtonRole.Primary ? new Vector2(2f, -2f) : new Vector2(1f, -1f);
@@ -452,8 +455,17 @@ namespace UnderwaterGliderTwin.UI
             var label = button.GetComponentInChildren<Text>(true);
             if (label != null)
             {
-                ApplyTextRole(label, UiTextRole.Button, RuntimeUiLayoutMode.CompressedThreeColumn);
-                if (role == UiButtonRole.Primary && (!preserveAuthoredValues || IsDefaultGraphicColor(label.color) || IsCommandThemeColor(label.color)))
+                var profile = ResponsiveUiTypography.ForMode(RuntimeUiLayoutMode.CompressedThreeColumn, 0f, 0f);
+                label.fontSize = Mathf.Max(label.fontSize, ResponsiveUiTypography.GetLogicalSize(profile, UiTextRole.Button));
+                var canApplyTextColor = !preserveAuthoredValues
+                    || IsDefaultGraphicColor(label.color)
+                    || IsCommandThemeColor(label.color)
+                    || IsKnownLegacyCommandColor(label.color);
+                if (canApplyTextColor)
+                {
+                    ApplyTextRoleColor(label, UiTextRole.Button);
+                }
+                if (role == UiButtonRole.Primary && canApplyTextColor)
                 {
                     ApplyCommandPalette(label, UiVisualRole.AccentText);
                 }
@@ -494,7 +506,7 @@ namespace UnderwaterGliderTwin.UI
             {
                 image = card.gameObject.AddComponent<Image>();
             }
-            if (created || imageCreated || IsDefaultGraphicColor(image.color))
+            if (created || imageCreated || IsDefaultGraphicColor(image.color) || IsKnownLegacyCommandColor(image.color))
             {
                 ApplyCommandPalette(image, role);
             }
@@ -1006,6 +1018,31 @@ namespace UnderwaterGliderTwin.UI
                 || color == CommandDarkText;
         }
 
+        private static bool IsKnownLegacyCommandColor(Color color)
+        {
+            return HasRgb(color, 0.027451f, 0.094118f, 0.129412f)
+                || HasRgb(color, 0.043137f, 0.141176f, 0.188235f)
+                || HasRgb(color, 0.062745f, 0.184314f, 0.235294f)
+                || HasRgb(color, 0.082353f, 0.231373f, 0.290196f)
+                || HasRgb(color, 0.086275f, 0.266667f, 0.329412f)
+                || HasRgb(color, 0.364706f, 0.843137f, 0.909804f)
+                || HasRgb(color, 0.898039f, 0.949020f, 0.952941f)
+                || HasRgb(color, 0.568627f, 0.709804f, 0.745098f)
+                || HasRgb(color, 0.025f, 0.12f, 0.18f)
+                || HasRgb(color, 0.015f, 0.09f, 0.14f)
+                || HasRgb(color, 0.02f, 0.10f, 0.14f)
+                || HasRgb(color, 0.04f, 0.16f, 0.20f)
+                || HasRgb(color, 0.082f, 0.184f, 0.259f);
+        }
+
+        private static bool HasRgb(Color color, float r, float g, float b)
+        {
+            const float tolerance = 0.002f;
+            return Mathf.Abs(color.r - r) <= tolerance
+                && Mathf.Abs(color.g - g) <= tolerance
+                && Mathf.Abs(color.b - b) <= tolerance;
+        }
+
         private static bool IsDefaultButtonStates(ColorBlock colors)
         {
             return AreButtonStatesEqual(colors, ColorBlock.defaultColorBlock)
@@ -1135,7 +1172,8 @@ namespace UnderwaterGliderTwin.UI
                 }
 
                 var panelImage = panel.GetComponent<Image>();
-                var panelWasDefault = IsDefaultGraphicColor(panelImage != null ? panelImage.color : Color.clear);
+                var panelWasDefault = IsDefaultGraphicColor(panelImage != null ? panelImage.color : Color.clear)
+                    || (panelImage != null && IsKnownLegacyCommandColor(panelImage.color));
                 if (panelWasDefault)
                 {
                     ApplyCommandPalette(panelImage, UiVisualRole.PanelFill);
@@ -1150,7 +1188,9 @@ namespace UnderwaterGliderTwin.UI
                 }
                 foreach (var outline in panel.GetComponents<Outline>())
                 {
-                    if (outline.effectColor == Color.white || outline.effectColor == CommandPanelEdge)
+                    if (outline.effectColor == Color.white
+                        || outline.effectColor == CommandPanelEdge
+                        || IsKnownLegacyCommandColor(outline.effectColor))
                     {
                         outline.effectColor = CommandPanelEdge;
                     }
@@ -1158,7 +1198,7 @@ namespace UnderwaterGliderTwin.UI
 
                 foreach (var button in panel.GetComponentsInChildren<Button>(true))
                 {
-                    if (button.image != null && IsDefaultGraphicColor(button.image.color))
+                    if (button.image != null && (IsDefaultGraphicColor(button.image.color) || IsKnownLegacyCommandColor(button.image.color)))
                     {
                         ApplyCommandPalette(button.image, IsPrimaryButton(button) ? UiVisualRole.AccentFill : UiVisualRole.ButtonFill);
                     }
@@ -1168,7 +1208,9 @@ namespace UnderwaterGliderTwin.UI
                     }
                     foreach (var outline in button.GetComponents<Outline>())
                     {
-                        if (outline.effectColor == Color.white || outline.effectColor == CommandPanelEdge)
+                        if (outline.effectColor == Color.white
+                            || outline.effectColor == CommandPanelEdge
+                            || IsKnownLegacyCommandColor(outline.effectColor))
                         {
                             outline.effectColor = CommandPanelEdge;
                         }
@@ -1178,13 +1220,16 @@ namespace UnderwaterGliderTwin.UI
                 foreach (var input in panel.GetComponentsInChildren<InputField>(true))
                 {
                     var inputImage = input.GetComponent<Image>();
-                    if (IsDefaultGraphicColor(inputImage != null ? inputImage.color : Color.clear))
+                    if (IsDefaultGraphicColor(inputImage != null ? inputImage.color : Color.clear)
+                        || (inputImage != null && IsKnownLegacyCommandColor(inputImage.color)))
                     {
                         ApplyCommandPalette(inputImage, UiVisualRole.InputFill);
                     }
                     foreach (var outline in input.GetComponents<Outline>())
                     {
-                        if (outline.effectColor == Color.white || outline.effectColor == CommandPanelEdge)
+                        if (outline.effectColor == Color.white
+                            || outline.effectColor == CommandPanelEdge
+                            || IsKnownLegacyCommandColor(outline.effectColor))
                         {
                             outline.effectColor = CommandPanelEdge;
                         }
@@ -1193,7 +1238,7 @@ namespace UnderwaterGliderTwin.UI
 
                 foreach (var text in panel.GetComponentsInChildren<Text>(true))
                 {
-                    if (IsDefaultGraphicColor(text.color))
+                    if (IsDefaultGraphicColor(text.color) || IsKnownLegacyCommandColor(text.color))
                     {
                         ApplyTextRoleColor(text, ResolveTextRole(text));
                     }
@@ -1213,7 +1258,7 @@ namespace UnderwaterGliderTwin.UI
             ApplyTextRoleColor(text, role);
         }
 
-        public static void ConfigureFixedLabelColumn(Text text, float width = 116f)
+        public static void ConfigureFixedLabelColumn(Text text, float width = PreferredLabelColumnWidth)
         {
             if (text == null)
             {
@@ -1225,9 +1270,9 @@ namespace UnderwaterGliderTwin.UI
             text.verticalOverflow = VerticalWrapMode.Truncate;
             text.supportRichText = false;
             var layout = text.GetComponent<LayoutElement>() ?? text.gameObject.AddComponent<LayoutElement>();
-            layout.minWidth = width;
+            layout.minWidth = Mathf.Min(width, MinimumLabelColumnWidth);
             layout.preferredWidth = width;
-            layout.flexibleWidth = 0f;
+            layout.flexibleWidth = 1f;
             ApplyTextRole(text, UiTextRole.Label, RuntimeUiLayoutMode.CompressedThreeColumn);
         }
 
