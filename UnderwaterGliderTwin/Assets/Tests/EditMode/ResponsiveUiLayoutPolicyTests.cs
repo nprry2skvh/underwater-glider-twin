@@ -20,6 +20,7 @@ namespace UnderwaterGliderTwin.Tests
         [TestCase(1599f, 656f)]
         [TestCase(1600f, 656f)]
         [TestCase(1615f, 656f)]
+        [TestCase(1616f, 655f)]
         public void Resolve_KeepsCompressedWithinTheCompressedBand(float width, float height)
         {
             Assert.That(ResponsiveUiLayoutPolicy.Resolve(width, height, RuntimeUiLayoutMode.CompressedThreeColumn),
@@ -54,13 +55,15 @@ namespace UnderwaterGliderTwin.Tests
                 Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
             Assert.That(ResponsiveUiLayoutPolicy.Resolve(1600f, 639f, RuntimeUiLayoutMode.FullThreeColumn),
                 Is.EqualTo(RuntimeUiLayoutMode.CompressedThreeColumn));
+            Assert.That(ResponsiveUiLayoutPolicy.Resolve(1616f, 655f, RuntimeUiLayoutMode.FullThreeColumn),
+                Is.EqualTo(RuntimeUiLayoutMode.FullThreeColumn));
         }
 
         [TestCase(1400f, 623f, RuntimeUiLayoutMode.Drawer)]
         [TestCase(1400f, 624f, RuntimeUiLayoutMode.CompressedThreeColumn)]
         [TestCase(1600f, 639f, RuntimeUiLayoutMode.CompressedThreeColumn)]
         [TestCase(1600f, 640f, RuntimeUiLayoutMode.FullThreeColumn)]
-        [TestCase(1616f, 655f, RuntimeUiLayoutMode.CompressedThreeColumn)]
+        [TestCase(1616f, 655f, RuntimeUiLayoutMode.FullThreeColumn)]
         [TestCase(1616f, 656f, RuntimeUiLayoutMode.FullThreeColumn)]
         public void Resolve_HandlesHeightBoundaries(float width, float height, RuntimeUiLayoutMode expected)
         {
