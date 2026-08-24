@@ -37,6 +37,16 @@ namespace UnderwaterGliderTwin.UI
                 new Vector2(0.5f, 1f),
                 new Vector2(0f, -320f),
                 new Vector2(880f, 58f));
+            // The obsolete fallback path still lives in the responsive viewport column.
+            // Reserve an explicit horizontal gutter so its fixed legacy controls never
+            // extend into the adjacent telemetry or status columns.
+            panel.anchorMin = new Vector2(0f, 1f);
+            panel.anchorMax = new Vector2(1f, 1f);
+            panel.pivot = new Vector2(0.5f, 1f);
+            panel.anchoredPosition = new Vector2(0f, -320f);
+            panel.sizeDelta = new Vector2(-120f, 58f);
+            var panelLayout = panel.GetComponent<LayoutElement>() ?? panel.gameObject.AddComponent<LayoutElement>();
+            panelLayout.ignoreLayout = true;
             boundCameraController = cameraController;
             boundRefs = null;
             boundToolbarParent = panel;

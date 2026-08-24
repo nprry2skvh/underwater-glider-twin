@@ -156,6 +156,7 @@ namespace UnderwaterGliderTwin.UI
 
             HideLegacyTextChild("MissionConfigurationTitle");
             HideLegacyTextChild("TitleText");
+            HideLegacyTextChild("ModelLabel");
             HideLegacyTextChild("SimulationLabel");
             HideLegacyTextChild("OceanCurrentLabel");
             MoveToSectionFooter(missionSection, "MissionConfigurationStatus");
@@ -397,12 +398,12 @@ namespace UnderwaterGliderTwin.UI
             if (RequiresLegacyFieldWrapper(child, childName))
             {
                 var wrapper = EnsureLegacyFieldWrapper(fields, childName, GetLegacyFieldLabel(childName));
-                child.SetParent(wrapper, false);
+                SafeSetParent(child, wrapper);
                 NormalizeLayoutChild(child, 28f);
                 return;
             }
 
-            child.SetParent(fields, false);
+            SafeSetParent(child, fields);
             NormalizeLayoutChild(child);
             NormalizeFieldCard(child);
             SetLegacyButtonLabel(child, childName);
@@ -502,7 +503,7 @@ namespace UnderwaterGliderTwin.UI
             // Keep the asynchronous status line in the mission card's own layout so
             // it follows the mission fields instead of overlapping them at a fixed
             // position in the expanded drawer.
-            child.SetParent(section, false);
+            SafeSetParent(child, section);
             child.SetAsLastSibling();
             NormalizeLayoutChild(child, 44f);
             var layoutElement = child.gameObject.GetComponent<LayoutElement>();
@@ -517,6 +518,10 @@ namespace UnderwaterGliderTwin.UI
         private void HideLegacyTextChild(string childName)
         {
             var child = FindDirectChild(childName);
+            if (child == null && configurationExpandedContent != null)
+            {
+                child = configurationExpandedContent.Find(childName) as RectTransform;
+            }
             if (child == null)
             {
                 return;
@@ -528,9 +533,13 @@ namespace UnderwaterGliderTwin.UI
                 var color = text.color;
                 color.a = 0f;
                 text.color = color;
+                text.canvasRenderer.SetAlpha(0f);
             }
 
-            child.SetParent(bottomDrawerContent, false);
+            if (configurationExpandedContent == null || !child.IsChildOf(configurationExpandedContent))
+            {
+                SafeSetParent(child, bottomDrawerContent);
+            }
             var element = child.gameObject.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
             element.ignoreLayout = true;
             child.sizeDelta = Vector2.zero;
@@ -544,8 +553,24 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            child.SetParent(parent, false);
+            SafeSetParent(child, parent);
             NormalizeLayoutChild(child, preferredHeight);
+        }
+
+        private static bool SafeSetParent(RectTransform child, Transform parent)
+        {
+            if (child == null || parent == null || child.parent == parent)
+            {
+                return child != null && parent != null;
+            }
+#if UNITY_EDITOR
+            if (!Application.isPlaying && UnityEditor.PrefabUtility.IsPartOfPrefabInstance(child))
+            {
+                return false;
+            }
+#endif
+            child.SetParent(parent, false);
+            return true;
         }
 
         private RectTransform FindDirectChild(string childName)
@@ -827,6 +852,12 @@ namespace UnderwaterGliderTwin.UI
             if (bottomDrawerToggleButton != null)
             {
                 UiFactory.SetButtonText(bottomDrawerToggleButton, expanded ? "收起参数" : "展开参数");
+                bottomDrawerToggleButton.transform.SetAsLastSibling();
+            }
+
+            if (configurationSummaryBar != null)
+            {
+                configurationSummaryBar.SetAsLastSibling();
             }
         }
 

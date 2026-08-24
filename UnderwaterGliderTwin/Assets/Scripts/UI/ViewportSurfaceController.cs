@@ -3,6 +3,7 @@ using UnityEngine.UI;
 
 namespace UnderwaterGliderTwin.UI
 {
+    [ExecuteAlways]
     public sealed class ViewportSurfaceController : MonoBehaviour
     {
         private Camera sourceCamera;
@@ -14,6 +15,7 @@ namespace UnderwaterGliderTwin.UI
         private Texture previousSurfaceTexture;
         private Canvas.WillRenderCanvases canvasRenderCallback;
         private bool subscribedToCanvasRender;
+        private bool releasingOwnedTexture;
 
         public RectTransform Host => host;
         public RawImage Surface => surface;
@@ -46,7 +48,7 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            if (!isActiveAndEnabled || sourceCamera == null || host == null || surface == null)
+            if (releasingOwnedTexture || !isActiveAndEnabled || sourceCamera == null || host == null || surface == null)
             {
                 return;
             }
@@ -160,37 +162,45 @@ namespace UnderwaterGliderTwin.UI
         private void ReleaseOwnedTexture(bool restorePreviousTargets)
         {
             var texture = ownedTexture;
-            if (texture == null)
+            if (texture == null || releasingOwnedTexture)
             {
                 return;
             }
 
-            if (restorePreviousTargets)
+            releasingOwnedTexture = true;
+            try
             {
-                RestorePreviousTargets(texture);
-            }
-            else
-            {
-                if (sourceCamera != null && sourceCamera.targetTexture == texture)
+                if (restorePreviousTargets)
                 {
-                    sourceCamera.targetTexture = null;
+                    RestorePreviousTargets(texture);
+                }
+                else
+                {
+                    if (sourceCamera != null && sourceCamera.targetTexture == texture)
+                    {
+                        sourceCamera.targetTexture = null;
+                    }
+
+                    if (surface != null && surface.texture == texture)
+                    {
+                        surface.texture = null;
+                    }
                 }
 
-                if (surface != null && surface.texture == texture)
+                ownedTexture = null;
+                texture.Release();
+                if (Application.isPlaying)
                 {
-                    surface.texture = null;
+                    Destroy(texture);
+                }
+                else
+                {
+                    DestroyImmediate(texture);
                 }
             }
-
-            ownedTexture = null;
-            texture.Release();
-            if (Application.isPlaying)
+            finally
             {
-                Destroy(texture);
-            }
-            else
-            {
-                DestroyImmediate(texture);
+                releasingOwnedTexture = false;
             }
         }
 

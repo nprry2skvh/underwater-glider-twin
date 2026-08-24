@@ -33,7 +33,7 @@ namespace UnderwaterGliderTwin.UI
     public static class UiFactory
     {
         public static readonly Color CommandPageBackground = new Color(0.019608f, 0.070588f, 0.101961f, 1f);
-        public static readonly Color CommandPanelFill = new Color(0.031373f, 0.125490f, 0.172549f, 1f);
+        public static readonly Color CommandPanelFill = new Color(0.035294f, 0.149020f, 0.196078f, 1f);
         public static readonly Color CommandCardFill = new Color(0.047059f, 0.180392f, 0.231373f, 1f);
         public static readonly Color CommandControlFill = new Color(0.062745f, 0.239216f, 0.301961f, 1f);
         public static readonly Color CommandPanelEdge = new Color(0.094118f, 0.352941f, 0.419608f, 1f);
@@ -222,7 +222,10 @@ namespace UnderwaterGliderTwin.UI
                         legacyFrame.SetParent(viewportColumn, false);
                     }
 
-                    ConfigureRect(legacyFrame, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+                    var gutterSize = new Vector2(
+                        Mathf.Min(legacyFrame.sizeDelta.x, -760f),
+                        Mathf.Min(legacyFrame.sizeDelta.y, -520f));
+                    ConfigureRect(legacyFrame, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, gutterSize);
                     var legacyLayout = legacyFrame.GetComponent<LayoutElement>() ?? legacyFrame.gameObject.AddComponent<LayoutElement>();
                     legacyLayout.ignoreLayout = true;
                     var legacyImage = legacyFrame.GetComponent<Image>();
@@ -241,6 +244,8 @@ namespace UnderwaterGliderTwin.UI
                         toolbar.SetParent(viewportColumn, false);
                     }
 
+                    var toolbarLayout = toolbar.GetComponent<LayoutElement>() ?? toolbar.gameObject.AddComponent<LayoutElement>();
+                    toolbarLayout.ignoreLayout = true;
                     toolbar.SetAsLastSibling();
                 }
             }

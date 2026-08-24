@@ -440,13 +440,13 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            var visible = !configurationPanel.gameObject.activeSelf;
-            configurationPanel.gameObject.SetActive(visible);
-            if (visible)
+            if (!configurationPanel.gameObject.activeSelf)
             {
-                SetBottomDrawerExpanded(false);
-                BringConfigurationToFront();
+                configurationPanel.gameObject.SetActive(true);
             }
+
+            SetBottomDrawerExpanded(!bottomDrawerExpanded);
+            BringConfigurationToFront();
         }
 
         private void OnEnable()

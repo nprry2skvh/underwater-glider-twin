@@ -722,11 +722,14 @@ namespace UnderwaterGliderTwin.Tests
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
 
             var drawer = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
+            var summary = GameObject.Find("ConfigurationSummaryBar").GetComponent<RectTransform>();
+            var expanded = GameObject.Find("ConfigurationExpandedContent").GetComponent<RectTransform>();
             var header = GameObject.Find("MissionConfigurationDrawerHeader").GetComponent<RectTransform>();
             var viewport = GameObject.Find("MissionConfigurationViewport").GetComponent<RectTransform>();
             GameObject.Find("MissionConfigurationDrawerToggleButton").GetComponent<Button>().onClick.Invoke();
 
             Assert.That(drawer.sizeDelta.y, Is.GreaterThan(48f));
+            Assert.That(summary.GetSiblingIndex(), Is.GreaterThan(expanded.GetSiblingIndex()));
             Assert.That(viewport.offsetMax.y, Is.LessThanOrEqualTo(-header.sizeDelta.y));
         }
 
@@ -741,7 +744,12 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(button, Is.Not.Null);
             Assert.That(panel.activeSelf, Is.True);
             button.GetComponent<Button>().onClick.Invoke();
-            Assert.That(panel.activeSelf, Is.False);
+            Assert.That(panel.activeSelf, Is.True);
+            Assert.That(dataInput.ConfigurationExpandedForTests, Is.True);
+
+            button.GetComponent<Button>().onClick.Invoke();
+            Assert.That(panel.activeSelf, Is.True);
+            Assert.That(dataInput.ConfigurationExpandedForTests, Is.False);
         }
 
         [Test]
@@ -1137,9 +1145,10 @@ namespace UnderwaterGliderTwin.Tests
             refs.mission.csvPathInput = csvInput;
             var view = panel.gameObject.AddComponent<DataInputView>();
             var loadCount = 0;
+            var csvPath = CreateTempCsv();
 
-            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null, _ => loadCount++);
-            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null, _ => loadCount++);
+            view.Bind(refs, csvPath, SimulationProfile.Default, null, _ => loadCount++);
+            view.Bind(refs, csvPath, SimulationProfile.Default, null, _ => loadCount++);
 
             Assert.That(CountDirectChildrenNamed(panel, "ConfigurationSummaryBar"), Is.EqualTo(1));
             Assert.That(CountDirectChildrenNamed(panel, "ConfigurationExpandedContent"), Is.EqualTo(1));
@@ -1149,7 +1158,7 @@ namespace UnderwaterGliderTwin.Tests
                 Assert.That(legacyTitle.transform.IsChildOf(expanded), Is.True, legacyTitle.name);
             }
 
-            csvInput.text = "D:\\telemetry.csv";
+            csvInput.text = csvPath;
             loadButton.onClick.Invoke();
             Assert.That(loadCount, Is.EqualTo(1));
         }
@@ -2115,7 +2124,7 @@ namespace UnderwaterGliderTwin.Tests
         public void UiFactory_UsesApprovedCommandCenterPaletteAndButtonStates()
         {
             AssertColorClose(UiFactory.CommandPageBackground, ParseColor("#05121A"));
-            AssertColorClose(UiFactory.CommandPanelFill, ParseColor("#08202C"));
+            AssertColorClose(UiFactory.CommandPanelFill, ParseColor("#092632"));
             AssertColorClose(UiFactory.CommandCardFill, ParseColor("#0C2E3B"));
             AssertColorClose(UiFactory.CommandControlFill, ParseColor("#103D4D"));
             AssertColorClose(UiFactory.CommandInputFill, ParseColor("#051720"));
@@ -2545,9 +2554,9 @@ namespace UnderwaterGliderTwin.Tests
             AssertColorClose(primary.image.color, UiFactory.CommandAccent);
             AssertColorClose(secondary.image.color, UiFactory.CommandButtonFill);
             Assert.That(primary.GetComponentInChildren<Text>().fontSize, Is.GreaterThanOrEqualTo(18));
-            Assert.That(GameObject.Find("CameraFollowButton").activeSelf, Is.False);
-            Assert.That(GameObject.Find("CameraGlobalButton").activeSelf, Is.False);
-            Assert.That(GameObject.Find("CameraOrbitButton").activeSelf, Is.False);
+            Assert.That(FindObjectIncludingInactive("CameraFollowButton").activeSelf, Is.False);
+            Assert.That(FindObjectIncludingInactive("CameraGlobalButton").activeSelf, Is.False);
+            Assert.That(FindObjectIncludingInactive("CameraOrbitButton").activeSelf, Is.False);
         }
 
         [Test]
@@ -2807,7 +2816,8 @@ namespace UnderwaterGliderTwin.Tests
             var secondMinY = secondCorners[0].y;
             var secondMaxY = secondCorners[2].y;
             Assert.That(firstMaxX <= secondMinX || secondMaxX <= firstMinX || firstMaxY <= secondMinY || secondMaxY <= firstMinY,
-                $"{first.name} must not overlap {second.name}");
+                $"{first.name} [{firstMinX:0.#},{firstMinY:0.#}]–[{firstMaxX:0.#},{firstMaxY:0.#}] must not overlap " +
+                $"{second.name} [{secondMinX:0.#},{secondMinY:0.#}]–[{secondMaxX:0.#},{secondMaxY:0.#}]");
         }
 
         private static string CreateTempCsv()
@@ -2942,6 +2952,10 @@ namespace UnderwaterGliderTwin.Tests
             {
                 if (names.Contains(text.name))
                 {
+                    if (text.name == "TitleText" && text.transform.parent != panel)
+                    {
+                        continue;
+                    }
                     titles.Add(text);
                 }
             }

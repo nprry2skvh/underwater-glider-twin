@@ -354,10 +354,16 @@ namespace UnderwaterGliderTwin.UI
 
             var parent = advanced && refsAdvancedRowsRoot != null ? refsAdvancedRowsRoot : panel;
             var row = EnsureRow(parent, rowName);
-            value.transform.SetParent(row, false);
+            if (CanReparentConfiguredTransform(value.transform))
+            {
+                value.transform.SetParent(row, false);
+            }
             if (label != null)
             {
-                label.transform.SetParent(row, false);
+                if (CanReparentConfiguredTransform(label.transform))
+                {
+                    label.transform.SetParent(row, false);
+                }
                 ConfigureKeyValueChildren(label, value);
             }
             else
@@ -383,6 +389,15 @@ namespace UnderwaterGliderTwin.UI
                 }
                 value.gameObject.SetActive(showingDetails);
             }
+        }
+
+        private static bool CanReparentConfiguredTransform(Transform target)
+        {
+#if UNITY_EDITOR
+            return target == null || Application.isPlaying || !UnityEditor.PrefabUtility.IsPartOfPrefabInstance(target);
+#else
+            return true;
+#endif
         }
 
         private static Text CreateBoundLabel(Transform row, string labelName)

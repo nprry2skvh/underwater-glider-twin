@@ -303,10 +303,16 @@ namespace UnderwaterGliderTwin.UI
             }
 
             var row = EnsureRow(panel, rowName);
-            value.transform.SetParent(row, false);
+            if (CanReparentConfiguredTransform(value.transform))
+            {
+                value.transform.SetParent(row, false);
+            }
             if (label != null)
             {
-                label.transform.SetParent(row, false);
+                if (CanReparentConfiguredTransform(label.transform))
+                {
+                    label.transform.SetParent(row, false);
+                }
                 ConfigureKeyValueChildren(label, value);
             }
             else
@@ -314,6 +320,15 @@ namespace UnderwaterGliderTwin.UI
                 label = CreateBoundLabel(row, labelName);
                 ConfigureKeyValueChildren(label, value);
             }
+        }
+
+        private static bool CanReparentConfiguredTransform(Transform target)
+        {
+#if UNITY_EDITOR
+            return target == null || Application.isPlaying || !UnityEditor.PrefabUtility.IsPartOfPrefabInstance(target);
+#else
+            return true;
+#endif
         }
 
         private static Text CreateBoundLabel(Transform row, string labelName)

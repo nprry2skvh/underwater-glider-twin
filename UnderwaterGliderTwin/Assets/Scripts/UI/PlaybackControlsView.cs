@@ -270,7 +270,10 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            control.SetParent(row, false);
+            if (CanReparentConfiguredTransform(control))
+            {
+                control.SetParent(row, false);
+            }
             control.anchorMin = Vector2.one;
             control.anchorMax = Vector2.one;
             control.offsetMin = Vector2.zero;
@@ -292,6 +295,15 @@ namespace UnderwaterGliderTwin.UI
             element.minWidth = flexible ? 80f : preferredWidth;
             element.flexibleWidth = flexible ? 1f : 0f;
             ConfigureControlText(control);
+        }
+
+        private static bool CanReparentConfiguredTransform(Transform target)
+        {
+#if UNITY_EDITOR
+            return target == null || Application.isPlaying || !UnityEditor.PrefabUtility.IsPartOfPrefabInstance(target);
+#else
+            return true;
+#endif
         }
 
         private static void ConfigureControlText(RectTransform control)
