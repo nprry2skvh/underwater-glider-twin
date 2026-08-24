@@ -221,6 +221,7 @@ namespace UnderwaterGliderTwin.UI
             ConfigureOceanCurrentModalDrawer(oceanCurrentDrawer);
             ConfigureInlineDrawer(flightLegDrawer);
             AttachRuntimeSession(SimulationRuntimeRegistry.Active);
+            ApplyConfigurationAreaHeight(bottomDrawerExpanded);
         }
 
         public void Bind(
@@ -399,6 +400,7 @@ namespace UnderwaterGliderTwin.UI
                 RefreshOceanCurrentLayerEditor();
             }
             RefreshDynamicsEditor();
+            ApplyConfigurationAreaHeight(bottomDrawerExpanded);
         }
 
         private static void BindButton(Button button, UnityEngine.Events.UnityAction action)

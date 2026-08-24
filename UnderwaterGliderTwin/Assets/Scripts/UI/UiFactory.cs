@@ -50,6 +50,7 @@ namespace UnderwaterGliderTwin.UI
         public static readonly Color CommandDarkText = new Color(0.031f, 0.090f, 0.129f, 1f);
         public const float CommandCenterHeaderHeight = 48f;
         public const float CommandCenterParameterBarHeight = 48f;
+        public const float CommandCenterCollapsedConfigurationAreaHeight = 64f;
         public const float CommandCenterConfigurationAreaHeight = 176f;
         public const float CommandCenterPlaybackBarHeight = 92f;
         public const float CommandCenterMainBodyBottomOffset = CommandCenterConfigurationAreaHeight + CommandCenterPlaybackBarHeight;
@@ -89,6 +90,7 @@ namespace UnderwaterGliderTwin.UI
             EnsureEventSystem();
             if (explicitFallbackCanvas != null)
             {
+                RuntimeUiFallback.RememberLegacyCanvas(explicitFallbackCanvas);
                 return explicitFallbackCanvas;
             }
 
@@ -135,17 +137,28 @@ namespace UnderwaterGliderTwin.UI
             var systemBar = EnsureRectTransformChild(uiRoot, "SystemBar");
             ConfigureRect(systemBar, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, CommandCenterHeaderHeight));
             ConfigureZoneHeight(systemBar, CommandCenterHeaderHeight);
-            var configurationArea = EnsureRectTransformChild(uiRoot, "ConfigurationArea");
-            ConfigureRect(configurationArea, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, CommandCenterPlaybackBarHeight), new Vector2(0f, CommandCenterConfigurationAreaHeight));
+            var existingConfigurationArea = uiRoot.Find("ConfigurationArea") as RectTransform;
+            var existingConfigurationElement = existingConfigurationArea != null
+                ? existingConfigurationArea.GetComponent<LayoutElement>()
+                : null;
+            var configurationAreaHeight = existingConfigurationArea != null
+                && (Mathf.Approximately(existingConfigurationArea.sizeDelta.y, CommandCenterCollapsedConfigurationAreaHeight)
+                    || (existingConfigurationElement != null
+                        && existingConfigurationElement.ignoreLayout
+                        && Mathf.Approximately(existingConfigurationElement.minHeight, CommandCenterCollapsedConfigurationAreaHeight)))
+                    ? CommandCenterCollapsedConfigurationAreaHeight
+                    : CommandCenterConfigurationAreaHeight;
+            var configurationArea = existingConfigurationArea ?? EnsureRectTransformChild(uiRoot, "ConfigurationArea");
+            ConfigureRect(configurationArea, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, CommandCenterPlaybackBarHeight), new Vector2(0f, configurationAreaHeight));
             ConfigureVerticalContent(configurationArea, 12f);
-            ConfigureZoneHeight(configurationArea, CommandCenterConfigurationAreaHeight);
+            ConfigureZoneHeight(configurationArea, configurationAreaHeight);
             var playbackBar = EnsureRectTransformChild(uiRoot, "PlaybackBar");
             ConfigureRect(playbackBar, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, CommandCenterPlaybackBarHeight));
             ConfigureVerticalContent(playbackBar, 12f);
             ConfigureZoneHeight(playbackBar, CommandCenterPlaybackBarHeight);
             var mainBody = EnsureRectTransformChild(uiRoot, "MainBody");
             ConfigureRect(mainBody, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            mainBody.offsetMin = new Vector2(0f, CommandCenterMainBodyBottomOffset);
+            mainBody.offsetMin = new Vector2(0f, CommandCenterPlaybackBarHeight + configurationAreaHeight);
             mainBody.offsetMax = new Vector2(0f, -48f);
             ConfigureMainBody(mainBody);
 

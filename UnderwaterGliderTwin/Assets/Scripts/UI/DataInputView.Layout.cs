@@ -823,6 +823,7 @@ namespace UnderwaterGliderTwin.UI
         public void SetConfigurationExpanded(bool expanded)
         {
             bottomDrawerExpanded = expanded;
+            ApplyConfigurationAreaHeight(expanded);
             if (configurationExpandedContent == null)
             {
                 return;
@@ -859,6 +860,36 @@ namespace UnderwaterGliderTwin.UI
             {
                 configurationSummaryBar.SetAsLastSibling();
             }
+        }
+
+        private void ApplyConfigurationAreaHeight(bool expanded)
+        {
+            var canvas = configurationPanel != null ? configurationPanel.GetComponentInParent<Canvas>() : null;
+            canvas = canvas ?? legacyCanvas ?? GetComponentInParent<Canvas>();
+            var uiRoot = canvas != null ? canvas.transform.Find("UiRoot") : null;
+            var configurationArea = uiRoot != null ? uiRoot.Find("ConfigurationArea") as RectTransform : null;
+            var mainBody = uiRoot != null ? uiRoot.Find("MainBody") as RectTransform : null;
+            if (configurationArea == null || mainBody == null)
+            {
+                return;
+            }
+
+            var configurationHeight = expanded
+                ? UiFactory.CommandCenterConfigurationAreaHeight
+                : UiFactory.CommandCenterCollapsedConfigurationAreaHeight;
+            configurationArea.sizeDelta = new Vector2(configurationArea.sizeDelta.x, configurationHeight);
+
+            var configurationElement = configurationArea.GetComponent<LayoutElement>();
+            if (configurationElement != null)
+            {
+                configurationElement.ignoreLayout = true;
+                configurationElement.minHeight = configurationHeight;
+                configurationElement.preferredHeight = configurationHeight;
+            }
+
+            mainBody.offsetMin = new Vector2(
+                mainBody.offsetMin.x,
+                configurationArea.anchoredPosition.y + configurationHeight);
         }
 
         private void SetBottomDrawerExpanded(bool expanded)

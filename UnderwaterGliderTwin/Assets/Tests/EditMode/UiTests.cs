@@ -2059,6 +2059,29 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(statusToggle.sizeDelta.y, Is.GreaterThanOrEqualTo(36f));
         }
 
+        [TestCase(1920f, 1080f, false, TestName = "DataInputView_CollapsedConfiguredLayoutCompactsConfigurationArea_At1920x1080")]
+        [TestCase(1280f, 720f, false, TestName = "DataInputView_CollapsedConfiguredLayoutCompactsConfigurationArea_At1280x720")]
+        public void DataInputView_CollapsedConfigurationCompactsParentAreaAndExpandsMainBody(float width, float height, bool useFallback)
+        {
+            var view = CreateConfigurationLayoutProbe(width, height, useFallback, out var configurationArea, out var mainBody, out var playbackBar);
+            view.SetConfigurationExpanded(false);
+            Canvas.ForceUpdateCanvases();
+
+            AssertConfigurationLayoutContract(configurationArea, mainBody, playbackBar, 64f, 156f);
+        }
+
+        [TestCase(1920f, 1080f, false, TestName = "DataInputView_ExpandedConfiguredLayoutRestoresConfigurationArea_At1920x1080")]
+        [TestCase(1280f, 720f, false, TestName = "DataInputView_ExpandedConfiguredLayoutRestoresConfigurationArea_At1280x720")]
+        public void DataInputView_ExpandedConfigurationRestoresParentAreaWithoutOverlappingPlayback(float width, float height, bool useFallback)
+        {
+            var view = CreateConfigurationLayoutProbe(width, height, useFallback, out var configurationArea, out var mainBody, out var playbackBar);
+
+            view.SetConfigurationExpanded(true);
+            Canvas.ForceUpdateCanvases();
+
+            AssertConfigurationLayoutContract(configurationArea, mainBody, playbackBar, 176f, 268f);
+        }
+
         [Test]
         public void UiFactory_CommandPaletteSeparatesPanelAndInputSurfaces()
         {
@@ -2935,6 +2958,67 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(instance, Is.Not.Null);
             instance.transform.SetParent(canvas.transform, false);
             return instance.GetComponent<RectTransform>();
+        }
+
+        private static DataInputView CreateConfigurationLayoutProbe(
+            float width,
+            float height,
+            bool useFallback,
+            out RectTransform configurationArea,
+            out RectTransform mainBody,
+            out RectTransform playbackBar)
+        {
+            var canvasObject = new GameObject("ConfigurationLayoutCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(width, height);
+            var canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
+            configurationArea = uiRoot.Find("ConfigurationArea").GetComponent<RectTransform>();
+            mainBody = uiRoot.Find("MainBody").GetComponent<RectTransform>();
+            playbackBar = uiRoot.Find("PlaybackBar").GetComponent<RectTransform>();
+
+            var viewObject = new GameObject(useFallback ? "FallbackDataInputView" : "ConfiguredDataInputView", typeof(RectTransform));
+            viewObject.transform.SetParent(uiRoot, false);
+            var view = viewObject.AddComponent<DataInputView>();
+            if (useFallback)
+            {
+                view.Initialize(CreateTempCsv(), SimulationProfile.Default, null);
+            }
+            else
+            {
+                var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/UI/Prefabs/DataInputPanel.prefab");
+                Assert.That(prefab, Is.Not.Null);
+                var instance = UnityEditor.PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+                Assert.That(instance, Is.Not.Null);
+                instance.transform.SetParent(configurationArea, false);
+                view.Bind(new DataInputPanelRefs { panel = instance.GetComponent<RectTransform>() }, CreateTempCsv(), SimulationProfile.Default, null);
+            }
+
+            Canvas.ForceUpdateCanvases();
+            return view;
+        }
+
+        private static void AssertConfigurationLayoutContract(
+            RectTransform configurationArea,
+            RectTransform mainBody,
+            RectTransform playbackBar,
+            float expectedConfigurationHeight,
+            float expectedMainBodyBottom)
+        {
+            var configurationElement = configurationArea.GetComponent<LayoutElement>();
+            var playbackTop = playbackBar.anchoredPosition.y + playbackBar.sizeDelta.y;
+            var configurationBottom = configurationArea.anchoredPosition.y;
+            var configurationTop = configurationBottom + configurationArea.sizeDelta.y;
+
+            Assert.That(playbackBar.sizeDelta.y, Is.EqualTo(92f).Within(0.01f));
+            Assert.That(configurationArea.sizeDelta.y, Is.EqualTo(expectedConfigurationHeight).Within(0.01f));
+            Assert.That(configurationElement.minHeight, Is.EqualTo(expectedConfigurationHeight).Within(0.01f));
+            Assert.That(configurationElement.preferredHeight, Is.EqualTo(expectedConfigurationHeight).Within(0.01f));
+            Assert.That(mainBody.offsetMin.y, Is.EqualTo(expectedMainBodyBottom).Within(0.01f));
+            Assert.That(configurationBottom, Is.EqualTo(playbackTop).Within(0.01f), "ConfigurationArea must start exactly above PlaybackBar.");
+            Assert.That(mainBody.offsetMin.y, Is.EqualTo(configurationTop).Within(0.01f), "MainBody must start exactly above ConfigurationArea.");
+            Assert.That(mainBody.rect.height, Is.GreaterThan(0f));
         }
 
         private static List<Text> FindLegacyConfigurationTitles(Transform panel)
