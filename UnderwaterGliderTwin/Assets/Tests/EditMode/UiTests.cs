@@ -1062,30 +1062,35 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void DataInputView_MigratesLegacyModelLabelIntoExpandedContent()
+        public void DataInputView_MigratesShippedPrefabLegacyTitlesIntoExpandedContent()
         {
-            var panel = new GameObject("DataInputPanel", typeof(RectTransform)).GetComponent<RectTransform>();
-            var legacyModelLabel = CreateText(panel, "ModelLabel");
+            var panel = InstantiateShippedDataInputPanel();
+            var legacyTitles = FindLegacyConfigurationTitles(panel);
             var refs = new DataInputPanelRefs { panel = panel };
             var view = panel.gameObject.AddComponent<DataInputView>();
 
             view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
 
             var expanded = panel.Find("ConfigurationExpandedContent");
-            Assert.That(legacyModelLabel.transform.IsChildOf(expanded), Is.True);
-            Assert.That(legacyModelLabel.transform.IsChildOf(panel.Find("MissionSectionCard")), Is.True);
+            Assert.That(legacyTitles, Is.Not.Empty);
+            Assert.That(legacyTitles.Exists(title => title.name == "ModelLabel"), Is.True);
+            foreach (var legacyTitle in legacyTitles)
+            {
+                Assert.That(legacyTitle.transform.IsChildOf(expanded), Is.True, legacyTitle.name);
+            }
         }
 
         [Test]
-        public void DataInputView_CollapsedConfigurationKeepsViewActiveAndHidesExpandedContent()
+        public void DataInputView_CollapsedShippedPrefabDoesNotRenderLegacyConfigurationTitles()
         {
-            var panel = new GameObject("DataInputPanel", typeof(RectTransform)).GetComponent<RectTransform>();
-            var legacyTitle = CreateText(panel, "TitleText");
-            var refs = new DataInputPanelRefs { panel = panel, titleText = legacyTitle };
+            var panel = InstantiateShippedDataInputPanel();
+            var legacyTitles = FindLegacyConfigurationTitles(panel);
+            var refs = new DataInputPanelRefs { panel = panel };
             var dataInput = panel.gameObject.AddComponent<DataInputView>();
             dataInput.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
 
             dataInput.SetConfigurationExpanded(false);
+            Canvas.ForceUpdateCanvases();
 
             var drawer = panel.gameObject;
             var summary = drawer.transform.Find("ConfigurationSummaryBar");
@@ -1093,9 +1098,15 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(dataInput.gameObject.activeInHierarchy, Is.True);
             Assert.That(drawer.activeInHierarchy, Is.True);
             Assert.That(summary.gameObject.activeInHierarchy, Is.True);
-            Assert.That(legacyTitle.transform.IsChildOf(expanded), Is.True);
             Assert.That(expanded.GetComponent<CanvasGroup>().alpha, Is.EqualTo(0f));
             Assert.That(expanded.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
+            Assert.That(legacyTitles, Is.Not.Empty);
+            foreach (var legacyTitle in legacyTitles)
+            {
+                Assert.That(legacyTitle.transform.IsChildOf(summary), Is.False, legacyTitle.name);
+                Assert.That(legacyTitle.transform.IsChildOf(expanded), Is.True, legacyTitle.name);
+                Assert.That(legacyTitle.canvasRenderer.GetAlpha(), Is.EqualTo(0f).Within(0.001f), legacyTitle.name);
+            }
         }
 
         [Test]
@@ -1115,17 +1126,32 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void DataInputView_RepeatedConfigurationSetupDoesNotDuplicateContainers()
+        public void DataInputView_RepeatedConfigurationSetupPreservesShippedPrefabMigrationAndListeners()
         {
-            var panel = new GameObject("DataInputPanel", typeof(RectTransform)).GetComponent<RectTransform>();
+            var panel = InstantiateShippedDataInputPanel();
+            var legacyTitles = FindLegacyConfigurationTitles(panel);
+            var loadButton = FindChildNamed(panel, "LoadCsvButton").GetComponent<Button>();
+            var csvInput = FindChildNamed(panel, "CsvPathInput").GetComponent<InputField>();
             var refs = new DataInputPanelRefs { panel = panel };
+            refs.mission.loadCsvButton = loadButton;
+            refs.mission.csvPathInput = csvInput;
             var view = panel.gameObject.AddComponent<DataInputView>();
+            var loadCount = 0;
 
-            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
-            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
+            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null, _ => loadCount++);
+            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null, _ => loadCount++);
 
             Assert.That(CountDirectChildrenNamed(panel, "ConfigurationSummaryBar"), Is.EqualTo(1));
             Assert.That(CountDirectChildrenNamed(panel, "ConfigurationExpandedContent"), Is.EqualTo(1));
+            var expanded = panel.Find("ConfigurationExpandedContent");
+            foreach (var legacyTitle in legacyTitles)
+            {
+                Assert.That(legacyTitle.transform.IsChildOf(expanded), Is.True, legacyTitle.name);
+            }
+
+            csvInput.text = "D:\\telemetry.csv";
+            loadButton.onClick.Invoke();
+            Assert.That(loadCount, Is.EqualTo(1));
         }
 
         [Test]
@@ -2553,6 +2579,40 @@ namespace UnderwaterGliderTwin.Tests
             }
 
             return count;
+        }
+
+        private static RectTransform InstantiateShippedDataInputPanel()
+        {
+            var canvas = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            canvas.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+            var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/UI/Prefabs/DataInputPanel.prefab");
+            Assert.That(prefab, Is.Not.Null);
+            var instance = UnityEditor.PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+            Assert.That(instance, Is.Not.Null);
+            instance.transform.SetParent(canvas.transform, false);
+            return instance.GetComponent<RectTransform>();
+        }
+
+        private static List<Text> FindLegacyConfigurationTitles(Transform panel)
+        {
+            var names = new HashSet<string>
+            {
+                "MissionConfigurationTitle",
+                "TitleText",
+                "ModelLabel",
+                "SimulationLabel",
+                "OceanCurrentLabel"
+            };
+            var titles = new List<Text>();
+            foreach (var text in panel.GetComponentsInChildren<Text>(true))
+            {
+                if (names.Contains(text.name))
+                {
+                    titles.Add(text);
+                }
+            }
+
+            return titles;
         }
 
         private static TypographyProbe CreateTypographyProbe(string canvasName, bool createFallbackContent)
