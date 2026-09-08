@@ -19,6 +19,7 @@ namespace UnderwaterGliderTwin.Playback
 
         public event Action<TelemetryFrame, int, float> FrameChanged;
         public event Action<TelemetryFrame, int, float, FrameUpdateReason> FrameChangedWithReason;
+        public event Action<SimulationTimelineSnapshot> TimelineChanged;
 
         public PlaybackModel Model => model;
 
@@ -27,10 +28,14 @@ namespace UnderwaterGliderTwin.Playback
             if (model != null)
             {
                 model.FramesReplaced -= OnFramesReplaced;
+                model.TimelineChanged -= OnTimelineChanged;
+                model.TimelineRebuildReady -= OnTimelineRebuildReady;
             }
 
             model = playbackModel;
             model.FramesReplaced += OnFramesReplaced;
+            model.TimelineChanged += OnTimelineChanged;
+            model.TimelineRebuildReady += OnTimelineRebuildReady;
             Publish(FrameUpdateReason.Initial);
         }
 
@@ -91,18 +96,33 @@ namespace UnderwaterGliderTwin.Playback
             if (model != null)
             {
                 model.FramesReplaced -= OnFramesReplaced;
+                model.TimelineChanged -= OnTimelineChanged;
+                model.TimelineRebuildReady -= OnTimelineRebuildReady;
             }
         }
 
         private void OnFramesReplaced(IReadOnlyList<TelemetryFrame> frames, int preservedIndex)
+        {
+            if (!model.IsTimelineBound)
+            {
+                Publish(FrameUpdateReason.Rebuild);
+            }
+        }
+
+        private void OnTimelineChanged(SimulationTimelineSnapshot snapshot, int preservedIndex)
+        {
+            TimelineChanged?.Invoke(snapshot);
+        }
+
+        private void OnTimelineRebuildReady()
         {
             Publish(FrameUpdateReason.Rebuild);
         }
 
         private void Publish(FrameUpdateReason reason)
         {
-            FrameChanged?.Invoke(model.CurrentFrame, model.CurrentIndex, model.Progress01);
             FrameChangedWithReason?.Invoke(model.CurrentFrame, model.CurrentIndex, model.Progress01, reason);
+            FrameChanged?.Invoke(model.CurrentFrame, model.CurrentIndex, model.Progress01);
         }
     }
 }

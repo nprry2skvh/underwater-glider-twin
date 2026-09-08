@@ -125,15 +125,91 @@ namespace UnderwaterGliderTwin.Tests
             UnityEngine.Object.DestroyImmediate(controller.gameObject);
         }
 
+        [Test]
+        public void BoundTimelinePublishesNewFramesBeforeEveryRebuildEvent()
+        {
+            var timeline = Timeline(Frames(2));
+            var model = new PlaybackModel(timeline.CommittedSnapshot.Frames, rowsPerSecond: 10f);
+            model.BindTimeline(timeline);
+            var controller = new UnityEngine.GameObject("Playback").AddComponent<PlaybackController>();
+            controller.Initialize(model);
+            var events = new List<string>();
+            IReadOnlyList<TelemetryFrame> committedFrames = null;
+            controller.TimelineChanged += snapshot =>
+            {
+                events.Add("TimelineChanged");
+                committedFrames = snapshot.Frames;
+                Assert.That(model.Frames, Is.SameAs(snapshot.Frames));
+            };
+            model.FramesReplaced += (frames, index) =>
+            {
+                events.Add("FramesReplaced");
+                Assert.That(model.Frames, Is.SameAs(frames));
+            };
+            controller.FrameChangedWithReason += (frame, index, progress, reason) =>
+            {
+                if (reason == FrameUpdateReason.Rebuild)
+                {
+                    events.Add("FrameChangedWithReason");
+                    Assert.That(model.Frames, Is.SameAs(committedFrames));
+                }
+            };
+            controller.FrameChanged += (frame, index, progress) =>
+            {
+                events.Add("FrameChanged");
+                Assert.That(model.Frames, Is.SameAs(committedFrames));
+            };
+
+            timeline.ReplaceFutureFrom(
+                1,
+                new[] { Frame(2, profileSequence: 1), Frame(3, profileSequence: 1) },
+                new SimulationTimelineSegment(1, 42, 2, 2f, new SimulationProfile(), System.DateTime.UtcNow));
+
+            Assert.That(events.ToArray(), Is.EqualTo(new[]
+            {
+                "TimelineChanged",
+                "FramesReplaced",
+                "FrameChangedWithReason",
+                "FrameChanged"
+            }));
+            UnityEngine.Object.DestroyImmediate(controller.gameObject);
+        }
+
+        [Test]
+        public void BoundTimelineReportsFutureHorizonFromCommittedFrames()
+        {
+            var timeline = Timeline(Frames(4));
+            var model = new PlaybackModel(timeline.CommittedSnapshot.Frames, rowsPerSecond: 10f);
+            model.BindTimeline(timeline);
+
+            Assert.That(model.HasFutureHorizon(3f, 3), Is.True);
+            Assert.That(model.HasFutureHorizon(4f, 4), Is.False);
+        }
+
         private static IReadOnlyList<TelemetryFrame> Frames(int count)
         {
             var frames = new List<TelemetryFrame>();
             for (var i = 0; i < count; i++)
             {
-                frames.Add(new TelemetryFrame(i, $"t{i}", i, 120, 25, i, 100, 0, 0, 0, 28, 0, 95, "mode", "state", 1, 0, 0, 0, 0, 0, 0));
+                frames.Add(Frame(i));
             }
 
             return frames;
+        }
+
+        private static SimulationTrajectoryTimeline Timeline(IReadOnlyList<TelemetryFrame> frames)
+        {
+            return new SimulationTrajectoryTimeline(
+                frames,
+                new SimulationTimelineSegment(0, 0, 0, 0f, new SimulationProfile(), System.DateTime.UtcNow));
+        }
+
+        private static TelemetryFrame Frame(int index, int profileSequence = 0)
+        {
+            return new TelemetryFrame(
+                index, $"t{index}", index, 120, 25, index, 100, 0, 0, 0,
+                28, 0, 95, "mode", "state", 1, 0, 0, 0, 0, 0, 0,
+                profileSequence: profileSequence);
         }
     }
 }

@@ -9,8 +9,12 @@ namespace UnderwaterGliderTwin.Playback
         private IReadOnlyList<TelemetryFrame> frames;
         private readonly float rowsPerSecond;
         private float continuousIndex;
+        private SimulationTrajectoryTimeline timeline;
+        private bool resumeAfterFuture;
 
         public event Action<IReadOnlyList<TelemetryFrame>, int> FramesReplaced;
+        public event Action<SimulationTimelineSnapshot, int> TimelineChanged;
+        public event Action TimelineRebuildReady;
 
         public bool IsPlaying { get; private set; }
         public float Speed { get; private set; } = 1f;
@@ -25,6 +29,8 @@ namespace UnderwaterGliderTwin.Playback
         public float EndElapsedSeconds => frames[frames.Count - 1].ElapsedSeconds;
         public float TotalElapsedSeconds => Math.Max(0f, EndElapsedSeconds - StartElapsedSeconds);
         public float CurrentElapsedSeconds => CurrentFrame.ElapsedSeconds;
+        public bool IsWaitingForFuture { get; private set; }
+        public bool IsTimelineBound => timeline != null;
 
         public PlaybackModel(IReadOnlyList<TelemetryFrame> frames, float rowsPerSecond)
         {
@@ -40,6 +46,10 @@ namespace UnderwaterGliderTwin.Playback
         public void SetPlaying(bool isPlaying)
         {
             IsPlaying = isPlaying;
+            if (!isPlaying)
+            {
+                resumeAfterFuture = false;
+            }
         }
 
         public void TogglePlaying()
@@ -74,7 +84,18 @@ namespace UnderwaterGliderTwin.Playback
 
             if ((Direction >= 0 && CurrentIndex >= frames.Count - 1) || (Direction < 0 && CurrentIndex <= 0))
             {
-                IsPlaying = false;
+                if (Direction >= 0
+                    && timeline != null
+                    && timeline.CommittedSnapshot.Status != SimulationTimelineStatus.Completed)
+                {
+                    resumeAfterFuture = IsPlaying;
+                    IsPlaying = false;
+                    IsWaitingForFuture = true;
+                }
+                else
+                {
+                    IsPlaying = false;
+                }
             }
 
             return changed;
@@ -99,8 +120,48 @@ namespace UnderwaterGliderTwin.Playback
             IsPlaying = playImmediately;
         }
 
+        public void BindTimeline(SimulationTrajectoryTimeline replacement)
+        {
+            if (replacement == null)
+            {
+                throw new ArgumentNullException(nameof(replacement));
+            }
+
+            if (timeline != null)
+            {
+                timeline.Changed -= OnTimelineChanged;
+            }
+
+            timeline = replacement;
+            ApplySnapshot(replacement.CommittedSnapshot);
+            timeline.Changed += OnTimelineChanged;
+        }
+
+        public bool HasFutureHorizon(float seconds, int minimumFrames)
+        {
+            if (seconds < 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(seconds));
+            }
+
+            if (minimumFrames < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(minimumFrames));
+            }
+
+            var remainingFrames = frames.Count - CurrentIndex - 1;
+            var remainingSeconds = EndElapsedSeconds - CurrentElapsedSeconds;
+            return remainingFrames >= minimumFrames && remainingSeconds >= seconds;
+        }
+
         public void ReplaceFrames(IReadOnlyList<TelemetryFrame> replacement, int preservedIndex)
         {
+            if (timeline != null)
+            {
+                throw new InvalidOperationException(
+                    "A timeline-bound PlaybackModel can only receive committed frames from its timeline.");
+            }
+
             if (replacement == null)
             {
                 throw new ArgumentNullException(nameof(replacement));
@@ -153,6 +214,49 @@ namespace UnderwaterGliderTwin.Playback
             }
         }
 
+        private void OnTimelineChanged(SimulationTimelineSnapshot snapshot)
+        {
+            ApplySnapshot(snapshot);
+            NotifyTimelineChanged(snapshot);
+            NotifyFramesReplaced();
+            TimelineRebuildReady?.Invoke();
+        }
+
+        private void ApplySnapshot(SimulationTimelineSnapshot snapshot)
+        {
+            frames = snapshot.Frames;
+            CurrentIndex = Math.Max(0, Math.Min(CurrentIndex, frames.Count - 1));
+            continuousIndex = Math.Max(CurrentIndex, Math.Min(frames.Count - 1, continuousIndex));
+
+            if (IsWaitingForFuture && CurrentIndex < frames.Count - 1)
+            {
+                IsWaitingForFuture = false;
+                IsPlaying = resumeAfterFuture;
+                resumeAfterFuture = false;
+            }
+        }
+
+        private void NotifyTimelineChanged(SimulationTimelineSnapshot snapshot)
+        {
+            var handlers = TimelineChanged;
+            if (handlers == null)
+            {
+                return;
+            }
+
+            foreach (Action<SimulationTimelineSnapshot, int> handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(snapshot, CurrentIndex);
+                }
+                catch (Exception)
+                {
+                    // A presentation listener must not roll back the committed playback transaction.
+                }
+            }
+        }
+
         private static bool FrameValuesEqual(TelemetryFrame left, TelemetryFrame right)
         {
             return left.RowIndex == right.RowIndex
@@ -179,7 +283,9 @@ namespace UnderwaterGliderTwin.Playback
                 && left.TurnAngleDeg.Equals(right.TurnAngleDeg)
                 && Nullable.Equals(left.Diagnostics, right.Diagnostics)
                 && left.PlannedLongitudeDeg.Equals(right.PlannedLongitudeDeg)
-                && left.PlannedLatitudeDeg.Equals(right.PlannedLatitudeDeg);
+                && left.PlannedLatitudeDeg.Equals(right.PlannedLatitudeDeg)
+                && Nullable.Equals(left.MissionState, right.MissionState)
+                && left.ProfileSequence == right.ProfileSequence;
         }
     }
 }

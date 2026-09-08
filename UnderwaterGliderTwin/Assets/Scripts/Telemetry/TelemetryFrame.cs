@@ -27,6 +27,8 @@ namespace UnderwaterGliderTwin.Telemetry
         public readonly SimulationDiagnostics? Diagnostics;
         public readonly double PlannedLongitudeDeg;
         public readonly double PlannedLatitudeDeg;
+        public readonly SimulationMissionState? MissionState;
+        public readonly int ProfileSequence;
 
         public bool HasPlannedPosition => !double.IsNaN(PlannedLongitudeDeg) && !double.IsNaN(PlannedLatitudeDeg);
 
@@ -55,7 +57,9 @@ namespace UnderwaterGliderTwin.Telemetry
             float turnAngleDeg,
             SimulationDiagnostics? diagnostics = null,
             double plannedLongitudeDeg = double.NaN,
-            double plannedLatitudeDeg = double.NaN)
+            double plannedLatitudeDeg = double.NaN,
+            SimulationMissionState? missionState = null,
+            int profileSequence = 0)
         {
             RowIndex = rowIndex;
             RawTime = rawTime;
@@ -82,6 +86,8 @@ namespace UnderwaterGliderTwin.Telemetry
             Diagnostics = diagnostics;
             PlannedLongitudeDeg = plannedLongitudeDeg;
             PlannedLatitudeDeg = plannedLatitudeDeg;
+            MissionState = missionState;
+            ProfileSequence = profileSequence;
         }
     }
 }
