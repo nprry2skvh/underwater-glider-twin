@@ -17,6 +17,7 @@ namespace UnderwaterGliderTwin.Prediction
         private IReadOnlyList<TelemetryFrame> frames;
         private GeoCoordinateMapper mapper;
         private PlaybackController playback;
+        private SimulationTrajectoryTimeline timeline;
 
         public event Action<PredictionSnapshot> SnapshotUpdated;
 
@@ -36,6 +37,10 @@ namespace UnderwaterGliderTwin.Prediction
             frames = telemetryFrames ?? throw new ArgumentNullException(nameof(telemetryFrames));
             mapper = coordinateMapper ?? throw new ArgumentNullException(nameof(coordinateMapper));
             playback = playbackController ?? throw new ArgumentNullException(nameof(playbackController));
+            if (playback.Model.IsTimelineBound)
+            {
+                BindTimeline(playback.Model.Timeline);
+            }
             BuildPredictorRegistry();
             if (!IsModelRuntimeAvailable(ModelKind))
             {
@@ -45,6 +50,12 @@ namespace UnderwaterGliderTwin.Prediction
             playback.FrameChangedWithReason += OnFrameChanged;
             playback.Model.FramesReplaced += OnFramesReplaced;
             Recompute(playback.Model.CurrentIndex);
+        }
+
+        public void BindTimeline(SimulationTrajectoryTimeline replacement)
+        {
+            timeline = replacement ?? throw new ArgumentNullException(nameof(replacement));
+            frames = replacement.CommittedSnapshot.Frames;
         }
 
         public void SetModelKind(PredictionModelKind modelKind)
@@ -102,7 +113,7 @@ namespace UnderwaterGliderTwin.Prediction
 
         private void OnFramesReplaced(IReadOnlyList<TelemetryFrame> replacement, int preservedIndex)
         {
-            frames = replacement;
+            frames = timeline != null ? timeline.CommittedSnapshot.Frames : replacement;
             Recompute(preservedIndex);
         }
 

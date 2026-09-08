@@ -102,6 +102,8 @@ namespace UnderwaterGliderTwin.Tests
             var camera = Camera.main;
             Assert.That(bootstrap, Is.Not.Null);
             Assert.That(bootstrap.SimulationSession, Is.Not.Null);
+            Assert.That(bootstrap.PlaybackController.Model.IsTimelineBound, Is.True);
+            Assert.That(bootstrap.PlaybackController.Model.Timeline, Is.SameAs(bootstrap.SimulationSession.Timeline));
             Assert.That(camera, Is.Not.Null);
             var sceneHandle = SceneManager.GetActiveScene().handle;
             var playback = bootstrap.PlaybackController;
@@ -129,6 +131,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(Camera.main.transform.position, Is.EqualTo(cameraPosition));
             Assert.That(Camera.main.transform.rotation, Is.EqualTo(cameraRotation));
             Assert.That(Camera.main.fieldOfView, Is.EqualTo(cameraFov));
+            Assert.That(bootstrap.SimulationSession.Timeline.CommittedSnapshot.Segments.Count, Is.EqualTo(2));
         }
 
         private static SimulationProfile CreateSmallProfile()

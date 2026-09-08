@@ -113,11 +113,29 @@ namespace UnderwaterGliderTwin.Bootstrap
                 minBatteryPercent: 20f,
                 maxAbsAttitudeDeg: 20f);
 
+            SimulationTrajectoryTimeline initialTimeline = null;
+            if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
+            {
+                initialTimeline = SimulationTrajectoryTimeline.CreateInitial(
+                    LoadResult.Frames,
+                    RuntimeDataSourceState.SimulationProfile);
+            }
+
+            var playbackModel = new PlaybackModel(LoadResult.Frames, rowsPerSecond);
+            if (initialTimeline != null)
+            {
+                playbackModel.BindTimeline(initialTimeline);
+            }
+
             PlaybackController = gameObject.AddComponent<PlaybackController>();
-            PlaybackController.Initialize(new PlaybackModel(LoadResult.Frames, rowsPerSecond));
+            PlaybackController.Initialize(playbackModel);
 
             var prediction = gameObject.AddComponent<PredictionController>();
             prediction.Initialize(LoadResult.Frames, Mapper, PlaybackController);
+            if (initialTimeline != null)
+            {
+                prediction.BindTimeline(initialTimeline);
+            }
 
             var glider = GliderVisualBuilder.Build();
             var driver = glider.AddComponent<GliderTransformDriver>();
@@ -133,8 +151,9 @@ namespace UnderwaterGliderTwin.Bootstrap
                 SimulationSession = new SimulationRuntimeSession(
                     PlaybackController.Model,
                     RuntimeDataSourceState.SimulationProfile,
-                    new SimulationFutureTrajectoryGenerator(this));
-                PlaybackController.Model.FramesReplaced += trajectoryView.ReplaceFutureTrajectory;
+                    new SimulationFutureTrajectoryGenerator(this),
+                    timeline: initialTimeline);
+                PlaybackController.Model.TimelineChanged += trajectoryView.ReplaceFutureTrajectory;
                 SimulationSession.StatusChanged += OnSimulationSessionStatusChanged;
                 SimulationRuntimeRegistry.SetActive(SimulationSession);
             }
@@ -427,7 +446,7 @@ namespace UnderwaterGliderTwin.Bootstrap
 
             if (PlaybackController != null && trajectoryView != null)
             {
-                PlaybackController.Model.FramesReplaced -= trajectoryView.ReplaceFutureTrajectory;
+                PlaybackController.Model.TimelineChanged -= trajectoryView.ReplaceFutureTrajectory;
             }
         }
 

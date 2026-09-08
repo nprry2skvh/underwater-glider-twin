@@ -161,6 +161,16 @@ namespace UnderwaterGliderTwin.Visualization
             RefreshVisibility();
         }
 
+        public void ReplaceFutureTrajectory(SimulationTimelineSnapshot snapshot, int preservedIndex)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            ReplaceFutureTrajectory(snapshot.Frames, preservedIndex);
+        }
+
         private void OnDestroy()
         {
             if (playback != null)

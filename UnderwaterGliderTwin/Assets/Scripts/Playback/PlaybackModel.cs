@@ -31,6 +31,7 @@ namespace UnderwaterGliderTwin.Playback
         public float CurrentElapsedSeconds => CurrentFrame.ElapsedSeconds;
         public bool IsWaitingForFuture { get; private set; }
         public bool IsTimelineBound => timeline != null;
+        public SimulationTrajectoryTimeline Timeline => timeline;
 
         public PlaybackModel(IReadOnlyList<TelemetryFrame> frames, float rowsPerSecond)
         {
@@ -120,7 +121,7 @@ namespace UnderwaterGliderTwin.Playback
             IsPlaying = playImmediately;
         }
 
-        public void BindTimeline(SimulationTrajectoryTimeline replacement)
+        public void BindTimeline(SimulationTrajectoryTimeline replacement, bool notify = false)
         {
             if (replacement == null)
             {
@@ -135,6 +136,12 @@ namespace UnderwaterGliderTwin.Playback
             timeline = replacement;
             ApplySnapshot(replacement.CommittedSnapshot);
             timeline.Changed += OnTimelineChanged;
+            if (notify)
+            {
+                NotifyTimelineChanged(replacement.CommittedSnapshot);
+                NotifyFramesReplaced();
+                TimelineRebuildReady?.Invoke();
+            }
         }
 
         public bool HasFutureHorizon(float seconds, int minimumFrames)

@@ -52,7 +52,7 @@ namespace UnderwaterGliderTwin.Telemetry
             this.frameSliceBudget = Math.Max(1, frameSliceBudget);
             this.timeout = timeout ?? TimeSpan.FromSeconds(30);
             this.utcNow = utcNow ?? (() => DateTime.UtcNow);
-            this.timeline = timeline ?? CreateInitialTimeline(playback, this.activeProfile);
+            this.timeline = timeline ?? SimulationTrajectoryTimeline.CreateInitial(playback.Frames, this.activeProfile, this.utcNow());
             if (playback.IsTimelineBound)
             {
                 if (!ReferenceEquals(playback.Frames, this.timeline.CommittedSnapshot.Frames))
@@ -503,27 +503,6 @@ namespace UnderwaterGliderTwin.Telemetry
             Status = status;
             timeline.SetStatus(status);
             StatusChanged?.Invoke();
-        }
-
-        private static SimulationTrajectoryTimeline CreateInitialTimeline(
-            PlaybackModel playback,
-            SimulationProfile profile)
-        {
-            if (playback.Frames.Count == 0)
-            {
-                throw new ArgumentException("Playback requires at least one frame.", nameof(playback));
-            }
-
-            var first = playback.Frames[0];
-            return new SimulationTrajectoryTimeline(
-                playback.Frames,
-                new SimulationTimelineSegment(
-                    0,
-                    0,
-                    first.RowIndex,
-                    first.ElapsedSeconds,
-                    profile,
-                    DateTime.UtcNow));
         }
 
         private int CurrentProfileSequence()

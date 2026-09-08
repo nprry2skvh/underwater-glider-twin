@@ -12,6 +12,49 @@ namespace UnderwaterGliderTwin.Telemetry
         public SimulationTimelineSnapshot CommittedSnapshot => committedSnapshot;
         public int Revision => committedSnapshot.Revision;
 
+        public static SimulationTrajectoryTimeline CreateInitial(
+            IReadOnlyList<TelemetryFrame> frames,
+            SimulationProfile profile,
+            DateTime? committedAtUtc = null)
+        {
+            if (frames == null)
+            {
+                throw new ArgumentNullException(nameof(frames));
+            }
+
+            if (frames.Count == 0)
+            {
+                throw new ArgumentException("Timeline requires at least one frame.", nameof(frames));
+            }
+
+            var first = frames[0];
+            return new SimulationTrajectoryTimeline(
+                frames,
+                new SimulationTimelineSegment(
+                    0,
+                    0,
+                    first.RowIndex,
+                    first.ElapsedSeconds,
+                    profile ?? throw new ArgumentNullException(nameof(profile)),
+                    committedAtUtc ?? DateTime.UtcNow));
+        }
+
+        public void SetStatus(SimulationTimelineStatus status)
+        {
+            if (committedSnapshot.Status == status)
+            {
+                return;
+            }
+
+            committedSnapshot = new SimulationTimelineSnapshot(
+                committedSnapshot.Frames,
+                committedSnapshot.Segments,
+                committedSnapshot.Revision + 1,
+                status,
+                committedSnapshot.MissionState,
+                committedSnapshot.Playback);
+        }
+
         public SimulationTrajectoryTimeline(
             IReadOnlyList<TelemetryFrame> frames,
             SimulationTimelineSegment initialSegment)
