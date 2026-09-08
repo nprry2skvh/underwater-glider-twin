@@ -1,0 +1,54 @@
+{
+  "artifact": {
+    "artifact_version": 1,
+    "source": "candidate"
+  },
+  "xgboost": {
+    "by_horizon": {
+      "30": {
+        "endpoint_error_m": 18.620067596435547,
+        "depth_mae_m": 6.468898773193359
+      },
+      "300": {
+        "endpoint_error_m": 112.10736083984375,
+        "depth_mae_m": 11.263216972351074
+      },
+      "900": {
+        "endpoint_error_m": 385.27276611328125,
+        "depth_mae_m": 19.62711524963379
+      }
+    },
+    "aggregate": {
+      "trajectory_rmse_m": 240.52024841308594,
+      "heading_mae_deg": 18.573280334472656
+    }
+  },
+  "physics": {
+    "by_horizon": {
+      "30": {
+        "endpoint_error_m": 13.196916580200195,
+        "depth_mae_m": 0.7649098634719849
+      },
+      "300": {
+        "endpoint_error_m": 130.0796661376953,
+        "depth_mae_m": 4.902219295501709
+      },
+      "900": {
+        "endpoint_error_m": 375.614501953125,
+        "depth_mae_m": 13.858389854431152
+      }
+    },
+    "aggregate": {
+      "trajectory_rmse_m": 228.14671325683594,
+      "heading_mae_deg": 11.18023681640625
+    }
+  },
+  "accepted": false,
+  "rejection_reasons": [
+    "900-second endpoint error did not improve over Physics",
+    "900-second depth MAE did not improve over Physics",
+    "aggregate trajectory RMSE regressed versus Physics",
+    "aggregate heading MAE regressed versus Physics"
+  ],
+  "source_row_count": 2520
+}

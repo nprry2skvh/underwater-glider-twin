@@ -3,6 +3,19 @@
 *.bin
 *.sqlite
 *.sqlite3
+*.npz
+
+# Local run/test artifacts
+*.log
+EditModeResults*.xml
+TestResults*.xml
+TestResults/
+.superpowers/
+.worktrees/
+
+# Python generated files
+__pycache__/
+*.py[cod]
 
 # Unity generated folders
 [Ll]ibrary/
@@ -12,6 +25,12 @@
 [Bb]uilds/
 [Ll]ogs/
 [Uu]ser[Ss]ettings/
+UnderwaterGliderTwin/[Ll]ibrary/
+UnderwaterGliderTwin/[Tt]emp/
+UnderwaterGliderTwin/[Oo]bj/
+UnderwaterGliderTwin/[Ll]ogs/
+UnderwaterGliderTwin/[Uu]ser[Ss]ettings/
+Builds/
 
 # IDE files
 .vs/

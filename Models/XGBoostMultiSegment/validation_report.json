@@ -1,0 +1,54 @@
+{
+  "artifact": {
+    "artifact_version": 1,
+    "source": "synthetic-multisegment",
+    "train_segments": 14,
+    "validation_segments": 6,
+    "origins_per_segment": 300
+  },
+  "xgboost": {
+    "by_horizon": {
+      "30": {
+        "endpoint_error_m": 13.252995491027832,
+        "depth_mae_m": 4.626623630523682
+      },
+      "300": {
+        "endpoint_error_m": 18.81951904296875,
+        "depth_mae_m": 9.111913681030273
+      },
+      "900": {
+        "endpoint_error_m": 95.22112274169922,
+        "depth_mae_m": 16.711671829223633
+      }
+    },
+    "aggregate": {
+      "trajectory_rmse_m": 68.42521667480469,
+      "heading_mae_deg": 11.305952072143555
+    }
+  },
+  "physics": {
+    "by_horizon": {
+      "30": {
+        "endpoint_error_m": 14.80224609375,
+        "depth_mae_m": 0.7795000672340393
+      },
+      "300": {
+        "endpoint_error_m": 147.04251098632812,
+        "depth_mae_m": 5.14300012588501
+      },
+      "900": {
+        "endpoint_error_m": 434.4952697753906,
+        "depth_mae_m": 14.42894458770752
+      }
+    },
+    "aggregate": {
+      "trajectory_rmse_m": 264.380126953125,
+      "heading_mae_deg": 7.207894802093506
+    }
+  },
+  "accepted": false,
+  "rejection_reasons": [
+    "900-second depth MAE did not improve over Physics",
+    "aggregate heading MAE regressed versus Physics"
+  ]
+}

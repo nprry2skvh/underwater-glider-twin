@@ -1,0 +1,195 @@
+{
+  "csv_path": "D:\\Desktop\\digital twin\\glider_underwater_synthetic.csv",
+  "row_count": 50400,
+  "train_ratio": 0.7,
+  "window_size": 30,
+  "horizon": 30,
+  "models": {
+    "xgboost": {
+      "artifact": {
+        "artifact_version": 1,
+        "source": "candidate"
+      },
+      "xgboost": {
+        "by_horizon": {
+          "30": {
+            "endpoint_error_m": 16.455081939697266,
+            "depth_mae_m": 4.986745834350586
+          },
+          "300": {
+            "endpoint_error_m": 17.751813888549805,
+            "depth_mae_m": 9.005650520324707
+          },
+          "900": {
+            "endpoint_error_m": 91.95726013183594,
+            "depth_mae_m": 16.858116149902344
+          }
+        },
+        "aggregate": {
+          "trajectory_rmse_m": 65.17218780517578,
+          "heading_mae_deg": 11.550143241882324
+        }
+      },
+      "deployment": {
+        "by_horizon": {
+          "30": {
+            "endpoint_error_m": 16.455081939697266,
+            "depth_mae_m": 0.7795000672340393
+          },
+          "300": {
+            "endpoint_error_m": 17.751813888549805,
+            "depth_mae_m": 5.14300012588501
+          },
+          "900": {
+            "endpoint_error_m": 91.95726013183594,
+            "depth_mae_m": 14.42894458770752
+          }
+        },
+        "aggregate": {
+          "trajectory_rmse_m": 65.17218780517578,
+          "heading_mae_deg": 7.207894802093506
+        }
+      },
+      "stable_reference": {
+        "by_horizon": {
+          "30": {
+            "endpoint_error_m": 14.80224609375,
+            "depth_mae_m": 0.7795000672340393
+          },
+          "300": {
+            "endpoint_error_m": 147.04251098632812,
+            "depth_mae_m": 5.14300012588501
+          },
+          "900": {
+            "endpoint_error_m": 434.4952697753906,
+            "depth_mae_m": 14.42894458770752
+          }
+        },
+        "aggregate": {
+          "trajectory_rmse_m": 264.380126953125,
+          "heading_mae_deg": 7.207894802093506
+        }
+      },
+      "accepted": true,
+      "rejection_reasons": [],
+      "source_row_count": 50400,
+      "output_sources": {
+        "east_displacement_m": "xgboost",
+        "north_displacement_m": "xgboost",
+        "depth_delta_m": "stable",
+        "heading_delta_deg": "stable",
+        "pitch_delta_deg": "xgboost",
+        "roll_delta_deg": "xgboost"
+      },
+      "selected_candidate": "regularized_long_horizon",
+      "candidate_search": [
+        {
+          "name": "balanced",
+          "parameters": {
+            "n_estimators": 120,
+            "max_depth": 5,
+            "learning_rate": 0.05,
+            "subsample": 0.85,
+            "colsample_bytree": 0.85
+          },
+          "validation_score": 81.75277738571167,
+          "metrics": {
+            "by_horizon": {
+              "30": {
+                "endpoint_error_m": 13.46413803100586,
+                "depth_mae_m": 4.72430944442749
+              },
+              "300": {
+                "endpoint_error_m": 18.72763442993164,
+                "depth_mae_m": 9.351431846618652
+              },
+              "900": {
+                "endpoint_error_m": 92.51409912109375,
+                "depth_mae_m": 17.091856002807617
+              }
+            },
+            "aggregate": {
+              "trajectory_rmse_m": 67.80843353271484,
+              "heading_mae_deg": 11.67625904083252
+            }
+          }
+        },
+        {
+          "name": "regularized_long_horizon",
+          "parameters": {
+            "n_estimators": 180,
+            "max_depth": 4,
+            "learning_rate": 0.04,
+            "subsample": 0.9,
+            "colsample_bytree": 0.9,
+            "min_child_weight": 3,
+            "reg_lambda": 2.0
+          },
+          "validation_score": 81.0132950782776,
+          "metrics": {
+            "by_horizon": {
+              "30": {
+                "endpoint_error_m": 16.455081939697266,
+                "depth_mae_m": 4.986745834350586
+              },
+              "300": {
+                "endpoint_error_m": 17.751813888549805,
+                "depth_mae_m": 9.005650520324707
+              },
+              "900": {
+                "endpoint_error_m": 91.95726013183594,
+                "depth_mae_m": 16.858116149902344
+              }
+            },
+            "aggregate": {
+              "trajectory_rmse_m": 65.17218780517578,
+              "heading_mae_deg": 11.550143241882324
+            }
+          }
+        },
+        {
+          "name": "deep_long_horizon",
+          "parameters": {
+            "n_estimators": 150,
+            "max_depth": 6,
+            "learning_rate": 0.035,
+            "subsample": 0.8,
+            "colsample_bytree": 0.9,
+            "min_child_weight": 2
+          },
+          "validation_score": 85.29467043876649,
+          "metrics": {
+            "by_horizon": {
+              "30": {
+                "endpoint_error_m": 7.992850303649902,
+                "depth_mae_m": 4.418229579925537
+              },
+              "300": {
+                "endpoint_error_m": 17.27635955810547,
+                "depth_mae_m": 9.572060585021973
+              },
+              "900": {
+                "endpoint_error_m": 97.43043518066406,
+                "depth_mae_m": 17.17829704284668
+              }
+            },
+            "aggregate": {
+              "trajectory_rmse_m": 72.17032623291016,
+              "heading_mae_deg": 11.498970031738281
+            }
+          }
+        }
+      ],
+      "segment_split": {
+        "eligible_segment_count": 20,
+        "train_segment_count": 14,
+        "validation_segment_count": 6,
+        "train_origin_count": 4200,
+        "validation_origin_count": 1800,
+        "max_origins_per_segment": 300,
+        "history_length": 30,
+        "sample_interval_seconds": 10
+      }
+    }
+  }
+}

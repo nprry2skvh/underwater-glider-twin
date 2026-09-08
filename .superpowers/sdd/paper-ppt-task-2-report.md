@@ -1,0 +1,34 @@
+# Task 2 report — slide content specification
+
+Status: complete
+
+Created `paper-ppt-assets/slide_spec.json` with 15 ordered slide records (title through conclusion/references). Every record includes `slide`, `title`, `takeaway`, `bullets`, `assets`, `animation_group`, and `source_reference`; bullets are capped at four items. The exact reported comparisons (11% vs 44%, Fig. 8 deltas, approximately 3 m Arctic discrepancy, and <15 W) are included only on the relevant slides.
+
+## Validation
+
+Command:
+
+```powershell
+$p='.superpowers\\sdd\\paper-ppt-assets\\slide_spec.json'; $j=Get-Content -Raw $p | ConvertFrom-Json; "slides=$($j.Count)"; $j | % { if ($_.bullets.Count -gt 4){throw "too many"}; foreach($f in 'slide','title','takeaway','bullets','assets','animation_group','source_reference'){if($null -eq $_.$f){throw "missing $f"}} }; 'VALID'
+```
+
+Output:
+
+```
+slides=15
+VALID
+```
+
+Commit: initial Task 2 commit `17efc2526126cf5bd7e0ded837523c0da4147631`; follow-up language/source fix commit recorded below.
+
+Concerns: The design-spec file is mojibake-encoded in the workspace; slide copy follows the unambiguous sequence and source-facts JSON. Slide 14 is explicitly labeled as an application inference rather than a paper-reported result.
+
+Follow-up fix commit: `6efea4d177cd4e3a4aeda78a5f176a4d00f6de64`.
+
+Additional language fix: slides 8–12 and 15 now use Chinese takeaways/bullets while retaining proper nouns and technical abbreviations. Slide 14 visibly marks its content as application inference.
+
+Language-fix commit: `e3487c1c92249ea47db21d44a76cc924c6fd5767`.
+
+Final slide 9 language fix is included in the latest commit below.
+
+Latest slide-9 fix commit: `e03f6114be5e5dececfc00d0bbf7e64b1844713e`.

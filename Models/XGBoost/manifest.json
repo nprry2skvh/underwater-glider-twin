@@ -1,0 +1,42 @@
+{
+  "artifact_schema_version": 1,
+  "validation_status": "accepted",
+  "training_run_id": "balanced",
+  "files": [
+    {
+      "path": "feature_schema.json",
+      "sha256": "eff46e47e83f365379e33c164cc97f6f1a5995c61f93f1860d18885b988d7970",
+      "size_bytes": 1731
+    },
+    {
+      "path": "models/depth_delta_m.json",
+      "sha256": "e88b8b809cd8fbaa89d5a12d1889c3710b1c87a25db62e0c08fd8bde8d2e061e",
+      "size_bytes": 838302
+    },
+    {
+      "path": "models/east_displacement_m.json",
+      "sha256": "dfdf972ae56000ab3aef9cfef10c7cc11eb9a095eac5d38e52ab1f432010696e",
+      "size_bytes": 917206
+    },
+    {
+      "path": "models/heading_delta_deg.json",
+      "sha256": "f5bd0cdf2691c208c8656d48823f48fe7c48e51c202b0df69e439df484d1e976",
+      "size_bytes": 798526
+    },
+    {
+      "path": "models/north_displacement_m.json",
+      "sha256": "c56c2fe44d94bde9b4f3cf6324ccc8b4ad37a5ebf87713b7b8b953ab30e3767d",
+      "size_bytes": 905800
+    },
+    {
+      "path": "models/pitch_delta_deg.json",
+      "sha256": "d50339868c949a38e4a9b214f546bac38699aba3353d323a5076c2e7b34f154d",
+      "size_bytes": 881611
+    },
+    {
+      "path": "models/roll_delta_deg.json",
+      "sha256": "d2c7d659afaa47f6325fb5620464812c2929abc21971c04845d79f3b03d3d733",
+      "size_bytes": 918230
+    }
+  ]
+}

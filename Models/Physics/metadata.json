@@ -1,0 +1,42 @@
+{
+  "model_name": "Physics",
+  "metrics": {
+    "rmse": 15935.8681640625,
+    "mae": 280.6121826171875,
+    "current_error": 18.395689010620117,
+    "max_error": 7153107.5,
+    "confidence": 0.00037636743311713646
+  },
+  "dataset": {
+    "train_rows": 165304,
+    "validation_rows": 70845,
+    "train_windows": 165245,
+    "validation_windows": 70816,
+    "feature_columns": [
+      "elapsed_seconds",
+      "latitude_deg",
+      "longitude_deg",
+      "depth_m",
+      "heading_deg",
+      "pitch_deg",
+      "roll_deg",
+      "velocity_x",
+      "velocity_y",
+      "velocity_z",
+      "current_speed",
+      "x_m",
+      "y_m",
+      "z_m"
+    ],
+    "target_columns": [
+      "x_m",
+      "y_m",
+      "z_m",
+      "heading_deg",
+      "depth_m",
+      "pitch_deg",
+      "roll_deg"
+    ]
+  },
+  "generated_at": "2026-07-11 11:40:35"
+}

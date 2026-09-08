@@ -1,0 +1,57 @@
+{
+  "artifact": {
+    "artifact_version": 1,
+    "source": "candidate"
+  },
+  "xgboost": {
+    "by_horizon": {
+      "30": {
+        "endpoint_error_m": 28.418684005737305,
+        "depth_mae_m": 4.080892086029053
+      },
+      "300": {
+        "endpoint_error_m": 43.70185852050781,
+        "depth_mae_m": 14.128650665283203
+      },
+      "900": {
+        "endpoint_error_m": 43.02557373046875,
+        "depth_mae_m": 91.45415496826172
+      }
+    },
+    "aggregate": {
+      "trajectory_rmse_m": 51.296905517578125,
+      "heading_mae_deg": 16.838653564453125
+    }
+  },
+  "physics": {
+    "by_horizon": {
+      "30": {
+        "endpoint_error_m": 35.16221618652344,
+        "depth_mae_m": 3.543104410171509
+      },
+      "300": {
+        "endpoint_error_m": 213.72998046875,
+        "depth_mae_m": 24.901281356811523
+      },
+      "900": {
+        "endpoint_error_m": 620.848876953125,
+        "depth_mae_m": 109.14835357666016
+      }
+    },
+    "aggregate": {
+      "trajectory_rmse_m": 370.2955627441406,
+      "heading_mae_deg": 16.215801239013672
+    }
+  },
+  "accepted": false,
+  "rejection_reasons": [
+    "aggregate heading MAE regressed versus Physics"
+  ],
+  "source_row_count": 1646,
+  "output_sources": {
+    "east_displacement_m": "xgboost",
+    "north_displacement_m": "xgboost",
+    "depth_delta_m": "xgboost",
+    "heading_delta_deg": "stable"
+  }
+}
