@@ -20,6 +20,7 @@ namespace UnderwaterGliderTwin.Telemetry
             if (!IsInRange(profile.RollDeadbandFraction, 0f, 0.25f)) return Fail("RollDeadbandFraction", out error);
             if (!IsFiniteNonNegative(profile.NonlinearRollRestoringGain)) return Fail("NonlinearRollRestoringGain", out error);
             if (!IsFiniteNonNegative(profile.MaxRollMomentNm)) return Fail("MaxRollMomentNm", out error);
+            if (!IsInRange(profile.IntegrationStepSeconds, 0.01f, 1f)) return Fail("IntegrationStepSeconds", out error);
 
             error = null;
             return true;

@@ -7,15 +7,18 @@ namespace UnderwaterGliderTwin.Telemetry
         public TelemetryFrame Frame { get; }
         public SimulationProfile Profile { get; }
         public GliderDynamicsState DynamicsState { get; }
+        public SimulationMissionState MissionState { get; }
 
         private SimulationStateSnapshot(
             TelemetryFrame frame,
             SimulationProfile profile,
-            GliderDynamicsState dynamicsState)
+            GliderDynamicsState dynamicsState,
+            SimulationMissionState missionState)
         {
             Frame = frame;
             Profile = profile;
             DynamicsState = dynamicsState;
+            MissionState = missionState;
         }
 
         public static SimulationStateSnapshot FromFrame(TelemetryFrame frame, SimulationProfile profile)
@@ -29,9 +32,9 @@ namespace UnderwaterGliderTwin.Telemetry
             var localZ = (float)((frame.LatitudeDeg - sourceProfile.OriginLatitudeDeg) * 111320d);
             var headingRadians = frame.HeadingDeg * Mathf.Deg2Rad;
             var waterVelocity = new Vector3(
-                Mathf.Sin(headingRadians) * sourceProfile.Dynamics.CruiseSpeedMps,
+                Mathf.Sin(headingRadians) * sourceProfile.HorizontalSpeedMps,
                 0f,
-                Mathf.Cos(headingRadians) * sourceProfile.Dynamics.CruiseSpeedMps);
+                Mathf.Cos(headingRadians) * sourceProfile.HorizontalSpeedMps);
             var currentVelocity = Vector3.zero;
             var diagnostics = frame.Diagnostics;
             if (diagnostics.HasValue)
@@ -64,7 +67,42 @@ namespace UnderwaterGliderTwin.Telemetry
                 ActuatorPowerWatts = diagnostics?.ActuatorPowerWatts ?? 0f
             };
 
-            return new SimulationStateSnapshot(frame, sourceProfile, state);
+            if (diagnostics.HasValue)
+            {
+                state.RollRateDegPerSecond = diagnostics.Value.AngularVelocityRadPerSecond.x * Mathf.Rad2Deg;
+                state.PitchRateDegPerSecond = diagnostics.Value.AngularVelocityRadPerSecond.y * Mathf.Rad2Deg;
+                state.YawRateDegPerSecond = diagnostics.Value.AngularVelocityRadPerSecond.z * Mathf.Rad2Deg;
+            }
+
+            var missionState = frame.MissionState ?? InferMissionState(frame);
+            return new SimulationStateSnapshot(frame, sourceProfile, state, missionState);
+        }
+
+        private static SimulationMissionState InferMissionState(TelemetryFrame frame)
+        {
+            var completedCycles = Mathf.Max(0, Mathf.RoundToInt(frame.TargetSegment) - 1);
+            if (frame.RunState == "Turnaround")
+            {
+                return new SimulationMissionState { Phase = SimulationMissionPhase.BottomTurn, CompletedCycles = completedCycles };
+            }
+
+            if (frame.RunState == "Surface" || frame.DepthM <= 0.001f)
+            {
+                return SimulationMissionState.AtSurface(completedCycles);
+            }
+
+            if (frame.TargetDepthM > 0.001f && frame.DepthM >= frame.TargetDepthM - 1f)
+            {
+                return new SimulationMissionState { Phase = SimulationMissionPhase.BottomTurn, CompletedCycles = completedCycles };
+            }
+
+            return new SimulationMissionState
+            {
+                Phase = frame.TargetDepthM > 0.001f && frame.DepthM < frame.TargetDepthM
+                    ? SimulationMissionPhase.Descent
+                    : SimulationMissionPhase.Ascent,
+                CompletedCycles = completedCycles
+            };
         }
     }
 }

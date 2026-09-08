@@ -53,6 +53,7 @@ namespace UnderwaterGliderTwin.Telemetry
         public float BuoyancyPowerWattsPerNewton { get; set; } = 0.4f;
         public float BatteryCapacityWh { get; set; } = 850f;
         public float MinimumBatteryPercent { get; set; } = 15f;
+        public float IntegrationStepSeconds { get; set; } = 0.5f;
 
         public static GliderDynamicsProfile Default => new GliderDynamicsProfile();
 
@@ -110,7 +111,8 @@ namespace UnderwaterGliderTwin.Telemetry
                 BasePowerWatts = BasePowerWatts,
                 BuoyancyPowerWattsPerNewton = BuoyancyPowerWattsPerNewton,
                 BatteryCapacityWh = BatteryCapacityWh,
-                MinimumBatteryPercent = MinimumBatteryPercent
+                MinimumBatteryPercent = MinimumBatteryPercent,
+                IntegrationStepSeconds = IntegrationStepSeconds
             };
         }
     }

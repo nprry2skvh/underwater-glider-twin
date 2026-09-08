@@ -32,6 +32,16 @@ namespace UnderwaterGliderTwin.Telemetry
 
         public bool HasPlannedPosition => !double.IsNaN(PlannedLongitudeDeg) && !double.IsNaN(PlannedLatitudeDeg);
 
+        public TelemetryFrame WithProfileSequence(int profileSequence)
+        {
+            return new TelemetryFrame(
+                RowIndex, RawTime, ElapsedSeconds, LongitudeDeg, LatitudeDeg, DepthM, AltitudeM,
+                HeadingDeg, PitchDeg, RollDeg, Voltage24V, Current24A, BatteryPercent,
+                WorkMode, RunState, TargetSegment, TargetHeadingDeg, TargetDepthM, TargetAltitudeM,
+                PropellerRpm, PistonMm, TurnAngleDeg, Diagnostics, PlannedLongitudeDeg,
+                PlannedLatitudeDeg, MissionState, profileSequence);
+        }
+
         public TelemetryFrame(
             int rowIndex,
             string rawTime,

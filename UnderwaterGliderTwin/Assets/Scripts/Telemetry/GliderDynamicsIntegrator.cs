@@ -20,12 +20,13 @@ namespace UnderwaterGliderTwin.Telemetry
                 return state;
             }
 
-            if (deltaSeconds > 1f)
+            var integrationStepSeconds = Mathf.Clamp(settings?.IntegrationStepSeconds ?? 0.5f, 0.01f, 1f);
+            if (deltaSeconds > integrationStepSeconds)
             {
                 var remainingSeconds = deltaSeconds;
                 while (remainingSeconds > 0f)
                 {
-                    var substepSeconds = Mathf.Min(1f, remainingSeconds);
+                    var substepSeconds = Mathf.Min(integrationStepSeconds, remainingSeconds);
                     state = Step(
                         state,
                         settings,
