@@ -72,7 +72,7 @@ namespace UnderwaterGliderTwin.Telemetry
             var current = playback.CurrentFrame;
             var state = new TrajectoryPlaybackState(
                 playback.CurrentIndex,
-                playback.CurrentIndex,
+                playback.ContinuousIndex,
                 current.ElapsedSeconds,
                 playback.IsPlaying,
                 playback.Speed,

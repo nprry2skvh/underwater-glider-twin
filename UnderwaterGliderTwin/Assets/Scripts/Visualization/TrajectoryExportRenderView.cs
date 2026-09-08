@@ -20,7 +20,7 @@ namespace UnderwaterGliderTwin.Visualization
             var success = false;
             string error = null;
             Texture2D texture = null;
-            yield return new WaitForEndOfFrame();
+            yield return null;
             try
             {
                 texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);

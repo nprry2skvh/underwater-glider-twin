@@ -20,6 +20,7 @@ namespace UnderwaterGliderTwin.Playback
         public float Speed { get; private set; } = 1f;
         public int Direction { get; private set; } = 1;
         public int CurrentIndex { get; private set; }
+        public float ContinuousIndex => continuousIndex;
         public int FrameCount => frames.Count;
         public IReadOnlyList<TelemetryFrame> Frames => frames;
         public float RowsPerSecond => rowsPerSecond;
