@@ -30,6 +30,7 @@ namespace UnderwaterGliderTwin.Bootstrap
         public AlarmEvaluator AlarmEvaluator { get; private set; }
         public string CurrentCsvPath { get; private set; }
         public SimulationRuntimeSession SimulationSession { get; private set; }
+        private TrajectoryExportService exportService;
 
         private TrajectoryView trajectoryView;
         private OceanVolumeView oceanVolume;
@@ -194,6 +195,7 @@ namespace UnderwaterGliderTwin.Bootstrap
 
             var screenshotCapture = gameObject.AddComponent<RuntimeScreenshotCapture>();
             screenshotCapture.Initialize(screenshotOptions);
+            exportService = new TrajectoryExportService();
 
             if (useGeneratedUi && runtimeUiRoot != null)
             {
@@ -242,6 +244,7 @@ namespace UnderwaterGliderTwin.Bootstrap
                 canvasRoot.AddComponent<OceanCommandToolbarView>().Bind(refs.oceanToolbar, cameraController, trajectoryView);
                 canvasRoot.AddComponent<PlaybackControlsView>().Bind(refs.playback, PlaybackController, cameraController, environment, trajectoryView,
                     onScreenshotRequested: screenshotCapture.CaptureManual,
+                    beginExport: BeginTrajectoryExport,
                     onMissionViewRequested: () =>
                     {
                         if (RuntimeDataSourceState.CurrentMode != RuntimeDataSourceMode.Simulation)
@@ -270,6 +273,7 @@ namespace UnderwaterGliderTwin.Bootstrap
                 canvasRoot.AddComponent<OceanCommandToolbarView>().Initialize(cameraController, trajectoryView);
                 canvasRoot.AddComponent<PlaybackControlsView>().Initialize(PlaybackController, cameraController, environment, trajectoryView,
                     onScreenshotRequested: screenshotCapture.CaptureManual,
+                    beginExport: BeginTrajectoryExport,
                     onMissionViewRequested: () =>
                     {
                         if (RuntimeDataSourceState.CurrentMode != RuntimeDataSourceMode.Simulation)
@@ -608,6 +612,11 @@ namespace UnderwaterGliderTwin.Bootstrap
             {
                 Logger.AppendLoad($"Simulation profile update rejected: {SimulationSession.LastError}");
             }
+        }
+
+        private IDisposable BeginTrajectoryExport(TrajectoryExportRequest request, Action<TrajectoryExportStatus> progress, Action<TrajectoryExportResult> completed)
+        {
+            return exportService.BeginExport(request.Snapshot, request.ExportRoot ?? RuntimePathResolver.ResolveExportDirectory(), progress, completed);
         }
 
         private void OnSimulationSessionStatusChanged()

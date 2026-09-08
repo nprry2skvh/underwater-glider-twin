@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnderwaterGliderTwin.Playback;
+using UnderwaterGliderTwin.Telemetry;
 using UnderwaterGliderTwin.Visualization;
 
 namespace UnderwaterGliderTwin.UI
@@ -17,14 +18,16 @@ namespace UnderwaterGliderTwin.UI
         private Action exitAction;
         private Action missionViewAction;
         private Func<string> screenshotAction;
+        private Func<TrajectoryExportRequest, Action<TrajectoryExportStatus>, Action<TrajectoryExportResult>, IDisposable> exportAction;
         private readonly Dictionary<float, Button> speedButtons = new Dictionary<float, Button>();
 
         [System.Obsolete("Use Bind(...) with editable UI references.")]
-        public void Initialize(PlaybackController playbackController, TwinCameraController cameraController, UnderwaterEnvironmentBuilder environmentBuilder, TrajectoryView trajectoryView, Action onExitRequested = null, Func<string> onScreenshotRequested = null, Action onMissionViewRequested = null)
+        public void Initialize(PlaybackController playbackController, TwinCameraController cameraController, UnderwaterEnvironmentBuilder environmentBuilder, TrajectoryView trajectoryView, Action onExitRequested = null, Func<string> onScreenshotRequested = null, Action onMissionViewRequested = null, Func<TrajectoryExportRequest, Action<TrajectoryExportStatus>, Action<TrajectoryExportResult>, IDisposable> beginExport = null)
         {
             playback = playbackController;
             exitAction = onExitRequested;
             screenshotAction = onScreenshotRequested;
+            exportAction = beginExport;
             missionViewAction = onMissionViewRequested;
             var canvas = UiFactory.EnsureCanvas(transform);
             var panel = UiFactory.CommandPanel("PlaybackControlsPanel", canvas.transform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 18f), new Vector2(-100f, 124f));
@@ -76,11 +79,12 @@ namespace UnderwaterGliderTwin.UI
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01);
         }
 
-        public void Bind(PlaybackControlsRefs refs, PlaybackController playbackController, TwinCameraController cameraController, UnderwaterEnvironmentBuilder environmentBuilder, TrajectoryView trajectoryView, Action onExitRequested = null, Func<string> onScreenshotRequested = null, Action onMissionViewRequested = null)
+        public void Bind(PlaybackControlsRefs refs, PlaybackController playbackController, TwinCameraController cameraController, UnderwaterEnvironmentBuilder environmentBuilder, TrajectoryView trajectoryView, Action onExitRequested = null, Func<string> onScreenshotRequested = null, Action onMissionViewRequested = null, Func<TrajectoryExportRequest, Action<TrajectoryExportStatus>, Action<TrajectoryExportResult>, IDisposable> beginExport = null)
         {
             playback = playbackController;
             exitAction = onExitRequested;
             screenshotAction = onScreenshotRequested;
+            exportAction = beginExport;
             missionViewAction = onMissionViewRequested;
             if (refs == null || playback == null || playback.Model == null)
             {
@@ -387,6 +391,14 @@ namespace UnderwaterGliderTwin.UI
 
         private void OnExportClicked()
         {
+            if (exportAction != null && playback != null && playback.Model.IsTimelineBound)
+            {
+                var snapshot = TrajectoryExportSnapshot.Capture(playback.Model.Timeline.CommittedSnapshot, playback.Model, null, Camera.main == null ? null : new CameraSnapshot(Camera.main));
+                exportAction(new TrajectoryExportRequest(snapshot), status => SetStatus(status.Message), result => SetStatus(result != null && result.Succeeded ? $"导出完成：{result.PublishedDirectory}" : $"导出失败：{result?.Error}"));
+                SetStatus("导出已开始");
+                return;
+            }
+
             if (screenshotAction == null)
             {
                 SetStatus("截图功能不可用");

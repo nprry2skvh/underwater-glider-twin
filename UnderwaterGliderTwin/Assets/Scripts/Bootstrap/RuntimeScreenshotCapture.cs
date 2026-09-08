@@ -39,6 +39,36 @@ namespace UnderwaterGliderTwin.Bootstrap
             return path;
         }
 
+        public void CaptureAsync(string path, Action<bool, string> completed)
+        {
+            StartCoroutine(CaptureAsyncCoroutine(path, completed));
+        }
+
+        private IEnumerator CaptureAsyncCoroutine(string path, Action<bool, string> completed)
+        {
+            var success = false;
+            string error = null;
+            yield return new WaitForEndOfFrame();
+            try
+            {
+                var directory = Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+                ScreenCapture.CaptureScreenshot(path, 1);
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+            }
+            if (string.IsNullOrEmpty(error))
+            {
+                var deadline = Time.realtimeSinceStartup + 10f;
+                while (!File.Exists(path) && Time.realtimeSinceStartup < deadline) yield return null;
+                success = File.Exists(path);
+                if (!success) error = "Timed out waiting for screenshot capture.";
+            }
+            completed?.Invoke(success, error);
+        }
+
         private IEnumerator CaptureAtEndOfFrame(string path, bool quitAfterCapture)
         {
             var directory = Path.GetDirectoryName(path);
