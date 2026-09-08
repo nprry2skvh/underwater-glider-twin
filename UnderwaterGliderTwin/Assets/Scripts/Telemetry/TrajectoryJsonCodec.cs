@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using UnityEngine;
 
 namespace UnderwaterGliderTwin.Telemetry
@@ -126,16 +127,66 @@ namespace UnderwaterGliderTwin.Telemetry
         private static ProfileDto ToDto(SimulationProfile p)
         {
             p = p ?? SimulationProfile.Default;
-            return new ProfileDto { cycleCount = p.CycleCount, cycleDurationSeconds = Finite(p.CycleDurationSeconds), sampleIntervalSeconds = Finite(p.SampleIntervalSeconds), targetDepthM = Finite(p.TargetDepthM), horizontalSpeedMps = Finite(p.HorizontalSpeedMps), startHeadingDeg = Finite(p.StartHeadingDeg), headingDeltaPerCycleDeg = Finite(p.HeadingDeltaPerCycleDeg), pitchAmplitudeDeg = Finite(p.PitchAmplitudeDeg), rollAmplitudeDeg = Finite(p.RollAmplitudeDeg), originLongitudeDeg = Finite(p.OriginLongitudeDeg), originLatitudeDeg = Finite(p.OriginLatitudeDeg), waterColumnDepthM = Finite(p.WaterColumnDepthM), dynamics = ToDto(p.Dynamics), oceanLayers = (p.OceanCurrentProfile?.Layers ?? Array.Empty<OceanCurrentLayer>()).Where(x => x != null).Select(x => new OceanLayerDto { minDepthM = Finite(x.MinDepthM), maxDepthM = Finite(x.MaxDepthM), eastwardMps = Finite(x.EastwardMps), northwardMps = Finite(x.NorthwardMps) }).ToArray() };
+            return new ProfileDto
+            {
+                values = ReadProperties(p, nameof(SimulationProfile.Dynamics), nameof(SimulationProfile.OceanCurrentProfile), nameof(SimulationProfile.OceanCurrentField)),
+                dynamicsValues = ReadProperties(p.Dynamics ?? GliderDynamicsProfile.Default),
+                oceanLayers = (p.OceanCurrentProfile?.Layers ?? Array.Empty<OceanCurrentLayer>()).Where(x => x != null).Select(x => new OceanLayerDto { minDepthM = Finite(x.MinDepthM), maxDepthM = Finite(x.MaxDepthM), eastwardMps = Finite(x.EastwardMps), northwardMps = Finite(x.NorthwardMps) }).ToArray(),
+                oceanFieldSamples = (p.OceanCurrentField?.Samples ?? Array.Empty<OceanCurrentFieldSample>()).Where(x => x != null).Select(x => new OceanFieldSampleDto { longitudeDeg = Finite(x.LongitudeDeg), latitudeDeg = Finite(x.LatitudeDeg), depthM = Finite(x.DepthM), elapsedSeconds = Finite(x.ElapsedSeconds), eastwardMps = Finite(x.EastwardMps), northwardMps = Finite(x.NorthwardMps), verticalMps = Finite(x.VerticalMps) }).ToArray()
+            };
         }
         private static SimulationProfile FromDto(ProfileDto p)
         {
             var profile = SimulationProfile.Default;
             if (p == null) return profile;
-            profile.CycleCount = p.cycleCount; profile.CycleDurationSeconds = p.cycleDurationSeconds; profile.SampleIntervalSeconds = p.sampleIntervalSeconds; profile.TargetDepthM = p.targetDepthM; profile.HorizontalSpeedMps = p.horizontalSpeedMps; profile.StartHeadingDeg = p.startHeadingDeg; profile.HeadingDeltaPerCycleDeg = p.headingDeltaPerCycleDeg; profile.PitchAmplitudeDeg = p.pitchAmplitudeDeg; profile.RollAmplitudeDeg = p.rollAmplitudeDeg; profile.OriginLongitudeDeg = p.originLongitudeDeg; profile.OriginLatitudeDeg = p.originLatitudeDeg; profile.WaterColumnDepthM = p.waterColumnDepthM; profile.Dynamics = FromDto(p.dynamics); profile.OceanCurrentProfile = new OceanCurrentProfile((p.oceanLayers ?? Array.Empty<OceanLayerDto>()).Select(x => new OceanCurrentLayer(x.minDepthM, x.maxDepthM, x.eastwardMps, x.northwardMps))); return profile;
+            ApplyProperties(profile, p.values);
+            ApplyProperties(profile.Dynamics, p.dynamicsValues);
+            profile.OceanCurrentProfile = new OceanCurrentProfile((p.oceanLayers ?? Array.Empty<OceanLayerDto>()).Select(x => new OceanCurrentLayer(x.minDepthM, x.maxDepthM, x.eastwardMps, x.northwardMps)));
+            profile.OceanCurrentField = new OceanCurrentField((p.oceanFieldSamples ?? Array.Empty<OceanFieldSampleDto>()).Select(x => new OceanCurrentFieldSample(x.longitudeDeg, x.latitudeDeg, x.depthM, x.elapsedSeconds, x.eastwardMps, x.northwardMps, x.verticalMps)));
+            return profile;
         }
         private static DynamicsDto ToDto(GliderDynamicsProfile d) { d = d ?? GliderDynamicsProfile.Default; return new DynamicsDto { presetName = d.PresetName, massKg = Finite(d.MassKg), referenceAreaM2 = Finite(d.ReferenceAreaM2), referenceLengthM = Finite(d.ReferenceLengthM), cruiseSpeedMps = Finite(d.CruiseSpeedMps), integrationStepSeconds = Finite(d.IntegrationStepSeconds), maxBuoyancyForceN = Finite(d.MaxBuoyancyForceN), batteryCapacityWh = Finite(d.BatteryCapacityWh), minimumBatteryPercent = Finite(d.MinimumBatteryPercent) }; }
         private static GliderDynamicsProfile FromDto(DynamicsDto d) { var result = GliderDynamicsProfile.Default; if (d == null) return result; result.PresetName = d.presetName; result.MassKg = d.massKg; result.ReferenceAreaM2 = d.referenceAreaM2; result.ReferenceLengthM = d.referenceLengthM; result.CruiseSpeedMps = d.cruiseSpeedMps; result.IntegrationStepSeconds = d.integrationStepSeconds; result.MaxBuoyancyForceN = d.maxBuoyancyForceN; result.BatteryCapacityWh = d.batteryCapacityWh; result.MinimumBatteryPercent = d.minimumBatteryPercent; return result; }
+        private static NamedValueDto[] ReadProperties(object source, params string[] excludedNames)
+        {
+            if (source == null) return Array.Empty<NamedValueDto>();
+            var excluded = new HashSet<string>(excludedNames ?? Array.Empty<string>());
+            return source.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                .Where(property => property.CanRead && property.GetIndexParameters().Length == 0 && !excluded.Contains(property.Name) && IsSupportedProperty(property.PropertyType))
+                .Select(property => ToNamedValue(property.Name, property.PropertyType, property.GetValue(source, null))).ToArray();
+        }
+
+        private static NamedValueDto ToNamedValue(string name, Type type, object value)
+        {
+            if (value is float floatValue && (float.IsNaN(floatValue) || float.IsInfinity(floatValue))) return new NamedValueDto { name = name, type = "float", isNull = true };
+            if (value is double doubleValue && (double.IsNaN(doubleValue) || double.IsInfinity(doubleValue))) return new NamedValueDto { name = name, type = "double", isNull = true };
+            return new NamedValueDto { name = name, type = TypeCodeFor(type), value = Convert.ToString(value, CultureInfo.InvariantCulture) };
+        }
+
+        private static void ApplyProperties(object target, IReadOnlyList<NamedValueDto> values)
+        {
+            if (target == null || values == null) return;
+            foreach (var value in values)
+            {
+                var property = target.GetType().GetProperty(value.name, BindingFlags.Instance | BindingFlags.Public);
+                if (property == null || !property.CanWrite || !IsSupportedProperty(property.PropertyType)) continue;
+                try { property.SetValue(target, ParseValue(value, property.PropertyType), null); } catch (Exception) { }
+            }
+        }
+
+        private static object ParseValue(NamedValueDto value, Type type)
+        {
+            if (value.isNull) return type == typeof(float) ? (object)float.NaN : type == typeof(double) ? double.NaN : Activator.CreateInstance(type);
+            if (type == typeof(string)) return value.value ?? string.Empty;
+            if (type == typeof(int)) return int.Parse(value.value, CultureInfo.InvariantCulture);
+            if (type == typeof(float)) return float.Parse(value.value, CultureInfo.InvariantCulture);
+            if (type == typeof(double)) return double.Parse(value.value, CultureInfo.InvariantCulture);
+            if (type.IsEnum) return Enum.Parse(type, value.value);
+            return null;
+        }
+
+        private static bool IsSupportedProperty(Type type) => type == typeof(string) || type == typeof(int) || type == typeof(float) || type == typeof(double) || type.IsEnum;
+        private static string TypeCodeFor(Type type) => type == typeof(float) ? "float" : type == typeof(double) ? "double" : type == typeof(int) ? "int" : type.IsEnum ? "enum" : "string";
         private static PlaybackDto ToDto(TrajectoryPlaybackState p) => p == null ? null : new PlaybackDto { currentFrameIndex = p.CurrentFrameIndex, continuousIndex = Finite(p.ContinuousIndex), currentElapsedSeconds = Finite(p.CurrentElapsedSeconds), isPlaying = p.IsPlaying, speed = Finite(p.Speed), direction = p.Direction };
         private static TrajectoryPlaybackState FromDto(PlaybackDto p) => p == null ? null : new TrajectoryPlaybackState(p.currentFrameIndex, p.continuousIndex, p.currentElapsedSeconds, p.isPlaying, p.speed, p.direction);
         private static PredictionDto ToDto(UnderwaterGliderTwin.Prediction.PredictionSnapshot p) => p == null ? null : new PredictionDto { status = p.Status, startIndex = p.StartIndex, endIndex = p.EndIndex, confidence01 = Finite(p.Confidence01), predicted = (p.PredictedPoints ?? Array.Empty<Vector3>()).Select(v => new Vector3Dto { x = Finite(v.x), y = Finite(v.y), z = Finite(v.z) }).ToArray() };
@@ -158,9 +209,11 @@ namespace UnderwaterGliderTwin.Telemetry
         [Serializable] internal sealed class TimelineDto { public int revision; public string status; public FrameDto[] frames; public SegmentDto[] segments; public MissionDto missionState; }
         [Serializable] internal sealed class FrameDto { public int rowIndex; public string rawTime; public float elapsedSeconds, depthM, altitudeM, headingDeg, pitchDeg, rollDeg, voltage24V, current24A, batteryPercent, targetSegment, targetHeadingDeg, targetDepthM, targetAltitudeM, propellerRpm, pistonMm, turnAngleDeg; public double longitudeDeg, latitudeDeg; public string workMode, runState; public Coordinate2Dto planned; public MissionDto missionState; public int profileSequence; }
         [Serializable] internal sealed class SegmentDto { public int profileSequence; public long requestId; public int startRowIndex; public float startElapsedSeconds; public string committedAtUtc; public ProfileDto profile; }
-        [Serializable] internal sealed class ProfileDto { public int cycleCount; public float cycleDurationSeconds, sampleIntervalSeconds, targetDepthM, horizontalSpeedMps, startHeadingDeg, headingDeltaPerCycleDeg, pitchAmplitudeDeg, rollAmplitudeDeg, waterColumnDepthM; public double originLongitudeDeg, originLatitudeDeg; public DynamicsDto dynamics; public OceanLayerDto[] oceanLayers; }
+        [Serializable] internal sealed class ProfileDto { public NamedValueDto[] values; public NamedValueDto[] dynamicsValues; public OceanLayerDto[] oceanLayers; public OceanFieldSampleDto[] oceanFieldSamples; }
+        [Serializable] internal sealed class NamedValueDto { public string name; public string type; public string value; public bool isNull; }
         [Serializable] internal sealed class DynamicsDto { public string presetName; public float massKg, referenceAreaM2, referenceLengthM, cruiseSpeedMps, integrationStepSeconds, maxBuoyancyForceN, batteryCapacityWh, minimumBatteryPercent; }
         [Serializable] internal sealed class OceanLayerDto { public float minDepthM, maxDepthM, eastwardMps, northwardMps; }
+        [Serializable] internal sealed class OceanFieldSampleDto { public double longitudeDeg, latitudeDeg; public float depthM, elapsedSeconds, eastwardMps, northwardMps, verticalMps; }
         [Serializable] internal sealed class MissionDto { public string phase; public int completedCycles; public float legElapsedSeconds, turnaroundElapsedSeconds; public bool safetyWarningRaised; }
         [Serializable] internal sealed class PlaybackDto { public int currentFrameIndex, direction; public float continuousIndex, currentElapsedSeconds, speed; public bool isPlaying; }
         [Serializable] internal sealed class PredictionDto { public string status; public int startIndex, endIndex; public float confidence01; public Vector3Dto[] predicted; }

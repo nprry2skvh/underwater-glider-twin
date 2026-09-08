@@ -195,7 +195,8 @@ namespace UnderwaterGliderTwin.Bootstrap
 
             var screenshotCapture = gameObject.AddComponent<RuntimeScreenshotCapture>();
             screenshotCapture.Initialize(screenshotOptions);
-            exportService = new TrajectoryExportService();
+            var exportRenderView = gameObject.AddComponent<TrajectoryExportRenderView>();
+            exportService = new TrajectoryExportService(renderView: exportRenderView);
 
             if (useGeneratedUi && runtimeUiRoot != null)
             {

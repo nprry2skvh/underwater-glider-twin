@@ -15,12 +15,16 @@ namespace UnderwaterGliderTwin.Tests
             var json = TrajectoryJsonCodec.Serialize(snapshot);
 
             Assert.That(json, Does.Contain("\"profileSequence\": 1"));
+            Assert.That(json, Does.Contain("dynamicsValues"));
+            Assert.That(json, Does.Contain("oceanFieldSamples"));
             Assert.That(json, Does.Not.Contain("NaN"));
             Assert.That(json, Does.Not.Contain("Infinity"));
             Assert.That(TrajectoryJsonImporter.TryRestoreJson(json, out var restored, out var error), Is.True, error);
             Assert.That(restored.Frames.Count, Is.EqualTo(snapshot.Timeline.Frames.Count));
             Assert.That(restored.Segments.Count, Is.EqualTo(snapshot.Timeline.Segments.Count));
             Assert.That(restored.Frames[2].ProfileSequence, Is.EqualTo(1));
+            Assert.That(restored.Segments[1].Profile.TargetDepthM, Is.EqualTo(177f));
+            Assert.That(restored.Segments[1].Profile.OceanCurrentField.Samples.Count, Is.EqualTo(1));
             Assert.That(restored.Playback.CurrentFrameIndex, Is.EqualTo(snapshot.Playback.CurrentFrameIndex));
         }
 
@@ -43,6 +47,10 @@ namespace UnderwaterGliderTwin.Tests
 
         private static TrajectoryExportSnapshot BuildExportSnapshotWithTwoSuccessfulSegments()
         {
+            var profile = SimulationProfile.Default;
+            profile.TargetDepthM = 177f;
+            profile.OceanCurrentProfile.AddLayer(new OceanCurrentLayer(0f, 100f, 0.1f, 0.2f));
+            profile.OceanCurrentField.ReplaceSamples(new[] { new OceanCurrentFieldSample(120d, 25d, 10f, 0f, 0.1f, 0.2f, 0.01f) });
             var frames = new List<TelemetryFrame> { Frame(0, 0f, 0), Frame(1, 1f, 0) };
             var timeline = new SimulationTrajectoryTimeline(
                 frames,
@@ -50,7 +58,7 @@ namespace UnderwaterGliderTwin.Tests
             timeline.ReplaceFutureFrom(
                 1,
                 new[] { Frame(2, 2f, 1), Frame(3, 3f, 1) },
-                new SimulationTimelineSegment(1, 12, 2, 2f, SimulationProfile.Default, System.DateTime.UtcNow));
+                new SimulationTimelineSegment(1, 12, 2, 2f, profile, System.DateTime.UtcNow));
             return new TrajectoryExportSnapshot(
                 timeline.CommittedSnapshot,
                 new TrajectoryPlaybackState(2, 2.25f, 2f, true, 1.5f, 1));

@@ -22,6 +22,8 @@ namespace UnderwaterGliderTwin.Tests
                 Assert.That(File.Exists(Path.Combine(result.PublishedDirectory, "manifest.json")), Is.True);
                 Assert.That(result.Files.Count, Is.EqualTo(4));
                 Assert.That(Directory.Exists(Path.Combine(root, ".staging")), Is.True);
+                Assert.That(TrajectoryJsonImporter.TryRestore(result.PublishedDirectory, out var restored, out var restoredPlayback, out var restoreError), Is.True, restoreError);
+                Assert.That(restored.CommittedSnapshot.Frames.Count, Is.EqualTo(2));
             }
             finally
             {
