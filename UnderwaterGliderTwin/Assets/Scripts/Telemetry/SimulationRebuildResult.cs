@@ -52,6 +52,7 @@ namespace UnderwaterGliderTwin.Telemetry
             SimulationStateSnapshot snapshot,
             SimulationProfile profile,
             int frameSliceBudget,
+            int maximumFrameCount,
             Action<SimulationRebuildResult> onCompleted);
     }
 }

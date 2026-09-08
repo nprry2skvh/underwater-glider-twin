@@ -6,6 +6,7 @@ namespace UnderwaterGliderTwin.Telemetry
 {
     public sealed class SimulationRuntimeSession
     {
+        public const int MaximumTimelineFrameCount = 200000;
         private const double EstimatedSecondsPerFutureSlice = 0.1d;
         private static readonly TimeSpan MaximumPendingTimeout = TimeSpan.FromMinutes(5);
 
@@ -14,18 +15,27 @@ namespace UnderwaterGliderTwin.Telemetry
         private readonly int frameSliceBudget;
         private readonly TimeSpan timeout;
         private readonly Func<DateTime> utcNow;
+        private readonly SimulationTrajectoryTimeline timeline;
         private SimulationProfile activeProfile;
+        private SimulationProfile queuedProfile;
         private ISimulationRebuildOperation pendingOperation;
         private DateTime pendingDeadline;
         private int requestVersion;
+        private long requestIdCounter;
+        private long generationToken;
         private int pendingSeedRowIndex;
         private float pendingSeedElapsedSeconds;
+        private bool pendingIsRefill;
+        private long pendingRequestId;
 
         public event Action StatusChanged;
 
         public bool IsRebuildPending { get; private set; }
         public string LastError { get; private set; }
         public SimulationProfile ActiveProfile => activeProfile.Clone();
+        public SimulationProfile QueuedProfile => queuedProfile?.Clone();
+        public SimulationTrajectoryTimeline Timeline => timeline;
+        public SimulationTimelineStatus Status { get; private set; } = SimulationTimelineStatus.Idle;
 
         public SimulationRuntimeSession(
             PlaybackModel playback,
@@ -33,7 +43,8 @@ namespace UnderwaterGliderTwin.Telemetry
             ISimulationFutureGenerator generator,
             int frameSliceBudget = 128,
             TimeSpan? timeout = null,
-            Func<DateTime> utcNow = null)
+            Func<DateTime> utcNow = null,
+            SimulationTrajectoryTimeline timeline = null)
         {
             this.playback = playback ?? throw new ArgumentNullException(nameof(playback));
             this.generator = generator ?? throw new ArgumentNullException(nameof(generator));
@@ -41,16 +52,18 @@ namespace UnderwaterGliderTwin.Telemetry
             this.frameSliceBudget = Math.Max(1, frameSliceBudget);
             this.timeout = timeout ?? TimeSpan.FromSeconds(30);
             this.utcNow = utcNow ?? (() => DateTime.UtcNow);
+            this.timeline = timeline ?? CreateInitialTimeline(playback, this.activeProfile);
+            if (playback.IsTimelineBound)
+            {
+                if (!ReferenceEquals(playback.Frames, this.timeline.CommittedSnapshot.Frames))
+                {
+                    throw new ArgumentException("Playback is bound to a different timeline.", nameof(timeline));
+                }
+            }
         }
 
         public bool RequestProfileUpdate(SimulationProfile candidate)
         {
-            if (IsRebuildPending)
-            {
-                SetError("A simulation rebuild is already pending.");
-                return false;
-            }
-
             if (!TryValidateProfile(candidate, out var profileError))
             {
                 SetError(profileError);
@@ -59,14 +72,20 @@ namespace UnderwaterGliderTwin.Telemetry
 
             var candidateSnapshot = candidate.Clone();
             var version = ++requestVersion;
+            var requestId = ++requestIdCounter;
             LastError = null;
             IsRebuildPending = true;
+            Status = SimulationTimelineStatus.Queued;
+            queuedProfile = candidateSnapshot;
+            pendingIsRefill = false;
+            pendingRequestId = requestId;
             pendingDeadline = utcNow().Add(CalculatePendingTimeout(candidateSnapshot));
             StatusChanged?.Invoke();
 
             try
             {
-                StartGeneration(version, candidateSnapshot);
+                pendingOperation?.Cancel();
+                StartGeneration(version, candidateSnapshot, requestId, false);
                 return true;
             }
             catch (Exception ex)
@@ -84,7 +103,8 @@ namespace UnderwaterGliderTwin.Telemetry
             }
 
             pendingOperation?.Cancel();
-            FailRequest(requestVersion, "Simulation rebuild was cancelled.");
+            requestVersion++;
+                FailRequest(requestVersion, "Simulation rebuild was cancelled.", SimulationTimelineStatus.Cancelled);
         }
 
         public void Tick()
@@ -92,16 +112,26 @@ namespace UnderwaterGliderTwin.Telemetry
             if (IsRebuildPending && utcNow() >= pendingDeadline)
             {
                 pendingOperation?.Cancel();
-                FailRequest(requestVersion, "Simulation rebuild timed out.");
+                requestVersion++;
+                FailRequest(requestVersion, "Simulation rebuild timed out.", SimulationTimelineStatus.Failed);
+            }
+            else if (!IsRebuildPending)
+            {
+                TryEnsureFutureHorizon();
             }
         }
 
         private void CompleteRequest(
             int version,
             SimulationProfile candidate,
+            long requestId,
+            long operationToken,
+            bool isRefill,
             SimulationRebuildResult result)
         {
-            if (!IsRebuildPending || version != requestVersion)
+            if (!IsRebuildPending
+                || version != requestVersion
+                || operationToken != generationToken)
             {
                 return;
             }
@@ -115,17 +145,22 @@ namespace UnderwaterGliderTwin.Telemetry
                         ? result != null && result.WasCancelled
                             ? "Simulation rebuild was cancelled."
                             : "Simulation rebuild failed."
-                        : error);
+                        : error,
+                    result != null && result.WasCancelled
+                        ? SimulationTimelineStatus.Cancelled
+                        : SimulationTimelineStatus.Failed);
                 return;
             }
 
             try
             {
-                if (playback.CurrentFrame.RowIndex != pendingSeedRowIndex
+                if (!isRefill
+                    && (playback.CurrentFrame.RowIndex != pendingSeedRowIndex
                     || Math.Abs(playback.CurrentFrame.ElapsedSeconds - pendingSeedElapsedSeconds) > 0.0001f)
+                )
                 {
                     pendingOperation = null;
-                    StartGeneration(++requestVersion, candidate);
+                    StartGeneration(version, candidate, requestId, isRefill);
                     return;
                 }
 
@@ -136,18 +171,54 @@ namespace UnderwaterGliderTwin.Telemetry
                     return;
                 }
 
-                var stagedFrames = BuildStagingFrames(result.Frames, preservedIndex);
+                if (isRefill)
+                {
+                    var refillFrames = StampProfileSequence(result.Frames, CurrentProfileSequence());
+                    if (!TryValidateAppend(refillFrames, out var appendError))
+                    {
+                        FailRequest(version, appendError);
+                        return;
+                    }
+
+                    timeline.AppendFuture(refillFrames);
+                    pendingOperation = null;
+                    IsRebuildPending = false;
+                    queuedProfile = null;
+                    LastError = null;
+                    Status = IsMissionComplete() ? SimulationTimelineStatus.Completed : SimulationTimelineStatus.Committed;
+                    timeline.SetStatus(Status);
+                    StatusChanged?.Invoke();
+                    return;
+                }
+
+                var nextProfileSequence = CurrentProfileSequence() + 1;
+                var stampedFuture = StampProfileSequence(result.Frames, nextProfileSequence);
+                var stagedFrames = BuildStagingFrames(stampedFuture, preservedIndex);
                 if (!TryValidateStaging(stagedFrames, preservedIndex, candidate, out var validationError))
                 {
                     FailRequest(version, validationError);
                     return;
                 }
 
-                playback.ReplaceFrames(stagedFrames, preservedIndex);
+                var segment = new SimulationTimelineSegment(
+                    nextProfileSequence,
+                    requestId,
+                    stampedFuture[0].RowIndex,
+                    stampedFuture[0].ElapsedSeconds,
+                    candidate,
+                    utcNow());
+                timeline.ReplaceFutureFrom(preservedIndex, stampedFuture, segment);
+                if (!playback.IsTimelineBound)
+                {
+                    playback.BindTimeline(timeline, notify: true);
+                }
                 activeProfile = candidate.Clone();
                 pendingOperation = null;
                 IsRebuildPending = false;
+                queuedProfile = null;
                 LastError = null;
+                Status = IsMissionComplete() ? SimulationTimelineStatus.Completed : SimulationTimelineStatus.Committed;
+                timeline.SetStatus(Status);
                 StatusChanged?.Invoke();
             }
             catch (Exception ex)
@@ -156,17 +227,26 @@ namespace UnderwaterGliderTwin.Telemetry
             }
         }
 
-        private void StartGeneration(int version, SimulationProfile candidate)
+        private void StartGeneration(int version, SimulationProfile candidate, long requestId, bool isRefill)
         {
-            var seedFrame = playback.CurrentFrame;
+            var seedFrame = isRefill
+                ? timeline.CommittedSnapshot.Frames[timeline.CommittedSnapshot.Frames.Count - 1]
+                : playback.CurrentFrame;
             pendingSeedRowIndex = seedFrame.RowIndex;
             pendingSeedElapsedSeconds = seedFrame.ElapsedSeconds;
-            var seed = SimulationStateSnapshot.FromFrame(seedFrame, activeProfile);
+            var seed = SimulationStateSnapshot.FromFrame(seedFrame, isRefill ? activeProfile : activeProfile);
+            var token = ++generationToken;
+            pendingIsRefill = isRefill;
+            pendingRequestId = requestId;
+            Status = SimulationTimelineStatus.Generating;
+            StatusChanged?.Invoke();
+            var maximumFrameCount = Math.Max(0, MaximumTimelineFrameCount - timeline.CommittedSnapshot.Frames.Count);
             var operation = generator.GenerateFuture(
                 seed,
                 candidate,
                 frameSliceBudget,
-                result => CompleteRequest(version, candidate, result));
+                maximumFrameCount,
+                result => CompleteRequest(version, candidate, requestId, token, isRefill, result));
             if (IsRebuildPending && version == requestVersion)
             {
                 pendingOperation = operation;
@@ -175,6 +255,34 @@ namespace UnderwaterGliderTwin.Telemetry
             {
                 operation?.Cancel();
             }
+        }
+
+        public bool TryEnsureFutureHorizon()
+        {
+            if (IsRebuildPending
+                || Status == SimulationTimelineStatus.Completed
+                || timeline.CommittedSnapshot.Frames.Count >= MaximumTimelineFrameCount
+                || IsMissionComplete())
+            {
+                return false;
+            }
+
+            var remainingFrames = timeline.CommittedSnapshot.Frames.Count - playback.CurrentIndex - 1;
+            var remainingSeconds = timeline.CommittedSnapshot.Frames[timeline.CommittedSnapshot.Frames.Count - 1].ElapsedSeconds
+                - playback.CurrentElapsedSeconds;
+            if (remainingSeconds >= 120f && remainingFrames >= 128)
+            {
+                return false;
+            }
+
+            var version = ++requestVersion;
+            var requestId = 0L;
+            IsRebuildPending = true;
+            queuedProfile = null;
+            LastError = null;
+            pendingDeadline = utcNow().Add(CalculatePendingTimeout(activeProfile));
+            StartGeneration(version, activeProfile.Clone(), requestId, true);
+            return true;
         }
 
         private TimeSpan CalculatePendingTimeout(SimulationProfile candidate)
@@ -289,7 +397,7 @@ namespace UnderwaterGliderTwin.Telemetry
             return true;
         }
 
-        private static bool TryValidateProfile(SimulationProfile profile, out string error)
+        private bool TryValidateProfile(SimulationProfile profile, out string error)
         {
             if (profile == null)
             {
@@ -346,11 +454,42 @@ namespace UnderwaterGliderTwin.Telemetry
                 return false;
             }
 
+            if (profile.CycleCount < 1)
+            {
+                error = "CycleCount must be positive.";
+                return false;
+            }
+
+            var estimatedFrames = (double)profile.CycleCount
+                * profile.CycleDurationSeconds
+                / profile.SampleIntervalSeconds;
+            if (estimatedFrames > MaximumTimelineFrameCount)
+            {
+                error = $"Projected timeline frame count {estimatedFrames:0} exceeds {MaximumTimelineFrameCount}.";
+                return false;
+            }
+
+            if (profile.CycleCount < activeProfile.CycleCount)
+            {
+                error = "CycleCount cannot be reduced while a simulation is running.";
+                return false;
+            }
+
+            if (Math.Abs(profile.OriginLongitudeDeg - activeProfile.OriginLongitudeDeg) > 0.0000001d
+                || Math.Abs(profile.OriginLatitudeDeg - activeProfile.OriginLatitudeDeg) > 0.0000001d)
+            {
+                error = "Simulation origin cannot change while a simulation is running.";
+                return false;
+            }
+
             error = null;
             return true;
         }
 
-        private void FailRequest(int version, string error)
+        private void FailRequest(
+            int version,
+            string error,
+            SimulationTimelineStatus status = SimulationTimelineStatus.Failed)
         {
             if (!IsRebuildPending || version != requestVersion)
             {
@@ -359,8 +498,93 @@ namespace UnderwaterGliderTwin.Telemetry
 
             pendingOperation = null;
             IsRebuildPending = false;
+            queuedProfile = null;
             LastError = error;
+            Status = status;
+            timeline.SetStatus(status);
             StatusChanged?.Invoke();
+        }
+
+        private static SimulationTrajectoryTimeline CreateInitialTimeline(
+            PlaybackModel playback,
+            SimulationProfile profile)
+        {
+            if (playback.Frames.Count == 0)
+            {
+                throw new ArgumentException("Playback requires at least one frame.", nameof(playback));
+            }
+
+            var first = playback.Frames[0];
+            return new SimulationTrajectoryTimeline(
+                playback.Frames,
+                new SimulationTimelineSegment(
+                    0,
+                    0,
+                    first.RowIndex,
+                    first.ElapsedSeconds,
+                    profile,
+                    DateTime.UtcNow));
+        }
+
+        private int CurrentProfileSequence()
+        {
+            var frames = timeline.CommittedSnapshot.Frames;
+            return frames.Count == 0 ? 0 : frames[frames.Count - 1].ProfileSequence;
+        }
+
+        private bool IsMissionComplete()
+        {
+            var frame = timeline.CommittedSnapshot.Frames[timeline.CommittedSnapshot.Frames.Count - 1];
+            if (!frame.MissionState.HasValue)
+            {
+                return false;
+            }
+
+            var mission = frame.MissionState.Value;
+            return mission.CompletedCycles >= activeProfile.CycleCount
+                || mission.Phase == SimulationMissionPhase.LegTimeout;
+        }
+
+        private static IReadOnlyList<TelemetryFrame> StampProfileSequence(
+            IReadOnlyList<TelemetryFrame> frames,
+            int profileSequence)
+        {
+            var stamped = new List<TelemetryFrame>(frames.Count);
+            for (var i = 0; i < frames.Count; i++)
+            {
+                stamped.Add(frames[i].WithProfileSequence(profileSequence));
+            }
+
+            return stamped;
+        }
+
+        private bool TryValidateAppend(
+            IReadOnlyList<TelemetryFrame> future,
+            out string error)
+        {
+            var previous = timeline.CommittedSnapshot.Frames[timeline.CommittedSnapshot.Frames.Count - 1];
+            if (future == null || future.Count == 0)
+            {
+                error = "Generated append future is empty.";
+                return false;
+            }
+
+            for (var i = 0; i < future.Count; i++)
+            {
+                if (!IsFrameFinite(future[i])
+                    || future[i].RowIndex <= previous.RowIndex
+                    || future[i].ElapsedSeconds <= previous.ElapsedSeconds
+                    || future[i].ProfileSequence != previous.ProfileSequence)
+                {
+                    error = $"Generated append frame {i} is not a valid continuation.";
+                    return false;
+                }
+
+                previous = future[i];
+            }
+
+            error = null;
+            return true;
         }
 
         private void SetError(string error)
@@ -410,12 +634,26 @@ namespace UnderwaterGliderTwin.Telemetry
                 return false;
             }
 
+            if (frame.MissionState.HasValue)
+            {
+                var mission = frame.MissionState.Value;
+                if ((int)mission.Phase < (int)SimulationMissionPhase.Surface
+                    || (int)mission.Phase > (int)SimulationMissionPhase.LegTimeout
+                    || mission.CompletedCycles < 0
+                    || !IsFinite(mission.LegElapsedSeconds)
+                    || !IsFinite(mission.TurnaroundElapsedSeconds))
+                {
+                    return false;
+                }
+            }
+
             if (!frame.Diagnostics.HasValue)
             {
                 return true;
             }
 
             var diagnostics = frame.Diagnostics.Value;
+
             return IsFinite(diagnostics.WaterVelocityEndMps)
                 && IsFinite(diagnostics.CurrentVelocityEndMps)
                 && IsFinite(diagnostics.NetBuoyancyForceN)

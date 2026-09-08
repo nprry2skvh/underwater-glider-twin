@@ -16,11 +16,20 @@ namespace UnderwaterGliderTwin.Tests
     {
         private SimulationRuntimeSession session;
 
+        [SetUp]
+        public void SetUp()
+        {
+            RuntimePredictionState.SetModelKind(PredictionModelKind.XGBoost);
+            RuntimePredictionState.SetEnabled(true);
+        }
+
         [TearDown]
         public void TearDown()
         {
             session?.CancelPendingRebuild();
             SimulationRuntimeRegistry.SetActive(null);
+            RuntimePredictionState.SetModelKind(PredictionModelKind.XGBoost);
+            RuntimePredictionState.SetEnabled(true);
         }
 
         [Test]
@@ -161,6 +170,126 @@ namespace UnderwaterGliderTwin.Tests
                 Assert.That(future.TargetDepthM, Is.GreaterThan(0f), "The 85-second continuation must not reset to the surface phase.");
                 Assert.That(future.TargetHeadingDeg, Is.GreaterThan(seed.TargetHeadingDeg));
                 Assert.That(future.TargetSegment, Is.EqualTo(1f));
+            }
+        }
+
+        [Test]
+        public void SeededFutureGeneration_ContinuesTheEventDrivenTurnaroundFromTheFullTrajectory()
+        {
+            var profile = SimulationProfile.Default;
+            profile.CycleCount = 1;
+            profile.CycleDurationSeconds = 120f;
+            profile.SampleIntervalSeconds = 1f;
+            profile.TargetDepthM = 20f;
+            profile.WaterColumnDepthM = 30f;
+            profile.HorizontalSpeedMps = 0f;
+            profile.Dynamics.CruiseSpeedMps = 0f;
+            profile.Dynamics.TurnaroundDurationSeconds = 10f;
+            profile.DescentNetBuoyancyForceN = -12f;
+            profile.AscentNetBuoyancyForceN = 12f;
+
+            var complete = SimulationTrajectoryGenerator.GenerateFrames(profile);
+            var turnaroundIndex = -1;
+            for (var index = 0; index < complete.Count - 1; index++)
+            {
+                if (complete[index].RunState == "Turnaround")
+                {
+                    turnaroundIndex = index;
+                    break;
+                }
+            }
+
+            Assert.That(turnaroundIndex, Is.GreaterThanOrEqualTo(0), "The full trajectory must enter BottomTurn.");
+            var snapshot = SimulationStateSnapshot.FromFrame(complete[turnaroundIndex], profile);
+
+            using (var slices = SimulationTrajectoryGenerator.GenerateFutureSlices(snapshot, profile, 1).GetEnumerator())
+            {
+                Assert.That(slices.MoveNext(), Is.True);
+                var future = slices.Current[0];
+                var expected = complete[turnaroundIndex + 1];
+
+                Assert.That(future.RunState, Is.EqualTo(expected.RunState));
+                Assert.That(future.TargetDepthM, Is.EqualTo(expected.TargetDepthM).Within(0.0001f));
+                Assert.That(future.DepthM, Is.EqualTo(expected.DepthM).Within(0.0001f));
+                Assert.That(future.PitchDeg, Is.EqualTo(expected.PitchDeg).Within(0.0001f));
+                Assert.That(future.RollDeg, Is.EqualTo(expected.RollDeg).Within(0.0001f));
+                Assert.That(future.BatteryPercent, Is.EqualTo(expected.BatteryPercent).Within(0.0001f));
+            }
+        }
+
+        [Test]
+        public void SnapshotFromFrame_RestoresScalarAngularRatesFromDiagnostics()
+        {
+            var profile = SimulationProfile.Default;
+            var diagnostics = new SimulationDiagnostics(
+                Vector3.forward,
+                Vector3.zero,
+                0f,
+                1f,
+                0f,
+                angularVelocityRadPerSecond: new Vector3(0.1f, 0.2f, 0.3f));
+            var frame = new TelemetryFrame(
+                0, "seed", 1f, profile.OriginLongitudeDeg, profile.OriginLatitudeDeg,
+                10f, 500f, 42f, 3f, 4f, 28f, 0.5f, 90f,
+                "Parameter Simulation", "Glide", 1f, 42f, 20f, 500f,
+                0f, 0f, 0f, diagnostics);
+
+            var snapshot = SimulationStateSnapshot.FromFrame(frame, profile);
+
+            Assert.That(snapshot.DynamicsState.RollRateDegPerSecond, Is.EqualTo(0.1f * Mathf.Rad2Deg).Within(0.0001f));
+            Assert.That(snapshot.DynamicsState.PitchRateDegPerSecond, Is.EqualTo(0.2f * Mathf.Rad2Deg).Within(0.0001f));
+            Assert.That(snapshot.DynamicsState.YawRateDegPerSecond, Is.EqualTo(0.3f * Mathf.Rad2Deg).Within(0.0001f));
+        }
+
+        [Test]
+        public void SeededFutureGeneration_MatchesTheNextFullFrameAcrossMissionPhases()
+        {
+            var profile = SimulationProfile.Default;
+            profile.CycleCount = 2;
+            profile.CycleDurationSeconds = 120f;
+            profile.SampleIntervalSeconds = 1f;
+            profile.TargetDepthM = 20f;
+            profile.WaterColumnDepthM = 30f;
+            profile.HorizontalSpeedMps = 0f;
+            profile.Dynamics.CruiseSpeedMps = 0f;
+            profile.Dynamics.TurnaroundDurationSeconds = 10f;
+            profile.DescentNetBuoyancyForceN = -12f;
+            profile.AscentNetBuoyancyForceN = 12f;
+
+            var complete = SimulationTrajectoryGenerator.GenerateFrames(profile);
+            var phases = new[]
+            {
+                SimulationMissionPhase.Descent,
+                SimulationMissionPhase.BottomTurn,
+                SimulationMissionPhase.Ascent
+            };
+            foreach (var phase in phases)
+            {
+                var phaseIndex = -1;
+                for (var index = 0; index < complete.Count - 1; index++)
+                {
+                    if (complete[index].MissionState.HasValue
+                        && complete[index].MissionState.Value.Phase == phase)
+                    {
+                        phaseIndex = index;
+                        break;
+                    }
+                }
+
+                Assert.That(phaseIndex, Is.GreaterThanOrEqualTo(0), "Missing phase " + phase);
+                var snapshot = SimulationStateSnapshot.FromFrame(complete[phaseIndex], profile);
+                using (var slices = SimulationTrajectoryGenerator.GenerateFutureSlices(snapshot, profile, 1).GetEnumerator())
+                {
+                    Assert.That(slices.MoveNext(), Is.True);
+                    var future = slices.Current[0];
+                    var expected = complete[phaseIndex + 1];
+                    Assert.That(future.RunState, Is.EqualTo(expected.RunState), phase.ToString());
+                    Assert.That(future.TargetDepthM, Is.EqualTo(expected.TargetDepthM).Within(0.0001f), phase.ToString());
+                    Assert.That(future.DepthM, Is.EqualTo(expected.DepthM).Within(0.0001f), phase.ToString());
+                    Assert.That(future.HeadingDeg, Is.EqualTo(expected.HeadingDeg).Within(0.0001f), phase.ToString());
+                    Assert.That(future.PitchDeg, Is.EqualTo(expected.PitchDeg).Within(0.0001f), phase.ToString());
+                    Assert.That(future.RollDeg, Is.EqualTo(expected.RollDeg).Within(0.0001f), phase.ToString());
+                }
             }
         }
 
@@ -453,11 +582,149 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(session.RequestProfileUpdate(longProfile), Is.True);
 
-            now = now.AddSeconds(31);
+            now = now.AddSeconds(57);
             session.Tick();
 
+            Assert.That(session.IsRebuildPending, Is.False);
+            Assert.That(session.LastError, Does.Contain("timed out"));
+        }
+
+        [Test]
+        public void MaximumWorkload_UsesTheFiveMinutePendingDeadlineCapAtFrameLimit()
+        {
+            var now = new DateTime(2026, 7, 31, 0, 0, 0, DateTimeKind.Utc);
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            var generator = new ManualFakeFutureGenerator();
+            session = new SimulationRuntimeSession(
+                model,
+                SimulationProfile.Default,
+                generator,
+                frameSliceBudget: 64,
+                utcNow: () => now);
+            var veryLongProfile = ChangedProfile();
+            veryLongProfile.CycleCount = 200;
+            veryLongProfile.CycleDurationSeconds = 1000f;
+            veryLongProfile.SampleIntervalSeconds = 1f;
+
+            Assert.That(session.RequestProfileUpdate(veryLongProfile), Is.True);
+            now = now.AddSeconds(299);
+            session.Tick();
             Assert.That(session.IsRebuildPending, Is.True);
-            Assert.That(session.LastError, Is.Null);
+
+            now = now.AddSeconds(2);
+            session.Tick();
+            Assert.That(session.IsRebuildPending, Is.False);
+            Assert.That(session.LastError, Does.Contain("timed out"));
+        }
+
+        [Test]
+        public void LateCompletionFromAnOlderRequest_CannotCommitAfterASecondRequestStarts()
+        {
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            var originalFrames = model.Frames;
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+
+            Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
+            session.CancelPendingRebuild();
+            Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
+
+            generator.CompleteAt(0, new[]
+            {
+                FutureFrame(generator.Seeds[0].Frame, 1, generator.Seeds[0].Frame.ElapsedSeconds + 1f)
+            });
+
+            Assert.That(session.IsRebuildPending, Is.True);
+            Assert.That(model.Frames, Is.SameAs(originalFrames));
+
+            generator.CompleteAt(1, new[]
+            {
+                FutureFrame(generator.Seeds[1].Frame, 1, generator.Seeds[1].Frame.ElapsedSeconds + 1f)
+            });
+
+            Assert.That(session.IsRebuildPending, Is.False);
+            Assert.That(model.Frames, Is.Not.SameAs(originalFrames));
+        }
+
+        [Test]
+        public void ValidRequestBeforeFirstCommitKeepsOnlyLatestProfileAndSequence()
+        {
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+            var first = ChangedProfile();
+            first.TargetDepthM = 100f;
+            var latest = ChangedProfile();
+            latest.TargetDepthM = 140f;
+
+            Assert.That(session.RequestProfileUpdate(first), Is.True);
+            Assert.That(session.RequestProfileUpdate(latest), Is.True);
+            generator.CompleteAt(0, new[] { FutureFrame(generator.Seeds[0].Frame, 1, 1f) });
+
+            Assert.That(session.Timeline.CommittedSnapshot.Segments.Count, Is.EqualTo(1));
+            Assert.That(session.ActiveProfile.TargetDepthM, Is.EqualTo(SimulationProfile.Default.TargetDepthM));
+
+            generator.CompleteAt(1, new[] { FutureFrame(generator.Seeds[1].Frame, 1, 1f) });
+
+            Assert.That(session.Timeline.CommittedSnapshot.Segments.Count, Is.EqualTo(2));
+            Assert.That(session.Timeline.CommittedSnapshot.Segments[1].ProfileSequence, Is.EqualTo(1));
+            Assert.That(session.ActiveProfile.TargetDepthM, Is.EqualTo(latest.TargetDepthM));
+        }
+
+        [Test]
+        public void InvalidRequestDoesNotReplaceValidQueuedProfile()
+        {
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+            var valid = ChangedProfile();
+            valid.TargetDepthM = 140f;
+            var invalid = ChangedProfile();
+            invalid.TargetDepthM = -1f;
+
+            Assert.That(session.RequestProfileUpdate(valid), Is.True);
+            Assert.That(session.RequestProfileUpdate(invalid), Is.False);
+            Assert.That(session.QueuedProfile.TargetDepthM, Is.EqualTo(valid.TargetDepthM));
+        }
+
+        [Test]
+        public void AutomaticRefillAppendsFramesWithoutCreatingProfileSegment()
+        {
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+            var initialCount = session.Timeline.CommittedSnapshot.Frames.Count;
+
+            Assert.That(session.TryEnsureFutureHorizon(), Is.True);
+            generator.CompleteAt(0, new[]
+            {
+                FutureFrame(generator.Seeds[0].Frame, 1, generator.Seeds[0].Frame.ElapsedSeconds + 1f)
+            });
+
+            Assert.That(session.Timeline.CommittedSnapshot.Segments.Count, Is.EqualTo(1));
+            Assert.That(session.Timeline.CommittedSnapshot.Frames.Count, Is.EqualTo(initialCount + 1));
+            Assert.That(session.Timeline.CommittedSnapshot.Frames[initialCount].ProfileSequence, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void StatusChanged_ReportsPendingThenSuccessAndFailureTransitions()
+        {
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+            var statuses = new List<string>();
+            session.StatusChanged += () => statuses.Add(session.Status.ToString());
+
+            Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
+            generator.CompleteWithDeterministicFuture();
+            Assert.That(statuses, Is.EqualTo(new[] { "Queued", "Generating", "Committed" }));
+
+            Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
+            generator.Fail("expected failure");
+            Assert.That(statuses, Is.EqualTo(new[]
+            {
+                "Queued", "Generating", "Committed", "Queued", "Generating", "Failed"
+            }));
         }
 
         [Test]
@@ -580,20 +847,36 @@ namespace UnderwaterGliderTwin.Tests
             model.SetSpeed(1f);
             model.SetDirection(-1);
             model.SetPlaying(true);
-            var camera = new GameObject("CameraReference");
+            var cameraObject = new GameObject("CameraReference");
+            var camera = cameraObject.AddComponent<Camera>();
+            camera.transform.SetPositionAndRotation(new Vector3(1f, 2f, 3f), Quaternion.Euler(4f, 5f, 6f));
+            camera.fieldOfView = 58f;
+            var cameraId = camera.GetInstanceID();
+            var cameraPosition = camera.transform.position;
+            var cameraRotation = camera.transform.rotation;
+            var cameraFov = camera.fieldOfView;
             var activeScene = SceneManager.GetActiveScene();
             var generator = new ManualFakeFutureGenerator();
             session = CreateSessionForTest(model, generator);
 
-            Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
-            generator.CompleteWithDeterministicFuture();
-            Assert.That(model.Tick(1f), Is.True);
+            try
+            {
+                Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
+                generator.CompleteWithDeterministicFuture();
+                Assert.That(model.Tick(1f), Is.True);
 
-            Assert.That(model.CurrentIndex, Is.EqualTo(3));
-            Assert.That(model.IsPlaying, Is.True);
-            Assert.That(camera, Is.Not.Null);
-            Assert.That(SceneManager.GetActiveScene().handle, Is.EqualTo(activeScene.handle));
-            UnityEngine.Object.DestroyImmediate(camera);
+                Assert.That(model.CurrentIndex, Is.EqualTo(3));
+                Assert.That(model.IsPlaying, Is.True);
+                Assert.That(camera.GetInstanceID(), Is.EqualTo(cameraId));
+                Assert.That(camera.transform.position, Is.EqualTo(cameraPosition));
+                Assert.That(camera.transform.rotation, Is.EqualTo(cameraRotation));
+                Assert.That(camera.fieldOfView, Is.EqualTo(cameraFov));
+                Assert.That(SceneManager.GetActiveScene().handle, Is.EqualTo(activeScene.handle));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(cameraObject);
+            }
         }
 
         private SimulationRuntimeSession CreateSessionForTest(
@@ -607,7 +890,7 @@ namespace UnderwaterGliderTwin.Tests
         {
             var profile = SimulationProfile.Default;
             profile.TargetDepthM = 180f;
-            profile.CycleCount = 4;
+            profile.CycleCount = SimulationProfile.Default.CycleCount;
             return profile;
         }
 
@@ -846,6 +1129,9 @@ namespace UnderwaterGliderTwin.Tests
             private Action<SimulationRebuildResult> completion;
             private SimulationStateSnapshot seed;
 
+            public readonly List<Action<SimulationRebuildResult>> Completions = new List<Action<SimulationRebuildResult>>();
+            public readonly List<SimulationStateSnapshot> Seeds = new List<SimulationStateSnapshot>();
+
             public int StartCount { get; private set; }
             public int FrameSliceBudget { get; private set; }
 
@@ -853,12 +1139,15 @@ namespace UnderwaterGliderTwin.Tests
                 SimulationStateSnapshot snapshot,
                 SimulationProfile profile,
                 int frameSliceBudget,
+                int maximumFrameCount,
                 Action<SimulationRebuildResult> onCompleted)
             {
                 StartCount++;
                 seed = snapshot;
+                Seeds.Add(snapshot);
                 FrameSliceBudget = frameSliceBudget;
                 completion = onCompleted;
+                Completions.Add(onCompleted);
                 return new ManualOperation();
             }
 
@@ -879,6 +1168,11 @@ namespace UnderwaterGliderTwin.Tests
             public void Fail(string error)
             {
                 completion?.Invoke(SimulationRebuildResult.Failure(error));
+            }
+
+            public void CompleteAt(int index, IReadOnlyList<TelemetryFrame> future)
+            {
+                Completions[index]?.Invoke(SimulationRebuildResult.Success(future));
             }
         }
 
