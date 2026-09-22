@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 using UnderwaterGliderTwin.Telemetry;
 
 namespace UnderwaterGliderTwin.Playback
@@ -9,6 +10,7 @@ namespace UnderwaterGliderTwin.Playback
         private IReadOnlyList<TelemetryFrame> frames;
         private readonly float rowsPerSecond;
         private float continuousIndex;
+        private float continuousElapsedSeconds;
         private SimulationTrajectoryTimeline timeline;
         private bool resumeAfterFuture;
 
@@ -24,7 +26,9 @@ namespace UnderwaterGliderTwin.Playback
         public int FrameCount => frames.Count;
         public IReadOnlyList<TelemetryFrame> Frames => frames;
         public float RowsPerSecond => rowsPerSecond;
-        public float Progress01 => frames.Count <= 1 ? 0f : CurrentIndex / (float)(frames.Count - 1);
+        public float Progress01 => TotalElapsedSeconds <= 0.0001f
+            ? 0f
+            : Mathf.Clamp01((ContinuousElapsedSeconds - StartElapsedSeconds) / TotalElapsedSeconds);
         public TelemetryFrame CurrentFrame => frames[CurrentIndex];
         public float StartElapsedSeconds => frames[0].ElapsedSeconds;
         public float EndElapsedSeconds => frames[frames.Count - 1].ElapsedSeconds;
@@ -33,6 +37,7 @@ namespace UnderwaterGliderTwin.Playback
         public bool IsWaitingForFuture { get; private set; }
         public bool IsTimelineBound => timeline != null;
         public SimulationTrajectoryTimeline Timeline => timeline;
+        public float ContinuousElapsedSeconds => continuousElapsedSeconds;
 
         public PlaybackModel(IReadOnlyList<TelemetryFrame> frames, float rowsPerSecond)
         {
@@ -43,6 +48,7 @@ namespace UnderwaterGliderTwin.Playback
             }
 
             this.rowsPerSecond = rowsPerSecond;
+            continuousElapsedSeconds = frames[0].ElapsedSeconds;
         }
 
         public void SetPlaying(bool isPlaying)
@@ -76,8 +82,23 @@ namespace UnderwaterGliderTwin.Playback
                 return false;
             }
 
-            continuousIndex += rowsPerSecond * Speed * deltaSeconds * Direction;
-            continuousIndex = Math.Max(0f, Math.Min(frames.Count - 1, continuousIndex));
+            var previousContinuousIndex = ContinuousIndex;
+            var previousContinuousElapsed = ContinuousElapsedSeconds;
+            if (timeline != null)
+            {
+                var firstDelta = frames.Count > 1
+                    ? Mathf.Max(0.0001f, frames[1].ElapsedSeconds - frames[0].ElapsedSeconds)
+                    : 1f;
+                continuousElapsedSeconds += rowsPerSecond * firstDelta * Speed * deltaSeconds * Direction;
+                continuousElapsedSeconds = Mathf.Clamp(continuousElapsedSeconds, StartElapsedSeconds, EndElapsedSeconds);
+                continuousIndex = FindContinuousIndex(continuousElapsedSeconds);
+            }
+            else
+            {
+                continuousIndex += rowsPerSecond * Speed * deltaSeconds * Direction;
+                continuousIndex = Math.Max(0f, Math.Min(frames.Count - 1, continuousIndex));
+                continuousElapsedSeconds = InterpolateElapsedSeconds(continuousIndex);
+            }
             var nextIndex = Direction >= 0
                 ? Math.Min(frames.Count - 1, (int)Math.Floor(continuousIndex))
                 : Math.Max(0, (int)Math.Ceiling(continuousIndex));
@@ -100,7 +121,9 @@ namespace UnderwaterGliderTwin.Playback
                 }
             }
 
-            return changed;
+            return !Mathf.Approximately(previousContinuousIndex, ContinuousIndex)
+                || !Mathf.Approximately(previousContinuousElapsed, ContinuousElapsedSeconds)
+                || changed;
         }
 
         public void SeekNormalized(float progress01)
@@ -108,6 +131,7 @@ namespace UnderwaterGliderTwin.Playback
             var clamped = Math.Max(0f, Math.Min(1f, progress01));
             CurrentIndex = (int)Math.Round(clamped * (frames.Count - 1));
             continuousIndex = CurrentIndex;
+            continuousElapsedSeconds = InterpolateElapsedSeconds(continuousIndex);
         }
 
         public TelemetryFrame GetFrame(int index)
@@ -198,7 +222,51 @@ namespace UnderwaterGliderTwin.Playback
             frames = replacement;
             CurrentIndex = preservedIndex;
             continuousIndex = Math.Max(preservedIndex, Math.Min(replacement.Count - 1, continuousIndex));
+            continuousElapsedSeconds = InterpolateElapsedSeconds(continuousIndex);
             NotifyFramesReplaced();
+        }
+
+        private float InterpolateElapsedSeconds(float index)
+        {
+            if (frames.Count == 0)
+            {
+                return 0f;
+            }
+
+            if (frames.Count == 1)
+            {
+                return frames[0].ElapsedSeconds;
+            }
+
+            var clamped = Mathf.Clamp(index, 0f, frames.Count - 1f);
+            var lower = Mathf.Clamp(Mathf.FloorToInt(clamped), 0, frames.Count - 1);
+            var upper = Mathf.Clamp(lower + 1, 0, frames.Count - 1);
+            if (lower == upper)
+            {
+                return frames[lower].ElapsedSeconds;
+            }
+
+            return Mathf.Lerp(frames[lower].ElapsedSeconds, frames[upper].ElapsedSeconds, clamped - lower);
+        }
+
+        private float FindContinuousIndex(float elapsedSeconds)
+        {
+            if (frames.Count <= 1) return 0f;
+            if (elapsedSeconds <= frames[0].ElapsedSeconds) return 0f;
+            if (elapsedSeconds >= frames[frames.Count - 1].ElapsedSeconds) return frames.Count - 1f;
+
+            var low = 0;
+            var high = frames.Count - 1;
+            while (low + 1 < high)
+            {
+                var middle = (low + high) / 2;
+                if (frames[middle].ElapsedSeconds <= elapsedSeconds) low = middle;
+                else high = middle;
+            }
+
+            var delta = frames[high].ElapsedSeconds - frames[low].ElapsedSeconds;
+            var amount = delta <= 0.0001f ? 0f : (elapsedSeconds - frames[low].ElapsedSeconds) / delta;
+            return low + Mathf.Clamp01(amount);
         }
 
         private void NotifyFramesReplaced()
@@ -233,8 +301,11 @@ namespace UnderwaterGliderTwin.Playback
         private void ApplySnapshot(SimulationTimelineSnapshot snapshot)
         {
             frames = snapshot.Frames;
-            CurrentIndex = Math.Max(0, Math.Min(CurrentIndex, frames.Count - 1));
-            continuousIndex = Math.Max(CurrentIndex, Math.Min(frames.Count - 1, continuousIndex));
+            continuousElapsedSeconds = Mathf.Clamp(continuousElapsedSeconds, StartElapsedSeconds, EndElapsedSeconds);
+            continuousIndex = FindContinuousIndex(continuousElapsedSeconds);
+            CurrentIndex = Direction >= 0
+                ? Mathf.Clamp(Mathf.FloorToInt(continuousIndex), 0, frames.Count - 1)
+                : Mathf.Clamp(Mathf.CeilToInt(continuousIndex), 0, frames.Count - 1);
 
             if (IsWaitingForFuture && CurrentIndex < frames.Count - 1)
             {

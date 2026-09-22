@@ -39,27 +39,35 @@ namespace UnderwaterGliderTwin.Telemetry
 
     public sealed class TrajectoryExportSnapshot
     {
-        public const int SchemaVersion = 1;
-        public const string AlgorithmVersion = "hybrid-glider-trajectory-v1";
+        public const int SchemaVersion = 2;
+        public const string AlgorithmVersion = "hybrid-glider-trajectory-v2";
 
         public SimulationTimelineSnapshot Timeline { get; }
         public TrajectoryPlaybackState Playback { get; }
         public PredictionSnapshot Prediction { get; }
         public CameraSnapshot Camera { get; }
         public DateTime CreatedAtUtc { get; }
+        public string ExportId { get; }
 
         public TrajectoryExportSnapshot(
             SimulationTimelineSnapshot timeline,
             TrajectoryPlaybackState playback,
             PredictionSnapshot prediction = null,
             CameraSnapshot camera = null,
-            DateTime? createdAtUtc = null)
+            DateTime? createdAtUtc = null,
+            string exportId = null)
         {
             Timeline = timeline ?? throw new ArgumentNullException(nameof(timeline));
             Playback = playback ?? throw new ArgumentNullException(nameof(playback));
             Prediction = prediction;
             Camera = camera;
             CreatedAtUtc = (createdAtUtc ?? DateTime.UtcNow).ToUniversalTime();
+            ExportId = exportId;
+        }
+
+        public TrajectoryExportSnapshot WithExportId(string exportId)
+        {
+            return new TrajectoryExportSnapshot(Timeline, Playback, Prediction, Camera, CreatedAtUtc, exportId);
         }
 
         public static TrajectoryExportSnapshot Capture(
@@ -69,11 +77,10 @@ namespace UnderwaterGliderTwin.Telemetry
             CameraSnapshot camera)
         {
             if (playback == null) throw new ArgumentNullException(nameof(playback));
-            var current = playback.CurrentFrame;
             var state = new TrajectoryPlaybackState(
                 playback.CurrentIndex,
                 playback.ContinuousIndex,
-                current.ElapsedSeconds,
+                playback.ContinuousElapsedSeconds,
                 playback.IsPlaying,
                 playback.Speed,
                 playback.Direction);

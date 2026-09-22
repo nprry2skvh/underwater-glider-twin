@@ -166,9 +166,11 @@ namespace UnderwaterGliderTwin.Telemetry
                     remainingSeconds,
                     Mathf.Clamp(dynamics.IntegrationStepSeconds, 0.01f, 1f));
                 currentEndMps = ResolveCurrentAtState(state, elapsedSeconds + stepSeconds);
+                var effectiveDynamics = dynamics.Clone();
+                effectiveDynamics.CruiseSpeedMps = Mathf.Max(0f, commands.TargetSpeedMps);
                 state = GliderDynamicsIntegrator.Step(
                     state,
-                    dynamics,
+                    effectiveDynamics,
                     currentEndMps,
                     commands.TargetDepthM,
                     commands.TargetHeadingDeg,
@@ -178,7 +180,7 @@ namespace UnderwaterGliderTwin.Telemetry
                     commands.CommandedNetBuoyancyForceN);
                 plannedState = GliderDynamicsIntegrator.Step(
                     plannedState,
-                    dynamics,
+                    effectiveDynamics,
                     Vector3.zero,
                     commands.TargetDepthM,
                     commands.TargetHeadingDeg,
@@ -279,6 +281,8 @@ namespace UnderwaterGliderTwin.Telemetry
             var ascentRollDeg = -turnDirection * profile.ResolveAscentRollDeg();
             var descentPitchDeg = profile.ResolveDescentPitchDeg();
             var ascentPitchDeg = -profile.ResolveAscentPitchDeg();
+            var descentSpeedMps = profile.ResolveDescentSpeedMps();
+            var ascentSpeedMps = profile.ResolveAscentSpeedMps();
             var commandedNetBuoyancyForceN = profile.HasDirectionalBuoyancyCommands()
                 ? Mathf.Lerp(
                     profile.ResolveDescentNetBuoyancyForceN(-dynamics.MaxBuoyancyForceN * 0.7f),
@@ -290,6 +294,7 @@ namespace UnderwaterGliderTwin.Telemetry
                 Phase = missionState.Phase,
                 TargetHeadingDeg = targetHeadingDeg,
                 TargetDepthM = targetDepthM,
+                TargetSpeedMps = Mathf.Lerp(descentSpeedMps, ascentSpeedMps, turnaroundBlend),
                 CommandedRollDeg = Mathf.Lerp(descentRollDeg, ascentRollDeg, turnaroundBlend),
                 CommandedPitchDeg = Mathf.Lerp(descentPitchDeg, ascentPitchDeg, turnaroundBlend),
                 CommandedNetBuoyancyForceN = commandedNetBuoyancyForceN
@@ -552,6 +557,7 @@ namespace UnderwaterGliderTwin.Telemetry
             public SimulationMissionPhase Phase;
             public float TargetHeadingDeg;
             public float TargetDepthM;
+            public float TargetSpeedMps;
             public float CommandedRollDeg;
             public float CommandedPitchDeg;
             public float CommandedNetBuoyancyForceN;

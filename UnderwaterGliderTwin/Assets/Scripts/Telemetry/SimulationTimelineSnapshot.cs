@@ -8,6 +8,7 @@ namespace UnderwaterGliderTwin.Telemetry
     {
         public IReadOnlyList<TelemetryFrame> Frames { get; }
         public IReadOnlyList<SimulationTimelineSegment> Segments { get; }
+        public IReadOnlyList<SimulationTimelineSegment> SupersededSegments { get; }
         public int Revision { get; }
         public SimulationTimelineStatus Status { get; }
         public SimulationMissionState? MissionState { get; }
@@ -19,7 +20,8 @@ namespace UnderwaterGliderTwin.Telemetry
             int revision,
             SimulationTimelineStatus status,
             SimulationMissionState? missionState = null,
-            TrajectoryPlaybackState playback = null)
+            TrajectoryPlaybackState playback = null,
+            IReadOnlyList<SimulationTimelineSegment> supersededSegments = null)
         {
             if (frames == null)
             {
@@ -34,6 +36,8 @@ namespace UnderwaterGliderTwin.Telemetry
             Frames = new ReadOnlyCollection<TelemetryFrame>(new List<TelemetryFrame>(frames));
             Segments = new ReadOnlyCollection<SimulationTimelineSegment>(
                 new List<SimulationTimelineSegment>(segments));
+            SupersededSegments = new ReadOnlyCollection<SimulationTimelineSegment>(
+                new List<SimulationTimelineSegment>(supersededSegments ?? Array.Empty<SimulationTimelineSegment>()));
             Revision = revision;
             Status = status;
             MissionState = missionState;

@@ -33,6 +33,7 @@ namespace UnderwaterGliderTwin.Bootstrap
         private TrajectoryExportService exportService;
 
         private TrajectoryView trajectoryView;
+        private MissionMapOverlay missionMapOverlay;
         private OceanVolumeView oceanVolume;
 
         private void Awake()
@@ -154,7 +155,7 @@ namespace UnderwaterGliderTwin.Bootstrap
                     RuntimeDataSourceState.SimulationProfile,
                     new SimulationFutureTrajectoryGenerator(this),
                     timeline: initialTimeline);
-                PlaybackController.Model.TimelineChanged += trajectoryView.ReplaceFutureTrajectory;
+                PlaybackController.Model.TimelineChanged += OnTimelineChanged;
                 SimulationSession.StatusChanged += OnSimulationSessionStatusChanged;
                 SimulationRuntimeRegistry.SetActive(SimulationSession);
             }
@@ -185,7 +186,8 @@ namespace UnderwaterGliderTwin.Bootstrap
                     missionHorizontalExtents,
                     missionDepthScale,
                     missionHorizontalCenter);
-                new GameObject("MissionMapOverlay").AddComponent<MissionMapOverlay>().Initialize(LoadResult.Frames, Mapper);
+                missionMapOverlay = new GameObject("MissionMapOverlay").AddComponent<MissionMapOverlay>();
+                missionMapOverlay.Initialize(LoadResult.Frames, Mapper);
             }
 
             var camera = Camera.main != null ? Camera.main : CreateMainCamera();
@@ -203,30 +205,7 @@ namespace UnderwaterGliderTwin.Bootstrap
                 runtimeUiRoot.gameObject.SetActive(false);
             }
 
-            var reusableGeneratedRoot = useGeneratedUi && runtimeUiRoot == null
-                ? FindObjectOfType<RuntimeUiRoot>(true)
-                : null;
-            var reuseExistingGeneratedUi = reusableGeneratedRoot != null && reusableGeneratedRoot.RuntimeCanvas != null;
-            var canvasRoot = reuseExistingGeneratedUi
-                ? reusableGeneratedRoot.gameObject
-                : useGeneratedUi || runtimeUiRoot == null ? new GameObject("RuntimeUI") : runtimeUiRoot.gameObject;
-            if (reuseExistingGeneratedUi)
-            {
-                RuntimeUiFallback.RememberLegacyCanvas(reusableGeneratedRoot.RuntimeCanvas);
-            }
-            if (useGeneratedUi && !reuseExistingGeneratedUi)
-            {
-                // A generated bootstrap may be started from a scene that already
-                // has the canonical editable canvas. Reuse it so the fallback
-                // path remains a single-Canvas/single-ModalRoot architecture.
-                var existingCanvas = FindCanonicalCanvas();
-                if (existingCanvas != null && existingCanvas.gameObject.activeInHierarchy)
-                {
-                    RuntimeUiFallback.RememberLegacyCanvas(existingCanvas);
-                }
-
-                canvasRoot.transform.SetParent(transform, false);
-            }
+            var canvasRoot = useGeneratedUi || runtimeUiRoot == null ? new GameObject("RuntimeUI") : runtimeUiRoot.gameObject;
             if (!useGeneratedUi && runtimeUiRoot != null)
             {
                 var refs = runtimeUiRoot.References;
@@ -256,10 +235,10 @@ namespace UnderwaterGliderTwin.Bootstrap
                         }
 
                         cameraController.SetMissionVolumeView(RuntimeDataSourceState.SimulationProfile.TargetDepthM, missionHorizontalExtents, missionDepthScale);
-                        trajectoryView.SetCameraMode(CameraMode.Global);
-                    });
+                         trajectoryView.SetCameraMode(CameraMode.Global);
+                     });
             }
-            else if (!reuseExistingGeneratedUi)
+            else
             {
                 var dataInput = canvasRoot.AddComponent<DataInputView>();
                 dataInput.Initialize(
@@ -290,15 +269,6 @@ namespace UnderwaterGliderTwin.Bootstrap
                 dataInput.BringConfigurationToFront();
             }
 
-            if (useGeneratedUi)
-            {
-                BindGeneratedResponsiveUi(canvasRoot, camera);
-            }
-            else if (runtimeUiRoot != null)
-            {
-                BindConfiguredResponsiveUi(runtimeUiRoot, camera);
-            }
-
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
             {
                 cameraController.SetMissionVolumeView(RuntimeDataSourceState.SimulationProfile.TargetDepthM, missionHorizontalExtents, missionDepthScale);
@@ -309,125 +279,6 @@ namespace UnderwaterGliderTwin.Bootstrap
             {
                 StartCoroutine(RunRuntimeSmoke(smokeOptions));
             }
-        }
-
-        private static void BindGeneratedResponsiveUi(GameObject canvasRoot, Camera sourceCamera)
-        {
-            if (canvasRoot == null)
-            {
-                return;
-            }
-
-            var canvas = UiFactory.EnsureCanvas(canvasRoot.transform);
-            if (canvas == null)
-            {
-                return;
-            }
-
-            UiFactory.EnsureCommandCenterHeader(canvas.transform);
-            HideGeneratedResponsiveScaffoldForLegacyLayout(canvas);
-            UiFactory.ApplyRuntimePalette(canvas.transform);
-            UiFactory.ApplyRuntimeLabels(canvas.transform);
-
-            var modalRoot = canvas.transform.Find("ModalRoot") as RectTransform;
-            var tooltipController = UiFactory.EnsureTooltipPopup(modalRoot);
-            var runtimeRoot = canvasRoot.GetComponent<RuntimeUiRoot>() ?? canvasRoot.AddComponent<RuntimeUiRoot>();
-            var references = new RuntimeUiReferences();
-            references.layout.tooltipPopup = tooltipController != null ? tooltipController.Popup : null;
-            references.layout.tooltipController = tooltipController;
-            runtimeRoot.ConfigureRuntimeReferences(canvas, modalRoot, references, RuntimeUiPanelFlags.None);
-            if (canvasRoot.name == "RuntimeUI")
-            {
-                RuntimeUiFallback.RememberGeneratedRuntimeRoot(canvasRoot);
-            }
-        }
-
-        private static void HideGeneratedResponsiveScaffoldForLegacyLayout(Canvas canvas)
-        {
-            if (canvas == null)
-            {
-                return;
-            }
-
-            var uiRoot = canvas.transform.Find("UiRoot") as RectTransform;
-            if (uiRoot == null)
-            {
-                return;
-            }
-
-            var viewportSurfaceHost = uiRoot.Find("MainBody/ViewportColumn/ViewportSurfaceHost");
-            if (viewportSurfaceHost != null)
-            {
-                viewportSurfaceHost.gameObject.SetActive(false);
-            }
-
-            var drawerEntryLayer = uiRoot.Find("DrawerEntryLayer");
-            if (drawerEntryLayer != null)
-            {
-                drawerEntryLayer.gameObject.SetActive(false);
-            }
-        }
-
-        private static void BindConfiguredResponsiveUi(RuntimeUiRoot root, Camera sourceCamera)
-        {
-            if (root == null || root.RuntimeCanvas == null)
-            {
-                return;
-            }
-
-            var uiRoot = root.RuntimeCanvas.transform.Find("UiRoot") as RectTransform;
-            if (uiRoot == null)
-            {
-                return;
-            }
-
-            UiFactory.ApplyResponsivePanelRoots(root.RuntimeCanvas);
-            UiFactory.ApplyRuntimePalette(root.RuntimeCanvas.transform);
-            UiFactory.ApplyRuntimeLabels(root.RuntimeCanvas.transform);
-            BindViewportSurface(uiRoot, sourceCamera, root.References != null ? root.References.layout : null);
-            var tooltipController = UiFactory.EnsureTooltipPopup(root.ModalRoot);
-            if (root.References != null && root.References.layout != null)
-            {
-                root.References.layout.tooltipPopup = tooltipController != null ? tooltipController.Popup : null;
-                root.References.layout.tooltipController = tooltipController;
-            }
-
-            var controller = uiRoot.GetComponent<ResponsiveUiLayoutController>() ?? uiRoot.gameObject.AddComponent<ResponsiveUiLayoutController>();
-            controller.Bind(root, root.References);
-            controller.RefreshForScreen(Screen.width, Screen.height);
-        }
-
-        private static void BindViewportSurface(RectTransform uiRoot, Camera sourceCamera, ResponsiveLayoutRefs layoutReferences)
-        {
-            var viewportColumn = layoutReferences != null ? layoutReferences.viewportColumn : null;
-            if (viewportColumn == null && uiRoot != null)
-            {
-                viewportColumn = uiRoot.Find("MainBody/ViewportColumn") as RectTransform;
-            }
-
-            var controller = UiFactory.EnsureViewportSurface(viewportColumn, sourceCamera);
-            if (layoutReferences == null || controller == null)
-            {
-                return;
-            }
-
-            layoutReferences.viewportColumn = viewportColumn;
-            layoutReferences.viewportSurfaceHost = controller.Host;
-            layoutReferences.viewportSurface = controller.Surface;
-        }
-
-        private static Canvas FindCanonicalCanvas()
-        {
-            var canvases = FindObjectsOfType<Canvas>(true);
-            foreach (var candidate in canvases)
-            {
-                if (candidate != null && candidate.gameObject.name == "RuntimeCanvas")
-                {
-                    return candidate;
-                }
-            }
-
-            return null;
         }
 
         private void Update()
@@ -451,8 +302,14 @@ namespace UnderwaterGliderTwin.Bootstrap
 
             if (PlaybackController != null && trajectoryView != null)
             {
-                PlaybackController.Model.TimelineChanged -= trajectoryView.ReplaceFutureTrajectory;
+                PlaybackController.Model.TimelineChanged -= OnTimelineChanged;
             }
+        }
+
+        private void OnTimelineChanged(SimulationTimelineSnapshot snapshot, int preservedIndex)
+        {
+            trajectoryView?.ReplaceFutureTrajectory(snapshot, preservedIndex);
+            missionMapOverlay?.UpdateTimeline(snapshot.Frames);
         }
 
         private void ValidateConfiguredRuntimeUi()
@@ -476,7 +333,6 @@ namespace UnderwaterGliderTwin.Bootstrap
                     return;
                 }
 
-                RuntimeUiFallback.CleanupGeneratedRuntimeRoot();
                 Debug.LogError("TwinBootstrap requires a serialized RuntimeUiRoot when runtime fallback is disabled.", this);
                 enabled = false;
                 return;
@@ -511,7 +367,7 @@ namespace UnderwaterGliderTwin.Bootstrap
 
         private bool ShouldUseGeneratedRuntimeUi()
         {
-            return useGeneratedRuntimeUi;
+            return useGeneratedRuntimeUi || runtimeUiRoot == null;
         }
 
         private IEnumerator RunRuntimeSmoke(RuntimeSmokeOptions options)

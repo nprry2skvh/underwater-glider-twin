@@ -51,6 +51,7 @@ namespace UnderwaterGliderTwin.Telemetry
                 Directory.CreateDirectory(exportRoot);
                 CleanupStaging(exportRoot);
                 var exportId = "export-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                snapshot = snapshot.WithExportId(exportId);
                 result.ExportId = exportId;
                 staging = Path.Combine(exportRoot, ".staging", exportId);
                 result.StagingDirectory = staging;
@@ -62,6 +63,8 @@ namespace UnderwaterGliderTwin.Telemetry
                 progress?.Invoke(new TrajectoryExportStatus(TrajectoryExportPhase.WritingGlb));
                 using (var stream = File.Create(Path.Combine(staging, "trajectory.glb"))) GlbTrajectoryWriter.Write(stream, snapshot);
                 progress?.Invoke(new TrajectoryExportStatus(TrajectoryExportPhase.WritingPng));
+                // EditMode has no live rendering host. Runtime exports use the
+                // independent TrajectoryExportRenderView path above.
                 File.WriteAllBytes(Path.Combine(staging, "trajectory.png"), MinimalPng);
                 progress?.Invoke(new TrajectoryExportStatus(TrajectoryExportPhase.Publishing));
                 var files = new[] { "trajectory.json", "trajectory.csv", "trajectory.glb", "trajectory.png" };
@@ -90,7 +93,7 @@ namespace UnderwaterGliderTwin.Telemetry
         private sealed class AsyncExportOperation : IDisposable
         {
             private readonly TrajectoryExportService service;
-            private readonly TrajectoryExportSnapshot snapshot;
+            private TrajectoryExportSnapshot snapshot;
             private readonly string exportRoot;
             private readonly Action<TrajectoryExportStatus> progress;
             private readonly Action<TrajectoryExportResult> completed;
@@ -114,6 +117,7 @@ namespace UnderwaterGliderTwin.Telemetry
                     Directory.CreateDirectory(root);
                     CleanupStaging(root);
                     exportId = CreateExportId();
+                    snapshot = snapshot.WithExportId(exportId);
                     staging = Path.Combine(root, ".staging", exportId);
                     result = new TrajectoryExportResult { ExportId = exportId, StagingDirectory = staging };
                     Directory.CreateDirectory(staging);
@@ -184,6 +188,8 @@ namespace UnderwaterGliderTwin.Telemetry
             return "export-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
         }
 
+        private static readonly byte[] MinimalPng = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+
         private static void CleanupStaging(string exportRoot)
         {
             var stagingRoot = Path.Combine(exportRoot, ".staging");
@@ -210,6 +216,5 @@ namespace UnderwaterGliderTwin.Telemetry
             }
         }
 
-        private static readonly byte[] MinimalPng = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
     }
 }

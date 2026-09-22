@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using UnityEngine;
 
 namespace UnderwaterGliderTwin.Telemetry
 {
@@ -20,6 +21,18 @@ namespace UnderwaterGliderTwin.Telemetry
             playback = null;
             error = null;
             if (string.IsNullOrWhiteSpace(packageDirectory)) { error = "Package directory is empty."; return false; }
+            var manifestPath = Path.Combine(packageDirectory, "manifest.json");
+            if (!File.Exists(manifestPath)) { error = "manifest.json is missing."; return false; }
+            try
+            {
+                var manifest = JsonUtility.FromJson<TrajectoryExportManifest>(File.ReadAllText(manifestPath));
+                if (manifest == null || !manifest.Validate(packageDirectory, out error)) return false;
+            }
+            catch (Exception ex)
+            {
+                error = "Invalid manifest: " + ex.Message;
+                return false;
+            }
             var path = Path.Combine(packageDirectory, "trajectory.json");
             if (!File.Exists(path)) { error = "trajectory.json is missing."; return false; }
             if (!TrajectoryJsonCodec.TryDeserialize(File.ReadAllText(path), out var export, out error)) return false;
@@ -44,6 +57,7 @@ namespace UnderwaterGliderTwin.Telemetry
                     timeline.ReplaceFutureFrom(timeline.CommittedSnapshot.Frames.Count - 1, future, segments[i]);
                     sourceFutureStart = nextBoundary;
                 }
+                timeline.RestoreSupersededSegments(source.SupersededSegments);
                 timeline.SetStatus(source.Status);
                 playback = export.Playback;
                 return true;

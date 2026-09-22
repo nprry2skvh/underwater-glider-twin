@@ -96,20 +96,18 @@ namespace UnderwaterGliderTwin.Visualization
 
         private static void ConfigureCamera(Camera camera, TrajectoryExportSnapshot snapshot, Transform geometry)
         {
-            if (snapshot.Camera != null)
-            {
-                camera.transform.position = snapshot.Camera.Position;
-                camera.transform.rotation = snapshot.Camera.Rotation;
-                camera.fieldOfView = Mathf.Clamp(snapshot.Camera.FieldOfView, 1f, 179f);
-                return;
-            }
-
             var renderers = geometry.GetComponentsInChildren<LineRenderer>();
             var bounds = new Bounds(Vector3.zero, Vector3.one);
             foreach (var renderer in renderers) bounds.Encapsulate(renderer.bounds);
-            camera.transform.position = bounds.center + new Vector3(0f, Mathf.Max(20f, bounds.size.magnitude), -Mathf.Max(20f, bounds.size.magnitude));
+            camera.fieldOfView = snapshot.Camera != null
+                ? Mathf.Clamp(snapshot.Camera.FieldOfView, 1f, 179f)
+                : 45f;
+            var distance = Mathf.Max(20f, bounds.size.magnitude * 1.25f);
+            var preferredRotation = snapshot.Camera != null ? snapshot.Camera.Rotation : Quaternion.Euler(35f, 0f, 0f);
+            var preferredForward = preferredRotation * Vector3.forward;
+            if (preferredForward.sqrMagnitude < 0.0001f) preferredForward = Vector3.back;
+            camera.transform.position = bounds.center - preferredForward.normalized * distance;
             camera.transform.LookAt(bounds.center);
-            camera.fieldOfView = 45f;
         }
     }
 }

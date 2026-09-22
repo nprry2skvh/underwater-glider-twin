@@ -39,6 +39,7 @@ namespace UnderwaterGliderTwin.Telemetry
                 var frames = dto.timeline.frames.Select(FromDto).ToArray();
                 if (frames.Length == 0) { error = "Timeline has no frames."; return false; }
                 var segments = dto.timeline.segments.Select(FromDto).ToArray();
+                var supersededSegments = (dto.timeline.supersededSegments ?? Array.Empty<SegmentDto>()).Select(FromDto).ToArray();
                 if (segments.Length == 0) { error = "Timeline has no segments."; return false; }
                 var snapshotTimeline = new SimulationTimelineSnapshot(
                     frames,
@@ -46,13 +47,15 @@ namespace UnderwaterGliderTwin.Telemetry
                     dto.timeline.revision,
                     ParseStatus(dto.timeline.status),
                     FromDto(dto.timeline.missionState),
-                    FromDto(dto.playback));
+                    FromDto(dto.playback),
+                    supersededSegments);
                 snapshot = new TrajectoryExportSnapshot(
                     snapshotTimeline,
                     FromDto(dto.playback) ?? new TrajectoryPlaybackState(0, 0f, frames[0].ElapsedSeconds, false, 1f, 1),
                     FromPredictionDto(dto.prediction),
                     FromDto(dto.camera),
-                    ParseDate(dto.createdAtUtc));
+                    ParseDate(dto.createdAtUtc),
+                    dto.exportId);
                 return Validate(snapshot, out error);
             }
             catch (Exception ex)
@@ -77,6 +80,11 @@ namespace UnderwaterGliderTwin.Telemetry
                 if (segment.Profile == null || !IsFinite(segment.StartElapsedSeconds))
                 { error = "Timeline segment is invalid."; return false; }
             }
+            foreach (var segment in snapshot.Timeline.SupersededSegments)
+            {
+                if (segment.Profile == null || !IsFinite(segment.StartElapsedSeconds))
+                { error = "Superseded timeline segment is invalid."; return false; }
+            }
             return true;
         }
 
@@ -87,14 +95,24 @@ namespace UnderwaterGliderTwin.Telemetry
                 schemaVersion = TrajectoryExportSnapshot.SchemaVersion,
                 algorithmVersion = TrajectoryExportSnapshot.AlgorithmVersion,
                 createdAtUtc = source.CreatedAtUtc.ToString("o", CultureInfo.InvariantCulture),
-                coordinate = new CoordinateDto { datum = "WGS84", axes = "east,north,up", units = "m" },
+                exportId = source.ExportId,
+                coordinate = new CoordinateDto
+                {
+                    datum = "WGS84",
+                    axes = "enu:east,north,up",
+                    units = "m",
+                    depthPositive = "down",
+                    originLongitudeDeg = Finite(source.Timeline.Frames[0].LongitudeDeg),
+                    originLatitudeDeg = Finite(source.Timeline.Frames[0].LatitudeDeg)
+                },
                 timeline = new TimelineDto
                 {
                     revision = source.Timeline.Revision,
                     status = source.Timeline.Status.ToString(),
                     missionState = ToDto(source.Timeline.MissionState),
                     segments = source.Timeline.Segments.Select(ToDto).ToArray(),
-                    frames = source.Timeline.Frames.Select(ToDto).ToArray()
+                    supersededSegments = source.Timeline.SupersededSegments.Select(ToDto).ToArray(),
+                    frames = source.Timeline.Frames.Select(frame => ToDto(frame, source.Timeline.Frames[0])).ToArray()
                 },
                 playback = ToDto(source.Playback),
                 prediction = ToDto(source.Prediction),
@@ -102,8 +120,11 @@ namespace UnderwaterGliderTwin.Telemetry
             };
         }
 
-        private static FrameDto ToDto(TelemetryFrame f)
+        private static FrameDto ToDto(TelemetryFrame f, TelemetryFrame origin)
         {
+            var metersPerLongitude = 111320d * Math.Cos(origin.LatitudeDeg * Math.PI / 180d);
+            var east = (f.LongitudeDeg - origin.LongitudeDeg) * metersPerLongitude;
+            var north = (f.LatitudeDeg - origin.LatitudeDeg) * 111320d;
             return new FrameDto
             {
                 rowIndex = f.RowIndex, rawTime = f.RawTime ?? string.Empty, elapsedSeconds = Finite(f.ElapsedSeconds),
@@ -111,14 +132,34 @@ namespace UnderwaterGliderTwin.Telemetry
                 headingDeg = Finite(f.HeadingDeg), pitchDeg = Finite(f.PitchDeg), rollDeg = Finite(f.RollDeg), voltage24V = Finite(f.Voltage24V), current24A = Finite(f.Current24A), batteryPercent = Finite(f.BatteryPercent),
                 workMode = f.WorkMode ?? string.Empty, runState = f.RunState ?? string.Empty, targetSegment = Finite(f.TargetSegment), targetHeadingDeg = Finite(f.TargetHeadingDeg), targetDepthM = Finite(f.TargetDepthM), targetAltitudeM = Finite(f.TargetAltitudeM),
                 propellerRpm = Finite(f.PropellerRpm), pistonMm = Finite(f.PistonMm), turnAngleDeg = Finite(f.TurnAngleDeg),
+                enu = new EnuDto { eastM = Finite(east), northM = Finite(north), upM = Finite(-f.DepthM) },
                 planned = f.HasPlannedPosition ? new Coordinate2Dto { longitudeDeg = Finite(f.PlannedLongitudeDeg), latitudeDeg = Finite(f.PlannedLatitudeDeg) } : null,
+                diagnostics = f.Diagnostics.HasValue ? ToDto(f.Diagnostics.Value) : null,
                 missionState = ToDto(f.MissionState), profileSequence = f.ProfileSequence
             };
         }
 
         private static TelemetryFrame FromDto(FrameDto f)
         {
-            return new TelemetryFrame(f.rowIndex, f.rawTime, f.elapsedSeconds, f.longitudeDeg, f.latitudeDeg, f.depthM, f.altitudeM, f.headingDeg, f.pitchDeg, f.rollDeg, f.voltage24V, f.current24A, f.batteryPercent, f.workMode, f.runState, f.targetSegment, f.targetHeadingDeg, f.targetDepthM, f.targetAltitudeM, f.propellerRpm, f.pistonMm, f.turnAngleDeg, null, f.planned == null ? double.NaN : f.planned.longitudeDeg, f.planned == null ? double.NaN : f.planned.latitudeDeg, FromDto(f.missionState), f.profileSequence);
+            return new TelemetryFrame(f.rowIndex, f.rawTime, f.elapsedSeconds, f.longitudeDeg, f.latitudeDeg, f.depthM, f.altitudeM, f.headingDeg, f.pitchDeg, f.rollDeg, f.voltage24V, f.current24A, f.batteryPercent, f.workMode, f.runState, f.targetSegment, f.targetHeadingDeg, f.targetDepthM, f.targetAltitudeM, f.propellerRpm, f.pistonMm, f.turnAngleDeg, FromDto(f.diagnostics), f.planned == null ? double.NaN : f.planned.longitudeDeg, f.planned == null ? double.NaN : f.planned.latitudeDeg, FromDto(f.missionState), f.profileSequence);
+        }
+
+        private static DiagnosticsDto ToDto(SimulationDiagnostics d) => new DiagnosticsDto
+        {
+            waterVelocity = ToDto(d.WaterVelocityEndMps), currentVelocity = ToDto(d.CurrentVelocityEndMps),
+            netBuoyancyForceN = Finite(d.NetBuoyancyForceN), energyWatts = Finite(d.EnergyWatts), sideSlipDeg = Finite(d.SideSlipDeg),
+            angleOfAttackDeg = Finite(d.AngleOfAttackDeg), liftForceN = Finite(d.LiftForceN), dragForceN = Finite(d.DragForceN), sideForceN = Finite(d.SideForceN),
+            angularVelocity = ToDto(d.AngularVelocityRadPerSecond), hydrodynamicMoment = ToDto(d.HydrodynamicMomentNm),
+            pistonPositionMm = Finite(d.PistonPositionMm), controlSurfaceDeflection = ToDto(d.ControlSurfaceDeflectionDeg), actuatorPowerWatts = Finite(d.ActuatorPowerWatts)
+        };
+
+        private static SimulationDiagnostics? FromDto(DiagnosticsDto d)
+        {
+            if (d == null) return null;
+            return new SimulationDiagnostics(
+                FromDto(d.waterVelocity), FromDto(d.currentVelocity), d.netBuoyancyForceN, d.energyWatts, d.sideSlipDeg,
+                d.angleOfAttackDeg, d.liftForceN, d.dragForceN, d.sideForceN, FromDto(d.angularVelocity), FromDto(d.hydrodynamicMoment),
+                d.pistonPositionMm, FromDto(d.controlSurfaceDeflection), d.actuatorPowerWatts);
         }
 
         private static SegmentDto ToDto(SimulationTimelineSegment s) => new SegmentDto { profileSequence = s.ProfileSequence, requestId = s.RequestId, startRowIndex = s.StartRowIndex, startElapsedSeconds = Finite(s.StartElapsedSeconds), committedAtUtc = s.CommittedAtUtc.ToString("o", CultureInfo.InvariantCulture), profile = ToDto(s.Profile) };
@@ -194,6 +235,7 @@ namespace UnderwaterGliderTwin.Telemetry
         private static CameraDto ToDto(CameraSnapshot c) => c == null ? null : new CameraDto { position = ToDto(c.Position), rotation = new Vector4Dto { x = c.Rotation.x, y = c.Rotation.y, z = c.Rotation.z, w = c.Rotation.w }, fieldOfView = Finite(c.FieldOfView), pixelWidth = c.PixelWidth, pixelHeight = c.PixelHeight, cullingMask = c.CullingMask };
         private static CameraSnapshot FromDto(CameraDto c) => c == null ? null : new CameraSnapshot(new Vector3(c.position.x, c.position.y, c.position.z), new Quaternion(c.rotation.x, c.rotation.y, c.rotation.z, c.rotation.w), c.fieldOfView, c.pixelWidth, c.pixelHeight, c.cullingMask);
         private static Vector3Dto ToDto(Vector3 v) => new Vector3Dto { x = Finite(v.x), y = Finite(v.y), z = Finite(v.z) };
+        private static Vector3 FromDto(Vector3Dto v) => v == null ? Vector3.zero : new Vector3(v.x, v.y, v.z);
         private static MissionDto ToDto(SimulationMissionState? state) { if (!state.HasValue) return null; var s = state.Value; return new MissionDto { phase = s.Phase.ToString(), completedCycles = s.CompletedCycles, legElapsedSeconds = Finite(s.LegElapsedSeconds), turnaroundElapsedSeconds = Finite(s.TurnaroundElapsedSeconds), safetyWarningRaised = s.SafetyWarningRaised }; }
         private static SimulationMissionState? FromDto(MissionDto s) { if (s == null) return null; Enum.TryParse(s.phase, out SimulationMissionPhase phase); return new SimulationMissionState { Phase = phase, CompletedCycles = s.completedCycles, LegElapsedSeconds = s.legElapsedSeconds, TurnaroundElapsedSeconds = s.turnaroundElapsedSeconds, SafetyWarningRaised = s.safetyWarningRaised }; }
         private static SimulationTimelineStatus ParseStatus(string value) { return Enum.TryParse(value, out SimulationTimelineStatus status) ? status : SimulationTimelineStatus.Committed; }
@@ -203,11 +245,13 @@ namespace UnderwaterGliderTwin.Telemetry
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
         private static bool IsFinite(TelemetryFrame f) => !(float.IsNaN(f.ElapsedSeconds) || float.IsInfinity(f.ElapsedSeconds) || double.IsNaN(f.LongitudeDeg) || double.IsInfinity(f.LongitudeDeg) || double.IsNaN(f.LatitudeDeg) || double.IsInfinity(f.LatitudeDeg));
 
-        [Serializable] internal sealed class TrajectoryJsonDocument { public int schemaVersion; public string algorithmVersion; public string createdAtUtc; public CoordinateDto coordinate; public TimelineDto timeline; public PlaybackDto playback; public PredictionDto prediction; public CameraDto camera; }
-        [Serializable] internal sealed class CoordinateDto { public string datum; public string axes; public string units; }
+        [Serializable] internal sealed class TrajectoryJsonDocument { public int schemaVersion; public string exportId; public string algorithmVersion; public string createdAtUtc; public CoordinateDto coordinate; public TimelineDto timeline; public PlaybackDto playback; public PredictionDto prediction; public CameraDto camera; }
+        [Serializable] internal sealed class CoordinateDto { public string datum; public string axes; public string units; public string depthPositive; public double originLongitudeDeg; public double originLatitudeDeg; }
         [Serializable] internal sealed class Coordinate2Dto { public double longitudeDeg; public double latitudeDeg; }
-        [Serializable] internal sealed class TimelineDto { public int revision; public string status; public FrameDto[] frames; public SegmentDto[] segments; public MissionDto missionState; }
-        [Serializable] internal sealed class FrameDto { public int rowIndex; public string rawTime; public float elapsedSeconds, depthM, altitudeM, headingDeg, pitchDeg, rollDeg, voltage24V, current24A, batteryPercent, targetSegment, targetHeadingDeg, targetDepthM, targetAltitudeM, propellerRpm, pistonMm, turnAngleDeg; public double longitudeDeg, latitudeDeg; public string workMode, runState; public Coordinate2Dto planned; public MissionDto missionState; public int profileSequence; }
+        [Serializable] internal sealed class TimelineDto { public int revision; public string status; public FrameDto[] frames; public SegmentDto[] segments; public SegmentDto[] supersededSegments; public MissionDto missionState; }
+        [Serializable] internal sealed class FrameDto { public int rowIndex; public string rawTime; public float elapsedSeconds, depthM, altitudeM, headingDeg, pitchDeg, rollDeg, voltage24V, current24A, batteryPercent, targetSegment, targetHeadingDeg, targetDepthM, targetAltitudeM, propellerRpm, pistonMm, turnAngleDeg; public double longitudeDeg, latitudeDeg; public string workMode, runState; public EnuDto enu; public Coordinate2Dto planned; public DiagnosticsDto diagnostics; public MissionDto missionState; public int profileSequence; }
+        [Serializable] internal sealed class EnuDto { public double eastM, northM; public float upM; }
+        [Serializable] internal sealed class DiagnosticsDto { public Vector3Dto waterVelocity, currentVelocity, angularVelocity, hydrodynamicMoment, controlSurfaceDeflection; public float netBuoyancyForceN, energyWatts, sideSlipDeg, angleOfAttackDeg, liftForceN, dragForceN, sideForceN, pistonPositionMm, actuatorPowerWatts; }
         [Serializable] internal sealed class SegmentDto { public int profileSequence; public long requestId; public int startRowIndex; public float startElapsedSeconds; public string committedAtUtc; public ProfileDto profile; }
         [Serializable] internal sealed class ProfileDto { public NamedValueDto[] values; public NamedValueDto[] dynamicsValues; public OceanLayerDto[] oceanLayers; public OceanFieldSampleDto[] oceanFieldSamples; }
         [Serializable] internal sealed class NamedValueDto { public string name; public string type; public string value; public bool isNull; }

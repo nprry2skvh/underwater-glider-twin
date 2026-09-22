@@ -25,6 +25,7 @@ namespace UnderwaterGliderTwin.Telemetry
         private long generationToken;
         private int pendingSeedRowIndex;
         private float pendingSeedElapsedSeconds;
+        private float pendingSeedContinuousIndex;
         private bool pendingIsRefill;
         private long pendingRequestId;
 
@@ -156,7 +157,8 @@ namespace UnderwaterGliderTwin.Telemetry
             {
                 if (!isRefill
                     && (playback.CurrentFrame.RowIndex != pendingSeedRowIndex
-                    || Math.Abs(playback.CurrentFrame.ElapsedSeconds - pendingSeedElapsedSeconds) > 0.0001f)
+                    || Math.Abs(playback.CurrentFrame.ElapsedSeconds - pendingSeedElapsedSeconds) > 0.0001f
+                    || Math.Abs(playback.ContinuousIndex - pendingSeedContinuousIndex) > 0.0001f)
                 )
                 {
                     pendingOperation = null;
@@ -229,24 +231,53 @@ namespace UnderwaterGliderTwin.Telemetry
 
         private void StartGeneration(int version, SimulationProfile candidate, long requestId, bool isRefill)
         {
-            var seedFrame = isRefill
+            var playbackSeedFrame = isRefill
                 ? timeline.CommittedSnapshot.Frames[timeline.CommittedSnapshot.Frames.Count - 1]
                 : playback.CurrentFrame;
-            pendingSeedRowIndex = seedFrame.RowIndex;
-            pendingSeedElapsedSeconds = seedFrame.ElapsedSeconds;
-            var seed = SimulationStateSnapshot.FromFrame(seedFrame, isRefill ? activeProfile : activeProfile);
+            pendingSeedRowIndex = playbackSeedFrame.RowIndex;
+            pendingSeedElapsedSeconds = playbackSeedFrame.ElapsedSeconds;
+            pendingSeedContinuousIndex = playback.ContinuousIndex;
+            var generationSeedFrame = playbackSeedFrame;
+            TelemetryFrame? fractionalSeedFrame = null;
+            if (!isRefill
+                && playback.CurrentIndex < playback.Frames.Count - 1
+                && playback.ContinuousElapsedSeconds - playbackSeedFrame.ElapsedSeconds > 0.0001f)
+            {
+                var warmupStepper = SimulationMissionStepper.FromSnapshot(
+                    SimulationStateSnapshot.FromFrame(playbackSeedFrame, activeProfile),
+                    activeProfile);
+                if (warmupStepper.TryAdvance(
+                    playback.ContinuousElapsedSeconds - playbackSeedFrame.ElapsedSeconds,
+                    out var preciseFrame))
+                {
+                    generationSeedFrame = preciseFrame;
+                    fractionalSeedFrame = preciseFrame;
+                }
+            }
+
+            var seed = SimulationStateSnapshot.FromFrame(generationSeedFrame, activeProfile);
             var token = ++generationToken;
             pendingIsRefill = isRefill;
             pendingRequestId = requestId;
             Status = SimulationTimelineStatus.Generating;
             StatusChanged?.Invoke();
-            var maximumFrameCount = Math.Max(0, MaximumTimelineFrameCount - timeline.CommittedSnapshot.Frames.Count);
+            var maximumFrameCount = Math.Max(
+                0,
+                MaximumTimelineFrameCount
+                    - timeline.CommittedSnapshot.Frames.Count
+                    - (fractionalSeedFrame.HasValue ? 1 : 0));
             var operation = generator.GenerateFuture(
                 seed,
                 candidate,
                 frameSliceBudget,
                 maximumFrameCount,
-                result => CompleteRequest(version, candidate, requestId, token, isRefill, result));
+                result => CompleteRequest(
+                    version,
+                    candidate,
+                    requestId,
+                    token,
+                    isRefill,
+                    PrependFractionalSeed(result, fractionalSeedFrame)));
             if (IsRebuildPending && version == requestVersion)
             {
                 pendingOperation = operation;
@@ -255,6 +286,23 @@ namespace UnderwaterGliderTwin.Telemetry
             {
                 operation?.Cancel();
             }
+        }
+
+        private static SimulationRebuildResult PrependFractionalSeed(
+            SimulationRebuildResult result,
+            TelemetryFrame? fractionalSeedFrame)
+        {
+            if (!fractionalSeedFrame.HasValue || result == null || !result.Succeeded)
+            {
+                return result;
+            }
+
+            var frames = new List<TelemetryFrame>(result.Frames.Count + 1)
+            {
+                fractionalSeedFrame.Value
+            };
+            frames.AddRange(result.Frames);
+            return SimulationRebuildResult.Success(frames);
         }
 
         public bool TryEnsureFutureHorizon()
@@ -269,7 +317,7 @@ namespace UnderwaterGliderTwin.Telemetry
 
             var remainingFrames = timeline.CommittedSnapshot.Frames.Count - playback.CurrentIndex - 1;
             var remainingSeconds = timeline.CommittedSnapshot.Frames[timeline.CommittedSnapshot.Frames.Count - 1].ElapsedSeconds
-                - playback.CurrentElapsedSeconds;
+                - playback.ContinuousElapsedSeconds;
             if (remainingSeconds >= 120f && remainingFrames >= 128)
             {
                 return false;
@@ -443,6 +491,13 @@ namespace UnderwaterGliderTwin.Telemetry
                 return false;
             }
 
+            if (!IsOptionalPositive(profile.DescentSpeedMps)
+                || !IsOptionalPositive(profile.AscentSpeedMps))
+            {
+                error = "Directional speeds must be NaN or finite and positive.";
+                return false;
+            }
+
             if (!IsFinite(profile.OriginLongitudeDeg)
                 || !IsFinite(profile.OriginLatitudeDeg)
                 || profile.OriginLongitudeDeg < -180d
@@ -580,6 +635,11 @@ namespace UnderwaterGliderTwin.Telemetry
         private static bool IsFinite(double value)
         {
             return !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private static bool IsOptionalPositive(float value)
+        {
+            return float.IsNaN(value) || (!float.IsInfinity(value) && value > 0f);
         }
 
         private static bool IsFiniteOrNaNPlanned(double longitude, double latitude)

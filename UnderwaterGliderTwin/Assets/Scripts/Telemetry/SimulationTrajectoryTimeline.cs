@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace UnderwaterGliderTwin.Telemetry
 {
     public sealed class SimulationTrajectoryTimeline
     {
         private SimulationTimelineSnapshot committedSnapshot;
+        private readonly List<SimulationTimelineSegment> supersededSegments = new List<SimulationTimelineSegment>();
 
         public event Action<SimulationTimelineSnapshot> Changed;
 
@@ -52,7 +54,8 @@ namespace UnderwaterGliderTwin.Telemetry
                 committedSnapshot.Revision + 1,
                 status,
                 committedSnapshot.MissionState,
-                committedSnapshot.Playback);
+                committedSnapshot.Playback,
+                supersededSegments);
         }
 
         public SimulationTrajectoryTimeline(
@@ -77,7 +80,8 @@ namespace UnderwaterGliderTwin.Telemetry
                 new[] { initialSegment },
                 revision: 0,
                 status: SimulationTimelineStatus.Committed,
-                missionState: initialFrames[initialFrames.Count - 1].MissionState);
+                missionState: initialFrames[initialFrames.Count - 1].MissionState,
+                supersededSegments: supersededSegments);
         }
 
         public void ReplaceFutureFrom(
@@ -114,12 +118,17 @@ namespace UnderwaterGliderTwin.Telemetry
 
             var preservedRowIndex = currentFrames[preservedIndex].RowIndex;
             var nextSegments = new List<SimulationTimelineSegment>();
+            var newlySuperseded = new List<SimulationTimelineSegment>();
             for (var i = 0; i < committedSnapshot.Segments.Count; i++)
             {
                 var existingSegment = committedSnapshot.Segments[i];
                 if (existingSegment.StartRowIndex <= preservedRowIndex)
                 {
                     nextSegments.Add(existingSegment);
+                }
+                else if (!supersededSegments.Any(segment => segment.ProfileSequence == existingSegment.ProfileSequence))
+                {
+                    newlySuperseded.Add(existingSegment);
                 }
             }
 
@@ -131,6 +140,7 @@ namespace UnderwaterGliderTwin.Telemetry
                     nameof(segment));
             }
 
+            supersededSegments.AddRange(newlySuperseded);
             nextSegments.Add(segment);
             Publish(nextFrames, nextSegments);
         }
@@ -153,6 +163,34 @@ namespace UnderwaterGliderTwin.Telemetry
             Publish(nextFrames, committedSnapshot.Segments);
         }
 
+        public void RestoreSupersededSegments(IEnumerable<SimulationTimelineSegment> segments)
+        {
+            supersededSegments.Clear();
+            if (segments != null)
+            {
+                foreach (var segment in segments)
+                {
+                    if (segment == null
+                        || committedSnapshot.Segments.Any(active => active.ProfileSequence == segment.ProfileSequence)
+                        || supersededSegments.Any(existing => existing.ProfileSequence == segment.ProfileSequence))
+                    {
+                        continue;
+                    }
+
+                    supersededSegments.Add(segment);
+                }
+            }
+
+            committedSnapshot = new SimulationTimelineSnapshot(
+                committedSnapshot.Frames,
+                committedSnapshot.Segments,
+                committedSnapshot.Revision,
+                committedSnapshot.Status,
+                committedSnapshot.MissionState,
+                committedSnapshot.Playback,
+                supersededSegments);
+        }
+
         private void Publish(
             IReadOnlyList<TelemetryFrame> frames,
             IReadOnlyList<SimulationTimelineSegment> segments)
@@ -162,7 +200,9 @@ namespace UnderwaterGliderTwin.Telemetry
                 segments,
                 committedSnapshot.Revision + 1,
                 SimulationTimelineStatus.Committed,
-                frames[frames.Count - 1].MissionState);
+                frames[frames.Count - 1].MissionState,
+                null,
+                supersededSegments);
             committedSnapshot = snapshot;
             NotifyChanged(snapshot);
         }
