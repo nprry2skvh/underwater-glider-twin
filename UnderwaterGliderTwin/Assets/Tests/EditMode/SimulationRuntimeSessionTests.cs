@@ -33,7 +33,7 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void RequestProfileUpdate_StaysPendingWhileOldFramesContinuePlaying()
+        public void RequestProfileUpdate_PausesPlaybackUntilTheTransactionFinishes()
         {
             var frames = BuildFrames(8);
             var model = new PlaybackModel(frames, 1f);
@@ -46,8 +46,13 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(session.IsRebuildPending, Is.True);
             Assert.That(model.Frames, Is.SameAs(oldFrames));
-            Assert.That(model.Tick(1f), Is.True);
-            Assert.That(model.CurrentIndex, Is.EqualTo(1));
+            Assert.That(model.IsPlaying, Is.False);
+            Assert.That(model.Tick(1f), Is.False);
+            Assert.That(model.CurrentIndex, Is.EqualTo(0));
+
+            generator.CompleteWithDeterministicFuture();
+
+            Assert.That(model.IsPlaying, Is.True);
         }
 
         [Test]
@@ -103,7 +108,7 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void SuccessfulUpdate_PreservesHistoryAccumulatedWhileRebuildWasPending()
+        public void SuccessfulUpdate_UsesOneStableSeedWhilePlaybackIsPaused()
         {
             var frames = BuildFrames(10);
             var model = new PlaybackModel(frames, 1f);
@@ -113,7 +118,7 @@ namespace UnderwaterGliderTwin.Tests
             session = CreateSessionForTest(model, generator);
 
             Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
-            model.Tick(2f);
+            Assert.That(model.Tick(2f), Is.False);
             var commitIndex = model.CurrentIndex;
             var historyAtCommit = new List<FrameSnapshot>();
             for (var i = 0; i <= commitIndex; i++)
@@ -129,20 +134,33 @@ namespace UnderwaterGliderTwin.Tests
                 FutureFrame(seed, 4, 6f)
             });
 
-            Assert.That(generator.StartCount, Is.EqualTo(2), "A completion seeded before playback advanced must be discarded and rebuilt from the latest frame.");
-            var latestSeed = model.CurrentFrame;
-            generator.CompleteWith(new[]
-            {
-                FutureFrame(latestSeed, 1, latestSeed.ElapsedSeconds + 1f),
-                FutureFrame(latestSeed, 2, latestSeed.ElapsedSeconds + 2f)
-            });
-
+            Assert.That(generator.StartCount, Is.EqualTo(1));
             Assert.That(model.CurrentIndex, Is.EqualTo(commitIndex));
+            Assert.That(model.IsPlaying, Is.True);
             for (var i = 0; i <= commitIndex; i++)
             {
                 Assert.That(CaptureFrameSnapshot(model.Frames[i]), Is.EqualTo(historyAtCommit[i]));
             }
             Assert.That(model.Frames[commitIndex + 1].ElapsedSeconds, Is.GreaterThan(model.CurrentFrame.ElapsedSeconds));
+        }
+
+        [Test]
+        public void ReverseFractionalPlayback_SeedsFromTheLowerFrameAtTheExactElapsedTime()
+        {
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            model.SeekNormalized(0.5f);
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+            Assert.That(model.Tick(0.5f), Is.True);
+            Assert.That(model.CurrentIndex, Is.EqualTo(4));
+            Assert.That(model.ContinuousElapsedSeconds, Is.EqualTo(3.5f).Within(0.0001f));
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+
+            Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
+
+            Assert.That(generator.Seeds[0].Frame.ElapsedSeconds, Is.EqualTo(3.5f).Within(0.0001f));
+            Assert.That(generator.Seeds[0].Frame.RowIndex, Is.GreaterThanOrEqualTo(3));
         }
 
         [Test]
@@ -672,6 +690,31 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void UpdateFromHistoricalSegment_UsesThatSegmentsProfileForTheSeed()
+        {
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            model.SeekNormalized(0.5f);
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+            var first = ChangedProfile();
+            first.TargetDepthM = 140f;
+
+            Assert.That(session.RequestProfileUpdate(first), Is.True);
+            generator.CompleteWithDeterministicFuture();
+            Assert.That(session.ActiveProfile.TargetDepthM, Is.EqualTo(140f));
+
+            model.SeekNormalized(0f);
+            var second = ChangedProfile();
+            second.TargetDepthM = 160f;
+            Assert.That(session.RequestProfileUpdate(second), Is.True);
+
+            Assert.That(generator.Seeds[1].Frame.ProfileSequence, Is.EqualTo(0));
+            Assert.That(
+                generator.Seeds[1].Profile.TargetDepthM,
+                Is.EqualTo(SimulationProfile.Default.TargetDepthM));
+        }
+
+        [Test]
         public void InvalidRequestDoesNotReplaceValidQueuedProfile()
         {
             var model = new PlaybackModel(BuildFrames(8), 1f);
@@ -704,6 +747,62 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(session.Timeline.CommittedSnapshot.Segments.Count, Is.EqualTo(1));
             Assert.That(session.Timeline.CommittedSnapshot.Frames.Count, Is.EqualTo(initialCount + 1));
             Assert.That(session.Timeline.CommittedSnapshot.Frames[initialCount].ProfileSequence, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void AutomaticRefill_RequestsOnlyOneBoundedFutureWindow()
+        {
+            var model = new PlaybackModel(BuildFrames(8), 1f);
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+
+            Assert.That(session.TryEnsureFutureHorizon(), Is.True);
+
+            var expectedWindow = Math.Max(
+                128,
+                (int)Math.Ceiling(120d / SimulationProfile.Default.SampleIntervalSeconds));
+            Assert.That(generator.MaximumFrameCounts[0], Is.EqualTo(expectedWindow));
+        }
+
+        [Test]
+        public void HistoricalReplacement_FrameCapacityCountsOnlyTheRetainedPrefix()
+        {
+            var model = new PlaybackModel(BuildFrames(1000), 1f);
+            model.SeekNormalized(0f);
+            var generator = new ManualFakeFutureGenerator();
+            session = CreateSessionForTest(model, generator);
+
+            Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
+
+            Assert.That(
+                generator.MaximumFrameCounts[0],
+                Is.EqualTo(SimulationRuntimeSession.MaximumTimelineFrameCount - 1));
+        }
+
+        [Test]
+        public void FailedUpdate_DoesNotReplaceACompletedCommittedTimelineStatus()
+        {
+            var profile = SimulationProfile.Default;
+            var frames = new List<TelemetryFrame>(BuildFrames(4));
+            frames[frames.Count - 1] = WithMissionState(
+                frames[frames.Count - 1],
+                SimulationMissionState.AtSurface(profile.CycleCount));
+            var timeline = SimulationTrajectoryTimeline.CreateInitial(frames, profile);
+            var model = new PlaybackModel(frames, 1f);
+            model.BindTimeline(timeline);
+            var generator = new ManualFakeFutureGenerator();
+            session = new SimulationRuntimeSession(model, profile, generator, timeline: timeline);
+            Assert.That(timeline.CommittedSnapshot.Status, Is.EqualTo(SimulationTimelineStatus.Completed));
+
+            Assert.That(session.RequestProfileUpdate(ChangedProfile()), Is.True);
+            generator.Fail("expected failure");
+
+            Assert.That(session.Status, Is.EqualTo(SimulationTimelineStatus.Failed));
+            Assert.That(timeline.CommittedSnapshot.Status, Is.EqualTo(SimulationTimelineStatus.Completed));
+            model.SeekNormalized(1f);
+            model.SetPlaying(true);
+            model.Tick(1f);
+            Assert.That(model.IsWaitingForFuture, Is.False);
         }
 
         [Test]
@@ -840,6 +939,73 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void TrajectoryView_SecondReplacementAfterRewindDoesNotKeepTheSupersededBranch()
+        {
+            var original = BuildFrames(10);
+            var model = new PlaybackModel(original, 1f);
+            var controller = new GameObject("Playback").AddComponent<PlaybackController>();
+            var view = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            try
+            {
+                controller.Initialize(model);
+                var mapper = new GeoCoordinateMapper(original[0], 1f, 1f);
+                view.Initialize(original, mapper, controller, null);
+                controller.Seek(0.7f);
+                var firstPreservedIndex = model.CurrentIndex;
+                var firstReplacement = new List<TelemetryFrame>();
+                for (var i = 0; i <= firstPreservedIndex; i++)
+                {
+                    firstReplacement.Add(original[i]);
+                }
+
+                firstReplacement.Add(FutureFrame(
+                    original[firstPreservedIndex],
+                    1,
+                    original[firstPreservedIndex].ElapsedSeconds + 1f));
+                firstReplacement.Add(FutureFrame(
+                    original[firstPreservedIndex],
+                    2,
+                    original[firstPreservedIndex].ElapsedSeconds + 2f));
+                view.ReplaceFutureTrajectory(firstReplacement, firstPreservedIndex);
+                model.ReplaceFrames(firstReplacement, firstPreservedIndex);
+
+                var actual = view.transform.Find("ActualTrajectoryLine").GetComponent<LineRenderer>();
+                var firstHistoryCount = actual.positionCount;
+                controller.Seek(0.25f);
+                var secondPreservedIndex = model.CurrentIndex;
+                var rewoundHistory = new Vector3[actual.positionCount];
+                actual.GetPositions(rewoundHistory);
+                Assert.That(rewoundHistory.Length, Is.LessThan(firstHistoryCount));
+
+                var secondReplacement = new List<TelemetryFrame>();
+                for (var i = 0; i <= secondPreservedIndex; i++)
+                {
+                    secondReplacement.Add(firstReplacement[i]);
+                }
+
+                secondReplacement.Add(FutureFrame(
+                    firstReplacement[secondPreservedIndex],
+                    1,
+                    firstReplacement[secondPreservedIndex].ElapsedSeconds + 1f));
+                secondReplacement.Add(FutureFrame(
+                    firstReplacement[secondPreservedIndex],
+                    2,
+                    firstReplacement[secondPreservedIndex].ElapsedSeconds + 2f));
+                view.ReplaceFutureTrajectory(secondReplacement, secondPreservedIndex);
+                model.ReplaceFrames(secondReplacement, secondPreservedIndex);
+
+                var afterSecondReplacement = new Vector3[actual.positionCount];
+                actual.GetPositions(afterSecondReplacement);
+                Assert.That(afterSecondReplacement, Is.EqualTo(rewoundHistory));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(controller.gameObject);
+                UnityEngine.Object.DestroyImmediate(view.gameObject);
+            }
+        }
+
+        [Test]
         public void SuccessfulUpdate_ContinuesReversePlaybackWithoutReplacingCameraObject()
         {
             var model = new PlaybackModel(BuildFrames(8), 1f);
@@ -973,6 +1139,19 @@ namespace UnderwaterGliderTwin.Tests
                 seed.Diagnostics,
                 seed.PlannedLongitudeDeg + offset * 0.001d,
                 seed.PlannedLatitudeDeg + offset * 0.001d);
+        }
+
+        private static TelemetryFrame WithMissionState(
+            TelemetryFrame frame,
+            SimulationMissionState missionState)
+        {
+            return new TelemetryFrame(
+                frame.RowIndex, frame.RawTime, frame.ElapsedSeconds, frame.LongitudeDeg, frame.LatitudeDeg,
+                frame.DepthM, frame.AltitudeM, frame.HeadingDeg, frame.PitchDeg, frame.RollDeg,
+                frame.Voltage24V, frame.Current24A, frame.BatteryPercent, frame.WorkMode, frame.RunState,
+                frame.TargetSegment, frame.TargetHeadingDeg, frame.TargetDepthM, frame.TargetAltitudeM,
+                frame.PropellerRpm, frame.PistonMm, frame.TurnAngleDeg, frame.Diagnostics,
+                frame.PlannedLongitudeDeg, frame.PlannedLatitudeDeg, missionState, frame.ProfileSequence);
         }
 
         private static TelemetryFrame WithNumericField(TelemetryFrame frame, int field, double value)
@@ -1131,6 +1310,7 @@ namespace UnderwaterGliderTwin.Tests
 
             public readonly List<Action<SimulationRebuildResult>> Completions = new List<Action<SimulationRebuildResult>>();
             public readonly List<SimulationStateSnapshot> Seeds = new List<SimulationStateSnapshot>();
+            public readonly List<int> MaximumFrameCounts = new List<int>();
 
             public int StartCount { get; private set; }
             public int FrameSliceBudget { get; private set; }
@@ -1145,6 +1325,7 @@ namespace UnderwaterGliderTwin.Tests
                 StartCount++;
                 seed = snapshot;
                 Seeds.Add(snapshot);
+                MaximumFrameCounts.Add(maximumFrameCount);
                 FrameSliceBudget = frameSliceBudget;
                 completion = onCompleted;
                 Completions.Add(onCompleted);

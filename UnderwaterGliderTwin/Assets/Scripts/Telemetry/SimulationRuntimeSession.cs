@@ -23,11 +23,13 @@ namespace UnderwaterGliderTwin.Telemetry
         private int requestVersion;
         private long requestIdCounter;
         private long generationToken;
-        private int pendingSeedRowIndex;
-        private float pendingSeedElapsedSeconds;
-        private float pendingSeedContinuousIndex;
+        private int pendingSeedIndex;
+        private float pendingSeedContinuousElapsedSeconds;
+        private int pendingSeedTimelineRevision;
         private bool pendingIsRefill;
         private long pendingRequestId;
+        private bool restorePlaybackAfterProfileUpdate;
+        private bool playbackWasPlayingBeforeProfileUpdate;
 
         public event Action StatusChanged;
 
@@ -61,6 +63,11 @@ namespace UnderwaterGliderTwin.Telemetry
                     throw new ArgumentException("Playback is bound to a different timeline.", nameof(timeline));
                 }
             }
+
+            Status = IsMissionComplete()
+                ? SimulationTimelineStatus.Completed
+                : SimulationTimelineStatus.Committed;
+            this.timeline.SetStatus(Status);
         }
 
         public bool RequestProfileUpdate(SimulationProfile candidate)
@@ -72,6 +79,14 @@ namespace UnderwaterGliderTwin.Telemetry
             }
 
             var candidateSnapshot = candidate.Clone();
+            var profileUpdateAlreadyPending = IsRebuildPending && !pendingIsRefill;
+            if (!profileUpdateAlreadyPending)
+            {
+                playbackWasPlayingBeforeProfileUpdate = playback.IsPlaying;
+                restorePlaybackAfterProfileUpdate = true;
+                playback.SetPlaying(false);
+            }
+
             var version = ++requestVersion;
             var requestId = ++requestIdCounter;
             LastError = null;
@@ -105,7 +120,7 @@ namespace UnderwaterGliderTwin.Telemetry
 
             pendingOperation?.Cancel();
             requestVersion++;
-                FailRequest(requestVersion, "Simulation rebuild was cancelled.", SimulationTimelineStatus.Cancelled);
+            FailRequest(requestVersion, "Simulation rebuild was cancelled.", SimulationTimelineStatus.Cancelled);
         }
 
         public void Tick()
@@ -156,17 +171,17 @@ namespace UnderwaterGliderTwin.Telemetry
             try
             {
                 if (!isRefill
-                    && (playback.CurrentFrame.RowIndex != pendingSeedRowIndex
-                    || Math.Abs(playback.CurrentFrame.ElapsedSeconds - pendingSeedElapsedSeconds) > 0.0001f
-                    || Math.Abs(playback.ContinuousIndex - pendingSeedContinuousIndex) > 0.0001f)
-                )
+                    && (timeline.Revision != pendingSeedTimelineRevision
+                    || Math.Abs(playback.ContinuousElapsedSeconds - pendingSeedContinuousElapsedSeconds) > 0.0001f))
                 {
                     pendingOperation = null;
                     StartGeneration(version, candidate, requestId, isRefill);
                     return;
                 }
 
-                var preservedIndex = playback.CurrentIndex;
+                var preservedIndex = isRefill
+                    ? timeline.CommittedSnapshot.Frames.Count - 1
+                    : pendingSeedIndex;
                 if (!TryValidateGeneratedFuture(result.Frames, out var futureError))
                 {
                     FailRequest(version, futureError);
@@ -221,6 +236,7 @@ namespace UnderwaterGliderTwin.Telemetry
                 LastError = null;
                 Status = IsMissionComplete() ? SimulationTimelineStatus.Completed : SimulationTimelineStatus.Committed;
                 timeline.SetStatus(Status);
+                RestorePlaybackAfterProfileUpdate();
                 StatusChanged?.Invoke();
             }
             catch (Exception ex)
@@ -231,23 +247,29 @@ namespace UnderwaterGliderTwin.Telemetry
 
         private void StartGeneration(int version, SimulationProfile candidate, long requestId, bool isRefill)
         {
-            var playbackSeedFrame = isRefill
-                ? timeline.CommittedSnapshot.Frames[timeline.CommittedSnapshot.Frames.Count - 1]
-                : playback.CurrentFrame;
-            pendingSeedRowIndex = playbackSeedFrame.RowIndex;
-            pendingSeedElapsedSeconds = playbackSeedFrame.ElapsedSeconds;
-            pendingSeedContinuousIndex = playback.ContinuousIndex;
+            var committedFrames = timeline.CommittedSnapshot.Frames;
+            pendingSeedIndex = isRefill
+                ? committedFrames.Count - 1
+                : FindFrameIndexAtOrBeforeElapsed(committedFrames, playback.ContinuousElapsedSeconds);
+            var playbackSeedFrame = committedFrames[pendingSeedIndex];
+            pendingSeedContinuousElapsedSeconds = isRefill
+                ? playbackSeedFrame.ElapsedSeconds
+                : playback.ContinuousElapsedSeconds;
+            pendingSeedTimelineRevision = timeline.Revision;
+            var seedProfile = isRefill
+                ? activeProfile.Clone()
+                : ResolveProfileForFrame(playbackSeedFrame);
             var generationSeedFrame = playbackSeedFrame;
             TelemetryFrame? fractionalSeedFrame = null;
             if (!isRefill
-                && playback.CurrentIndex < playback.Frames.Count - 1
-                && playback.ContinuousElapsedSeconds - playbackSeedFrame.ElapsedSeconds > 0.0001f)
+                && pendingSeedIndex < committedFrames.Count - 1
+                && pendingSeedContinuousElapsedSeconds - playbackSeedFrame.ElapsedSeconds > 0.0001f)
             {
                 var warmupStepper = SimulationMissionStepper.FromSnapshot(
-                    SimulationStateSnapshot.FromFrame(playbackSeedFrame, activeProfile),
-                    activeProfile);
+                    SimulationStateSnapshot.FromFrame(playbackSeedFrame, seedProfile),
+                    seedProfile);
                 if (warmupStepper.TryAdvance(
-                    playback.ContinuousElapsedSeconds - playbackSeedFrame.ElapsedSeconds,
+                    pendingSeedContinuousElapsedSeconds - playbackSeedFrame.ElapsedSeconds,
                     out var preciseFrame))
                 {
                     generationSeedFrame = preciseFrame;
@@ -255,17 +277,27 @@ namespace UnderwaterGliderTwin.Telemetry
                 }
             }
 
-            var seed = SimulationStateSnapshot.FromFrame(generationSeedFrame, activeProfile);
+            var seed = SimulationStateSnapshot.FromFrame(generationSeedFrame, seedProfile);
             var token = ++generationToken;
             pendingIsRefill = isRefill;
             pendingRequestId = requestId;
             Status = SimulationTimelineStatus.Generating;
             StatusChanged?.Invoke();
+            var retainedFrameCount = isRefill
+                ? committedFrames.Count
+                : pendingSeedIndex + 1;
             var maximumFrameCount = Math.Max(
                 0,
                 MaximumTimelineFrameCount
-                    - timeline.CommittedSnapshot.Frames.Count
+                    - retainedFrameCount
                     - (fractionalSeedFrame.HasValue ? 1 : 0));
+            if (isRefill)
+            {
+                var refillWindowFrames = Math.Max(
+                    128,
+                    (int)Math.Ceiling(120d / Math.Max(0.1d, candidate.SampleIntervalSeconds)));
+                maximumFrameCount = Math.Min(maximumFrameCount, refillWindowFrames);
+            }
             var operation = generator.GenerateFuture(
                 seed,
                 candidate,
@@ -556,8 +588,60 @@ namespace UnderwaterGliderTwin.Telemetry
             queuedProfile = null;
             LastError = error;
             Status = status;
-            timeline.SetStatus(status);
+            if (!pendingIsRefill)
+            {
+                RestorePlaybackAfterProfileUpdate();
+            }
             StatusChanged?.Invoke();
+        }
+
+        private void RestorePlaybackAfterProfileUpdate()
+        {
+            if (!restorePlaybackAfterProfileUpdate)
+            {
+                return;
+            }
+
+            var shouldResume = playbackWasPlayingBeforeProfileUpdate;
+            restorePlaybackAfterProfileUpdate = false;
+            playbackWasPlayingBeforeProfileUpdate = false;
+            playback.SetPlaying(shouldResume);
+        }
+
+        private SimulationProfile ResolveProfileForFrame(TelemetryFrame frame)
+        {
+            var segments = timeline.CommittedSnapshot.Segments;
+            for (var i = segments.Count - 1; i >= 0; i--)
+            {
+                if (segments[i].ProfileSequence == frame.ProfileSequence)
+                {
+                    return segments[i].Profile;
+                }
+            }
+
+            return activeProfile.Clone();
+        }
+
+        private static int FindFrameIndexAtOrBeforeElapsed(
+            IReadOnlyList<TelemetryFrame> frames,
+            float elapsedSeconds)
+        {
+            var low = 0;
+            var high = frames.Count - 1;
+            while (low < high)
+            {
+                var middle = low + (high - low + 1) / 2;
+                if (frames[middle].ElapsedSeconds <= elapsedSeconds)
+                {
+                    low = middle;
+                }
+                else
+                {
+                    high = middle - 1;
+                }
+            }
+
+            return low;
         }
 
         private int CurrentProfileSequence()

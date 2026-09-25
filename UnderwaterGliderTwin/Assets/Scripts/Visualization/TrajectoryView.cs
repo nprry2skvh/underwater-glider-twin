@@ -492,6 +492,12 @@ namespace UnderwaterGliderTwin.Visualization
 
         private void UpdateActualLineAfterReplacement(TelemetryFrame frame, int index)
         {
+            if (index < replacementPreservedIndex)
+            {
+                RenderRewoundHistory(frame);
+                return;
+            }
+
             var additionalFrames = Mathf.Max(0, index - replacementPreservedIndex);
             var targetCount = replacementHistoryPointCount + additionalFrames;
             if (targetCount > actualBuffer.Length)
@@ -527,6 +533,48 @@ namespace UnderwaterGliderTwin.Visualization
             RebuildPredictedHistory();
             UpdatePlannedLine();
             lastActualCount = targetCount;
+        }
+
+        private void RenderRewoundHistory(TelemetryFrame frame)
+        {
+            var elapsedSeconds = playback.Model.ContinuousElapsedSeconds;
+            var historyFrames = playback.Model.Frames
+                .TakeWhile(candidate => candidate.ElapsedSeconds <= elapsedSeconds + 0.0001f)
+                .ToArray();
+            if (historyFrames.Length == 0)
+            {
+                historyFrames = new[] { playback.Model.Frames[0] };
+            }
+
+            var visible = new List<Vector3>(TrajectorySampler.SampleSmooth(historyFrames, mapper, 1200));
+            var currentPoint = mapper != null && TelemetryPositionUtility.HasUsableCoordinates(frame)
+                ? mapper.Map(frame)
+                : visible.Count > 0 ? visible[visible.Count - 1] : Vector3.zero;
+            if (visible.Count == 0)
+            {
+                visible.Add(currentPoint);
+            }
+            else if ((visible[visible.Count - 1] - currentPoint).sqrMagnitude > 0.000001f)
+            {
+                visible.Add(currentPoint);
+            }
+            else
+            {
+                visible[visible.Count - 1] = currentPoint;
+            }
+
+            actualLine.positionCount = visible.Count;
+            actualLine.SetPositions(visible.ToArray());
+            currentActualWorldPoint = currentPoint;
+            if (currentMarker != null)
+            {
+                currentMarker.transform.position = currentActualWorldPoint;
+            }
+
+            UpdateFutureActualLine(visible.Count);
+            RebuildPredictedHistory();
+            UpdatePlannedLine();
+            lastActualCount = visible.Count;
         }
 
         private void RebuildPredictedHistory()
