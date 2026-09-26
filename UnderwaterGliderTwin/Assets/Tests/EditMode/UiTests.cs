@@ -401,6 +401,53 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void DashboardView_AllowsRebuildRefreshWithinThePlaybackThrottleWindow()
+        {
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            Assert.That(dashboard.ShouldUpdateForFrame(1f, FrameUpdateReason.Initial), Is.True);
+            Assert.That(dashboard.ShouldUpdateForFrame(1.01f, FrameUpdateReason.Rebuild), Is.True);
+        }
+
+        [Test]
+        public void DashboardView_RebuildsDistanceCacheWhenFramesAreReplacedAndExtended()
+        {
+            var originalFrames = Frames(2);
+            var playback = CreatePlayback(originalFrames);
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+            dashboard.Initialize(playback, null);
+
+            var replacementFrames = new List<TelemetryFrame>
+            {
+                originalFrames[0],
+                WithCoordinates(originalFrames[1], 120.001, 25, 1000f),
+                WithCoordinates(originalFrames[1], 120.002, 25, 2000f)
+            };
+            playback.Model.ReplaceFrames(replacementFrames, 0);
+            playback.Seek(1f);
+
+            Assert.That(FindText("DistanceValue").text, Is.Not.EqualTo("0.00"));
+        }
+
+        [Test]
+        public void DashboardView_MarksUnavailableSampleCoordinatesInsteadOfShowingZero()
+        {
+            var framesWithNoCoordinates = Frames(2);
+            var missingCoordinateFrames = new List<TelemetryFrame>
+            {
+                WithCoordinates(framesWithNoCoordinates[0], 0, 0),
+                WithCoordinates(framesWithNoCoordinates[1], 0, 0)
+            };
+            var playback = CreatePlayback(missingCoordinateFrames);
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Initialize(playback, null);
+
+            Assert.That(FindText("LatitudeValue").text, Is.EqualTo("-"));
+            Assert.That(FindText("LongitudeValue").text, Is.EqualTo("-"));
+        }
+
+        [Test]
         public void StatusPanelView_DisplaysAlarmAndWritesLog()
         {
             var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-log-" + System.Guid.NewGuid().ToString("N"));
@@ -3176,6 +3223,38 @@ namespace UnderwaterGliderTwin.Tests
             }
 
             return frames;
+        }
+
+        private static TelemetryFrame WithCoordinates(
+            TelemetryFrame frame,
+            double longitudeDeg,
+            double latitudeDeg,
+            float elapsedSeconds = float.NaN)
+        {
+            return new TelemetryFrame(
+                frame.RowIndex,
+                frame.RawTime,
+                float.IsNaN(elapsedSeconds) ? frame.ElapsedSeconds : elapsedSeconds,
+                longitudeDeg,
+                latitudeDeg,
+                frame.DepthM,
+                frame.AltitudeM,
+                frame.HeadingDeg,
+                frame.PitchDeg,
+                frame.RollDeg,
+                frame.Voltage24V,
+                frame.Current24A,
+                frame.BatteryPercent,
+                frame.WorkMode,
+                frame.RunState,
+                frame.TargetSegment,
+                frame.TargetHeadingDeg,
+                frame.TargetDepthM,
+                frame.TargetAltitudeM,
+                frame.PropellerRpm,
+                frame.PistonMm,
+                frame.TurnAngleDeg,
+                frame.Diagnostics);
         }
     }
 }

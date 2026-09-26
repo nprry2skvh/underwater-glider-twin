@@ -16,6 +16,7 @@ namespace UnderwaterGliderTwin.UI
         private PredictionController prediction;
         private float nextAllowedUiTime;
         private float[] cumulativeDistanceMeters;
+        private IReadOnlyList<TelemetryFrame> distanceCacheFrames;
         private Text depthValue;
         private Text headingValue;
         private Text pitchValue;
@@ -64,7 +65,7 @@ namespace UnderwaterGliderTwin.UI
         {
             playback = playbackController;
             prediction = predictionController;
-            cumulativeDistanceMeters = BuildDistanceCache(playback.Model);
+            RefreshDistanceCache(playback.Model);
 
             var canvas = UiFactory.EnsureCanvas(transform);
             UiFactory.EnsureCommandCenterHeader(canvas.transform);
@@ -166,7 +167,7 @@ namespace UnderwaterGliderTwin.UI
             dynamicsSummaryValue = refs.dynamicsSummaryValue;
             minimalBoundReferences = headingValue == null || pitchValue == null || rollValue == null;
             EnsureTelemetryEmptyState();
-            cumulativeDistanceMeters = BuildDistanceCache(playback.Model);
+            RefreshDistanceCache(playback.Model);
             if (detailsButton != null)
             {
                 detailsButton.onClick.RemoveAllListeners();
@@ -229,7 +230,9 @@ namespace UnderwaterGliderTwin.UI
 
         public bool ShouldUpdateForFrame(float timeSeconds, FrameUpdateReason reason)
         {
-            if (reason == FrameUpdateReason.Initial || reason == FrameUpdateReason.Seek)
+            if (reason == FrameUpdateReason.Initial
+                || reason == FrameUpdateReason.Seek
+                || reason == FrameUpdateReason.Rebuild)
             {
                 nextAllowedUiTime = timeSeconds + MinUiUpdateIntervalSeconds;
                 return true;
@@ -761,6 +764,7 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            RefreshDistanceCache(playback.Model);
             RefreshTelemetryState(playback.Model.Frames);
             if (!ShouldUpdateForFrame(Time.unscaledTime, reason))
             {
@@ -779,8 +783,12 @@ namespace UnderwaterGliderTwin.UI
             SetValue(pitchValue, $"{frame.PitchDeg:0.0}", "°");
             SetValue(rollValue, $"{frame.RollDeg:0.0}", "°");
             SetValue(yawValue, $"{frame.HeadingDeg:0.0}", "°");
-            SetValue(latitudeValue, $"{frame.LatitudeDeg:0.000000}", "°");
-            SetValue(longitudeValue, $"{frame.LongitudeDeg:0.000000}", "°");
+            SetValue(latitudeValue, TelemetryPositionUtility.HasUsableCoordinates(frame)
+                ? $"{frame.LatitudeDeg:0.000000}"
+                : "-", "°");
+            SetValue(longitudeValue, TelemetryPositionUtility.HasUsableCoordinates(frame)
+                ? $"{frame.LongitudeDeg:0.000000}"
+                : "-", "°");
             SetValue(velocityXValue, $"{velocity.x:0.00}", "m/s");
             SetValue(velocityYValue, $"{velocity.y:0.00}", "m/s");
             SetValue(velocityZValue, $"{velocity.z:0.00}", "m/s");
@@ -857,6 +865,7 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            RefreshDistanceCache(playback.Model);
             if (!ShouldUpdateForFrame(Time.unscaledTime, reason))
             {
                 return;
@@ -869,8 +878,8 @@ namespace UnderwaterGliderTwin.UI
             SetValue(pitchValue, $"{sample.PitchDeg:0.0}", "°");
             SetValue(rollValue, $"{sample.RollDeg:0.0}", "°");
             SetValue(yawValue, $"{sample.HeadingDeg:0.0}", "°");
-            SetValue(latitudeValue, $"{sample.LatitudeDeg:0.000000}", "°");
-            SetValue(longitudeValue, $"{sample.LongitudeDeg:0.000000}", "°");
+            SetValue(latitudeValue, sample.HasUsableCoordinates ? $"{sample.LatitudeDeg:0.000000}" : "-", "°");
+            SetValue(longitudeValue, sample.HasUsableCoordinates ? $"{sample.LongitudeDeg:0.000000}" : "-", "°");
 
             var velocity = sample.DisplayVelocityEnuMps;
             SetValue(velocityXValue, $"{velocity.x:0.00}", "m/s");
@@ -949,6 +958,26 @@ namespace UnderwaterGliderTwin.UI
             }
 
             return distances;
+        }
+
+        private void RefreshDistanceCache(PlaybackModel model)
+        {
+            if (model == null || model.Frames == null)
+            {
+                cumulativeDistanceMeters = null;
+                distanceCacheFrames = null;
+                return;
+            }
+
+            if (ReferenceEquals(distanceCacheFrames, model.Frames)
+                && cumulativeDistanceMeters != null
+                && cumulativeDistanceMeters.Length == model.FrameCount)
+            {
+                return;
+            }
+
+            cumulativeDistanceMeters = BuildDistanceCache(model);
+            distanceCacheFrames = model.Frames;
         }
 
         private static string FormatDuration(float seconds)

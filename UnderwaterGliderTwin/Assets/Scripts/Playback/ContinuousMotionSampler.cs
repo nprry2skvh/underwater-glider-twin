@@ -81,7 +81,7 @@ namespace UnderwaterGliderTwin.Playback
             var displayVelocity = hasDiagnostics
                 ? DynamicsToEnu(groundVelocity)
                 : index > 0
-                    ? EstimateVelocityEnu(frames[index - 1], frame)
+                    ? EstimateVelocityEnu(frames, frames[index - 1], frame)
                     : Vector3.zero;
             var controlDeflection = hasDiagnostics
                 ? Sanitize(frame.Diagnostics.Value.ControlSurfaceDeflectionDeg)
@@ -151,7 +151,7 @@ namespace UnderwaterGliderTwin.Playback
             var groundVelocity = Sanitize(waterVelocity + currentVelocity);
             var displayVelocity = hasDiagnostics
                 ? DynamicsToEnu(groundVelocity)
-                : EstimateVelocityEnu(lower, upper);
+                : EstimateVelocityEnu(frames, lower, upper);
             var controlDeflection = hasDiagnostics
                 ? LerpSanitized(
                     lower.Diagnostics.Value.ControlSurfaceDeflectionDeg,
@@ -179,21 +179,45 @@ namespace UnderwaterGliderTwin.Playback
                 controlDeflection);
         }
 
-        private static Vector3 EstimateVelocityEnu(TelemetryFrame lower, TelemetryFrame upper)
+        private static Vector3 EstimateVelocityEnu(
+            IReadOnlyList<TelemetryFrame> frames,
+            TelemetryFrame lower,
+            TelemetryFrame upper)
         {
             var deltaSeconds = upper.ElapsedSeconds - lower.ElapsedSeconds;
             if (!IsFinite(deltaSeconds)
                 || deltaSeconds <= TimeEpsilon
-                || !TelemetryKinematicsUtility.TryGetHorizontalDisplacementMeters(lower, upper, out var horizontalMeters))
+                || !TelemetryPositionUtility.HasUsableCoordinates(lower)
+                || !TelemetryPositionUtility.HasUsableCoordinates(upper))
             {
                 return Vector3.zero;
             }
 
+            var originIndex = TelemetryPositionUtility.FindFirstUsableCoordinateIndex(frames);
+            if (originIndex < 0)
+            {
+                return Vector3.zero;
+            }
+
+            var origin = frames[originIndex];
+            var lowerPosition = LocalMissionCoordinateConverter.ToLocalPosition(
+                lower.LongitudeDeg,
+                lower.LatitudeDeg,
+                lower.DepthM,
+                origin.LongitudeDeg,
+                origin.LatitudeDeg);
+            var upperPosition = LocalMissionCoordinateConverter.ToLocalPosition(
+                upper.LongitudeDeg,
+                upper.LatitudeDeg,
+                upper.DepthM,
+                origin.LongitudeDeg,
+                origin.LatitudeDeg);
+            var localDelta = upperPosition - lowerPosition;
             var depthDelta = Sanitize(upper.DepthM) - Sanitize(lower.DepthM);
             return Sanitize(new Vector3(
-                horizontalMeters.x / deltaSeconds,
+                localDelta.x / deltaSeconds,
                 -depthDelta / deltaSeconds,
-                horizontalMeters.y / deltaSeconds));
+                localDelta.z / deltaSeconds));
         }
 
         private static Vector3 DynamicsToEnu(Vector3 eastDownNorth)

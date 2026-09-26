@@ -140,6 +140,33 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(IsFinite(sample.ControlSurfaceDeflectionDeg), Is.True);
         }
 
+        [Test]
+        public void Sample_CsvVelocityUsesTheSameOriginProjectionAsSceneCoordinates()
+        {
+            var frames = new[]
+            {
+                Frame(0, 0f, 10d, 70d, 10f, 0f, 0f, 0f),
+                Frame(1, 10f, 11d, 80d, 10f, 0f, 0f, 0f)
+            };
+            var sample = ContinuousMotionSampler.Sample(frames, 5f);
+            var origin = frames[0];
+            var lowerPosition = LocalMissionCoordinateConverter.ToLocalPosition(
+                frames[0].LongitudeDeg,
+                frames[0].LatitudeDeg,
+                frames[0].DepthM,
+                origin.LongitudeDeg,
+                origin.LatitudeDeg);
+            var upperPosition = LocalMissionCoordinateConverter.ToLocalPosition(
+                frames[1].LongitudeDeg,
+                frames[1].LatitudeDeg,
+                frames[1].DepthM,
+                origin.LongitudeDeg,
+                origin.LatitudeDeg);
+            var expectedVelocity = (upperPosition - lowerPosition) / 10f;
+
+            Assert.That(Vector3.Distance(sample.DisplayVelocityEnuMps, expectedVelocity), Is.LessThan(0.001f));
+        }
+
         private static TelemetryFrame Frame(
             int row,
             float elapsedSeconds,
