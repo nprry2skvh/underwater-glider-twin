@@ -52,46 +52,13 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void GliderTransformDriver_AppliesCurrentFramePose()
-        {
-            var frames = Frames(3);
-            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
-            var playback = CreatePlayback(frames);
-            playback.Seek(1f);
-            var glider = new GameObject("Glider");
-            var driver = glider.AddComponent<GliderTransformDriver>();
-
-            driver.Initialize(playback, mapper);
-
-            Assert.That(glider.transform.position.y, Is.EqualTo(-20f).Within(0.001f));
-            Assert.That(glider.transform.position.z, Is.GreaterThan(0f));
-        }
-
-        [Test]
-        public void GliderTransformDriver_AlignsTheVisualFuselageWithTheGroundTrack()
+        public void GliderTransformDriver_UsesContinuousRawTelemetryPose()
         {
             var frames = new[]
             {
-                new TelemetryFrame(0, "t0", 0f, 120.0000, 25.0000, 0f, 100f, 0f, 0f, 3f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
-                new TelemetryFrame(1, "t1", 10f, 120.0001, 25.0000, 10f, 90f, 0f, 0f, 3f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
-                new TelemetryFrame(2, "t2", 20f, 120.0002, 25.0000, 20f, 80f, 0f, 0f, 3f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f)
+                new TelemetryFrame(0, "t0", 0f, 120d, 25d, 10f, 90f, 350f, -10f, 170f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(1, "t1", 10f, 120.001d, 25.002d, 30f, 70f, 10f, 10f, -170f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f)
             };
-            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
-            var playback = CreatePlayback(frames);
-            playback.Seek(0.5f);
-            var glider = new GameObject("Glider");
-            var driver = glider.AddComponent<GliderTransformDriver>();
-
-            driver.Initialize(playback, mapper);
-
-            var groundTrack = (mapper.Map(frames[2]) - mapper.Map(frames[0])).normalized;
-            Assert.That(Vector3.Dot(glider.transform.forward, groundTrack), Is.GreaterThan(0.99f));
-        }
-
-        [Test]
-        public void GliderTransformDriver_SmoothsPlaybackPoseChanges()
-        {
-            var frames = Frames(3);
             var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
             var playback = CreatePlayback(frames);
             var glider = new GameObject("Glider");
@@ -99,10 +66,31 @@ namespace UnderwaterGliderTwin.Tests
 
             driver.Initialize(playback, mapper);
             playback.SetPlaying(true);
-            playback.Step(1f);
+            playback.Step(0.5f);
 
-            Assert.That(glider.transform.position.y, Is.LessThan(0f));
-            Assert.That(glider.transform.position.y, Is.GreaterThan(-10f));
+            Assert.That(glider.transform.position.y, Is.EqualTo(-20f).Within(0.001f));
+            Assert.That(glider.transform.position.x, Is.EqualTo((mapper.Map(frames[1]).x + mapper.Map(frames[0]).x) * 0.5f).Within(0.001f));
+            var expectedRotation = PoseMapper.ToRotation(0f, 0f, 180f, AttitudeSettings.Default);
+            Assert.That(Quaternion.Angle(glider.transform.rotation, expectedRotation), Is.LessThan(0.01f));
+        }
+
+        [Test]
+        public void GliderTransformDriver_UsesTelemetryAttitudeInsteadOfPathTangent()
+        {
+            var frames = new[]
+            {
+                new TelemetryFrame(0, "t0", 0f, 120.0000, 25.0000, 0f, 100f, 0f, 0f, 0f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(1, "t1", 10f, 120.0001, 25.0000, 10f, 90f, 0f, 0f, 0f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f)
+            };
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var glider = new GameObject("Glider");
+            var driver = glider.AddComponent<GliderTransformDriver>();
+
+            driver.Initialize(playback, mapper);
+
+            Assert.That(Vector3.Dot(glider.transform.forward, Vector3.forward), Is.GreaterThan(0.999f));
+            Assert.That(Vector3.Dot(glider.transform.forward, Vector3.right), Is.LessThan(0.01f));
         }
 
         [Test]
@@ -142,12 +130,107 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void GliderTransformDriver_FutureReplacementCannotMoveExactCurrentPose()
+        {
+            var original = new[]
+            {
+                new TelemetryFrame(0, "t0", 0f, 120d, 25d, 0f, 100f, 10f, 2f, 3f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(1, "t1", 10f, 120.001d, 25.001d, 10f, 90f, 20f, 4f, 5f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(2, "t2", 20f, 120.002d, 25.002d, 20f, 80f, 30f, 6f, 7f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f)
+            };
+            var replacement = new[]
+            {
+                original[0],
+                original[1],
+                new TelemetryFrame(2, "replacement", 15f, 80d, -30d, 900f, 0f, 250f, -80f, 90f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f)
+            };
+            var mapper = new GeoCoordinateMapper(original[0], 1f, 1f);
+            var playback = CreatePlayback(original);
+            playback.Seek(0.5f);
+            var glider = new GameObject("Glider");
+            var driver = glider.AddComponent<GliderTransformDriver>();
+            driver.Initialize(playback, mapper);
+            var before = glider.transform.position;
+            var beforeRotation = glider.transform.rotation;
+
+            playback.Model.ReplaceFrames(replacement, playback.Model.CurrentIndex);
+
+            Assert.That(glider.transform.position, Is.EqualTo(before));
+            Assert.That(Quaternion.Angle(glider.transform.rotation, beforeRotation), Is.LessThan(0.001f));
+        }
+
+        [Test]
+        public void GliderVisualController_MapsDynamicsVectorsIntoUnityCoordinates()
+        {
+            var diagnostics = new SimulationDiagnostics(Vector3.zero, new Vector3(1f, 2f, 3f), 0f, 0f, 0f);
+            var frame = FrameWithDiagnostics(diagnostics);
+            var playback = CreatePlayback(new[] { frame });
+            var mapper = new GeoCoordinateMapper(frame, horizontalScale: 2f, depthScale: 4f);
+            var glider = GliderVisualBuilder.Build();
+            glider.transform.rotation = Quaternion.Euler(12f, 37f, -9f);
+            var controller = glider.AddComponent<GliderVisualController>();
+
+            controller.Initialize(playback, mapper);
+
+            Assert.That(controller.CurrentVector.useWorldSpace, Is.False);
+            var worldStart = controller.CurrentVector.transform.TransformPoint(controller.CurrentVector.GetPosition(0));
+            var worldEnd = controller.CurrentVector.transform.TransformPoint(controller.CurrentVector.GetPosition(1));
+            var worldVector = worldEnd - worldStart;
+            Assert.That(worldVector.x, Is.EqualTo(5f).Within(0.001f));
+            Assert.That(worldVector.y, Is.EqualTo(-20f).Within(0.001f));
+            Assert.That(worldVector.z, Is.EqualTo(15f).Within(0.001f));
+        }
+
+        [Test]
+        public void GliderVisualController_WorldVectorsFollowMovingParentContinuously()
+        {
+            var diagnostics = new SimulationDiagnostics(Vector3.zero, Vector3.right, 0f, 0f, 0f);
+            var frame = FrameWithDiagnostics(diagnostics);
+            var playback = CreatePlayback(new[] { frame });
+            var glider = GliderVisualBuilder.Build();
+            var controller = glider.AddComponent<GliderVisualController>();
+            controller.Initialize(playback, new GeoCoordinateMapper(frame, 1f, 1f));
+            var localStart = controller.CurrentVector.GetPosition(0);
+            var localEnd = controller.CurrentVector.GetPosition(1);
+
+            glider.transform.position = new Vector3(12f, -7f, 30f);
+
+            Assert.That(controller.CurrentVector.GetPosition(0), Is.EqualTo(localStart));
+            Assert.That(controller.CurrentVector.GetPosition(1), Is.EqualTo(localEnd));
+            Assert.That(controller.CurrentVector.transform.TransformPoint(localStart), Is.EqualTo(glider.transform.position));
+        }
+
+        [Test]
+        public void GliderVisualController_UsesDiagnosticControlSurfaceDeflections()
+        {
+            var diagnostics = new SimulationDiagnostics(
+                Vector3.zero,
+                Vector3.zero,
+                0f,
+                0f,
+                0f,
+                controlSurfaceDeflectionDeg: new Vector3(4f, 6f, 8f));
+            var frame = FrameWithDiagnostics(diagnostics);
+            var playback = CreatePlayback(new[] { frame });
+            var controller = GliderVisualBuilder.Build().AddComponent<GliderVisualController>();
+
+            controller.Initialize(playback, new GeoCoordinateMapper(frame, 1f, 1f));
+
+            Assert.That(Mathf.DeltaAngle(0f, controller.PortControlSurface.localEulerAngles.x), Is.EqualTo(10f).Within(0.001f));
+            Assert.That(Mathf.DeltaAngle(0f, controller.StarboardControlSurface.localEulerAngles.x), Is.EqualTo(2f).Within(0.001f));
+            Assert.That(Mathf.DeltaAngle(0f, controller.VerticalTail.localEulerAngles.y), Is.EqualTo(8f).Within(0.001f));
+        }
+
+        [Test]
         public void GliderVisualController_HidesVectorsForCsvReplay()
         {
+            var frame = Frames(1)[0];
+            var playback = CreatePlayback(new[] { frame });
             var controller = GliderVisualBuilder.Build().AddComponent<GliderVisualController>();
-            controller.ApplyFrame(Frames(1)[0]);
+            controller.Initialize(playback, new GeoCoordinateMapper(frame, 1f, 1f));
 
             Assert.That(controller.CurrentVector.gameObject.activeSelf, Is.False);
+            Assert.That(Quaternion.Angle(controller.PortControlSurface.localRotation, Quaternion.identity), Is.LessThan(0.001f));
         }
 
         [Test]
@@ -432,6 +515,14 @@ namespace UnderwaterGliderTwin.Tests
             }
 
             return frames;
+        }
+
+        private static TelemetryFrame FrameWithDiagnostics(SimulationDiagnostics diagnostics)
+        {
+            return new TelemetryFrame(
+                0, "t", 0f, 120d, 25d, 0f, 100f, 30f, -14f, 18f,
+                28f, 0f, 90f, "Parameter Simulation", "Glide", 1f, 30f, 10f, 90f,
+                0f, 0f, 20f, diagnostics);
         }
     }
 }

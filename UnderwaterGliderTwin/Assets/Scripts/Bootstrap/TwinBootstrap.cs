@@ -143,7 +143,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             var driver = glider.AddComponent<GliderTransformDriver>();
             driver.Initialize(PlaybackController, Mapper);
             var visualController = glider.AddComponent<GliderVisualController>();
-            visualController.Initialize(PlaybackController);
+            visualController.Initialize(PlaybackController, Mapper);
 
             trajectoryView = new GameObject("TrajectoryView").AddComponent<TrajectoryView>();
             trajectoryView.Initialize(LoadResult.Frames, Mapper, PlaybackController, prediction);

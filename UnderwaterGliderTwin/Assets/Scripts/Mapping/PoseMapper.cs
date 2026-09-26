@@ -12,9 +12,18 @@ namespace UnderwaterGliderTwin.Mapping
 
         public static Quaternion ToRotation(TelemetryFrame frame, AttitudeSettings settings)
         {
-            var headingDeg = NormalizeHeading(frame.HeadingDeg);
-            var pitchDeg = Mathf.Clamp(frame.PitchDeg * settings.PitchScale, -settings.MaxAbsPitchDeg, settings.MaxAbsPitchDeg);
-            var rollDeg = Mathf.Clamp(frame.RollDeg * settings.RollScale, -settings.MaxAbsRollDeg, settings.MaxAbsRollDeg);
+            return ToRotation(frame.HeadingDeg, frame.PitchDeg, frame.RollDeg, settings);
+        }
+
+        public static Quaternion ToRotation(
+            float headingDeg,
+            float pitchDeg,
+            float rollDeg,
+            AttitudeSettings settings)
+        {
+            headingDeg = NormalizeHeading(headingDeg);
+            pitchDeg = Mathf.Clamp(pitchDeg * settings.PitchScale, -settings.MaxAbsPitchDeg, settings.MaxAbsPitchDeg);
+            rollDeg = Mathf.Clamp(rollDeg * settings.RollScale, -settings.MaxAbsRollDeg, settings.MaxAbsRollDeg);
 
             var yaw = Quaternion.AngleAxis(headingDeg, Vector3.up);
             var pitch = Quaternion.AngleAxis(pitchDeg, Vector3.right);
