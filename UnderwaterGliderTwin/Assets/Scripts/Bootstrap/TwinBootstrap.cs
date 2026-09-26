@@ -368,7 +368,7 @@ namespace UnderwaterGliderTwin.Bootstrap
 
         private bool ShouldUseGeneratedRuntimeUi()
         {
-            return useGeneratedRuntimeUi || runtimeUiRoot == null;
+            return useGeneratedRuntimeUi;
         }
 
         private IEnumerator RunRuntimeSmoke(RuntimeSmokeOptions options)
