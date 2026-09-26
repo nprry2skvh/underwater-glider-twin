@@ -84,21 +84,9 @@ namespace UnderwaterGliderTwin.Playback
 
             var previousContinuousIndex = ContinuousIndex;
             var previousContinuousElapsed = ContinuousElapsedSeconds;
-            if (timeline != null)
-            {
-                var firstDelta = frames.Count > 1
-                    ? Mathf.Max(0.0001f, frames[1].ElapsedSeconds - frames[0].ElapsedSeconds)
-                    : 1f;
-                continuousElapsedSeconds += rowsPerSecond * firstDelta * Speed * deltaSeconds * Direction;
-                continuousElapsedSeconds = Mathf.Clamp(continuousElapsedSeconds, StartElapsedSeconds, EndElapsedSeconds);
-                continuousIndex = FindContinuousIndex(continuousElapsedSeconds);
-            }
-            else
-            {
-                continuousIndex += rowsPerSecond * Speed * deltaSeconds * Direction;
-                continuousIndex = Math.Max(0f, Math.Min(frames.Count - 1, continuousIndex));
-                continuousElapsedSeconds = InterpolateElapsedSeconds(continuousIndex);
-            }
+            continuousIndex += rowsPerSecond * Speed * deltaSeconds * Direction;
+            continuousIndex = Math.Max(0f, Math.Min(frames.Count - 1, continuousIndex));
+            continuousElapsedSeconds = InterpolateElapsedSeconds(continuousIndex);
             var nextIndex = Direction >= 0
                 ? Math.Min(frames.Count - 1, (int)Math.Floor(continuousIndex))
                 : Math.Max(0, (int)Math.Ceiling(continuousIndex));
@@ -182,7 +170,7 @@ namespace UnderwaterGliderTwin.Playback
             }
 
             var remainingFrames = frames.Count - CurrentIndex - 1;
-            var remainingSeconds = EndElapsedSeconds - CurrentElapsedSeconds;
+            var remainingSeconds = EndElapsedSeconds - ContinuousElapsedSeconds;
             return remainingFrames >= minimumFrames && remainingSeconds >= seconds;
         }
 
@@ -303,6 +291,7 @@ namespace UnderwaterGliderTwin.Playback
             frames = snapshot.Frames;
             continuousElapsedSeconds = Mathf.Clamp(continuousElapsedSeconds, StartElapsedSeconds, EndElapsedSeconds);
             continuousIndex = FindContinuousIndex(continuousElapsedSeconds);
+            continuousElapsedSeconds = InterpolateElapsedSeconds(continuousIndex);
             CurrentIndex = Direction >= 0
                 ? Mathf.Clamp(Mathf.FloorToInt(continuousIndex), 0, frames.Count - 1)
                 : Mathf.Clamp(Mathf.CeilToInt(continuousIndex), 0, frames.Count - 1);

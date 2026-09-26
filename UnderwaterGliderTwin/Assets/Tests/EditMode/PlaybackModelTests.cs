@@ -20,6 +20,78 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void Tick_TracksContinuousIndexAndElapsedTimeBetweenFrames()
+        {
+            var frames = new List<TelemetryFrame>
+            {
+                TimedFrame(0, 0f),
+                TimedFrame(1, 10f),
+                TimedFrame(2, 30f)
+            };
+            var model = new PlaybackModel(frames, rowsPerSecond: 1f);
+            model.SetPlaying(true);
+
+            model.Tick(0.5f);
+
+            Assert.That(model.ContinuousIndex, Is.EqualTo(0.5f).Within(0.001f));
+            Assert.That(model.CurrentIndex, Is.EqualTo(0));
+            Assert.That(model.ContinuousElapsedSeconds, Is.EqualTo(5f).Within(0.001f));
+        }
+
+        [Test]
+        public void BoundTimelineTick_UsesRowsPerSecondAcrossIrregularIntervals()
+        {
+            var frames = IrregularFrames();
+            var timeline = Timeline(frames);
+            var model = new PlaybackModel(frames, rowsPerSecond: 1f);
+            model.BindTimeline(timeline);
+            model.SeekNormalized(1f / 3f);
+            model.SetPlaying(true);
+
+            model.Tick(1f);
+
+            Assert.That(model.ContinuousIndex, Is.EqualTo(2f).Within(0.001f));
+            Assert.That(model.CurrentIndex, Is.EqualTo(2));
+            Assert.That(model.ContinuousElapsedSeconds, Is.EqualTo(11f).Within(0.001f));
+        }
+
+        [Test]
+        public void BoundTimelineTick_ReverseUsesTheSameClockContract()
+        {
+            var frames = IrregularFrames();
+            var timeline = Timeline(frames);
+            var model = new PlaybackModel(frames, rowsPerSecond: 1f);
+            model.BindTimeline(timeline);
+            model.SeekNormalized(2f / 3f);
+            model.SetDirection(-1);
+            model.SetPlaying(true);
+
+            model.Tick(1f);
+
+            Assert.That(model.ContinuousIndex, Is.EqualTo(1f).Within(0.001f));
+            Assert.That(model.CurrentIndex, Is.EqualTo(1));
+            Assert.That(model.ContinuousElapsedSeconds, Is.EqualTo(1f).Within(0.001f));
+        }
+
+        [Test]
+        public void HasFutureHorizon_UsesContinuousElapsedInsteadOfDiscreteFrameTime()
+        {
+            var frames = IrregularFrames();
+            var timeline = Timeline(frames);
+            var model = new PlaybackModel(frames, rowsPerSecond: 1f);
+            model.BindTimeline(timeline);
+            model.SeekNormalized(1f / 3f);
+            model.SetPlaying(true);
+
+            model.Tick(0.5f);
+
+            Assert.That(model.ContinuousIndex, Is.EqualTo(1.5f).Within(0.001f));
+            Assert.That(model.ContinuousElapsedSeconds, Is.EqualTo(6f).Within(0.001f));
+            Assert.That(model.HasFutureHorizon(7f, 1), Is.False);
+            Assert.That(model.HasFutureHorizon(6f, 1), Is.True);
+        }
+
+        [Test]
         public void SeekNormalized_ClampsToValidIndex()
         {
             var model = new PlaybackModel(Frames(100), rowsPerSecond: 10f);
@@ -202,6 +274,24 @@ namespace UnderwaterGliderTwin.Tests
             return new SimulationTrajectoryTimeline(
                 frames,
                 new SimulationTimelineSegment(0, 0, 0, 0f, new SimulationProfile(), System.DateTime.UtcNow));
+        }
+
+        private static IReadOnlyList<TelemetryFrame> IrregularFrames()
+        {
+            return new[]
+            {
+                TimedFrame(0, 0f),
+                TimedFrame(1, 1f),
+                TimedFrame(2, 11f),
+                TimedFrame(3, 12f)
+            };
+        }
+
+        private static TelemetryFrame TimedFrame(int index, float elapsedSeconds)
+        {
+            return new TelemetryFrame(
+                index, $"t{index}", elapsedSeconds, 120, 25, index, 100, 0, 0, 0,
+                28, 0, 95, "mode", "state", 1, 0, 0, 0, 0, 0, 0);
         }
 
         private static TelemetryFrame Frame(int index, int profileSequence = 0)
