@@ -143,13 +143,14 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(Vector3.Distance(driver.transform.position, expectedPosition), Is.LessThan(0.001f));
             Assert.That(Quaternion.Angle(driver.transform.rotation, expectedRotation), Is.LessThan(0.001f));
-            Assert.That(FindText("DepthValue").text, Is.EqualTo($"{sample.DepthM:0.0} m"));
-            Assert.That(FindText("HeadingValue").text, Is.EqualTo($"{sample.HeadingDeg:0.0}°"));
-            Assert.That(FindText("PitchValue").text, Is.EqualTo($"{sample.PitchDeg:0.0}°"));
-            Assert.That(FindText("RollValue").text, Is.EqualTo($"{sample.RollDeg:0.0}°"));
-            Assert.That(FindText("VelocityXValue").text, Is.EqualTo($"{sample.DisplayVelocityEnuMps.x:0.00} m/s"));
-            Assert.That(FindText("VelocityYValue").text, Is.EqualTo($"{sample.DisplayVelocityEnuMps.y:0.00} m/s"));
-            Assert.That(FindText("VelocityZValue").text, Is.EqualTo($"{sample.DisplayVelocityEnuMps.z:0.00} m/s"));
+            Assert.That(FindText("DepthValue").text, Is.EqualTo($"{sample.DepthM:0.0}"));
+            Assert.That(FindText("DepthValueUnit").text, Is.EqualTo("m"));
+            Assert.That(FindText("HeadingValue").text, Is.EqualTo($"{sample.HeadingDeg:0.0}"));
+            Assert.That(FindText("PitchValue").text, Is.EqualTo($"{sample.PitchDeg:0.0}"));
+            Assert.That(FindText("RollValue").text, Is.EqualTo($"{sample.RollDeg:0.0}"));
+            Assert.That(FindText("VelocityXValue").text, Is.EqualTo($"{sample.DisplayVelocityEnuMps.x:0.00}"));
+            Assert.That(FindText("VelocityYValue").text, Is.EqualTo($"{sample.DisplayVelocityEnuMps.y:0.00}"));
+            Assert.That(FindText("VelocityZValue").text, Is.EqualTo($"{sample.DisplayVelocityEnuMps.z:0.00}"));
             Assert.That(
                 FindText("MissionTimeValue").text,
                 Is.EqualTo(FormatDuration(sample.ElapsedSeconds - model.StartElapsedSeconds)));

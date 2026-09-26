@@ -112,6 +112,7 @@ namespace UnderwaterGliderTwin.UI
             EnsureTelemetryEmptyState();
 
             playback.FrameChangedWithReason += OnFrameChanged;
+            playback.ContinuousChanged += OnContinuousChanged;
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
             navigationReferenceCard = BuildNavigationReferenceCard(canvas.transform);
             RefreshDetails();
@@ -177,6 +178,8 @@ namespace UnderwaterGliderTwin.UI
 
             playback.FrameChangedWithReason -= OnFrameChanged;
             playback.FrameChangedWithReason += OnFrameChanged;
+            playback.ContinuousChanged -= OnContinuousChanged;
+            playback.ContinuousChanged += OnContinuousChanged;
             RefreshFromCurrentFrame();
         }
 
@@ -211,6 +214,7 @@ namespace UnderwaterGliderTwin.UI
             }
 
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
+            OnContinuousChanged(playback.Model.ContinuousIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
             RefreshDetails();
         }
 
@@ -219,6 +223,7 @@ namespace UnderwaterGliderTwin.UI
             if (playback != null)
             {
                 playback.FrameChangedWithReason -= OnFrameChanged;
+                playback.ContinuousChanged -= OnContinuousChanged;
             }
         }
 
@@ -843,6 +848,77 @@ namespace UnderwaterGliderTwin.UI
             SetValue(inertiaValue, dynamics == null
                 ? "-"
                 : $"{dynamics.RollInertiaKgM2:0.#}/{dynamics.PitchInertiaKgM2:0.#}/{dynamics.YawInertiaKgM2:0.#}", "kg*m2");
+        }
+
+        private void OnContinuousChanged(float continuousIndex, float progress01, FrameUpdateReason reason)
+        {
+            if (playback == null || playback.Model == null || playback.Model.Frames == null || playback.Model.Frames.Count == 0)
+            {
+                return;
+            }
+
+            if (!ShouldUpdateForFrame(Time.unscaledTime, reason))
+            {
+                return;
+            }
+
+            var model = playback.Model;
+            var sample = ContinuousMotionSampler.Sample(model.Frames, model.ContinuousElapsedSeconds);
+            SetValue(depthValue, $"{sample.DepthM:0.0}", "m");
+            SetValue(headingValue, $"{sample.HeadingDeg:0.0}", "°");
+            SetValue(pitchValue, $"{sample.PitchDeg:0.0}", "°");
+            SetValue(rollValue, $"{sample.RollDeg:0.0}", "°");
+            SetValue(yawValue, $"{sample.HeadingDeg:0.0}", "°");
+            SetValue(latitudeValue, $"{sample.LatitudeDeg:0.000000}", "°");
+            SetValue(longitudeValue, $"{sample.LongitudeDeg:0.000000}", "°");
+
+            var velocity = sample.DisplayVelocityEnuMps;
+            SetValue(velocityXValue, $"{velocity.x:0.00}", "m/s");
+            SetValue(velocityYValue, $"{velocity.y:0.00}", "m/s");
+            SetValue(velocityZValue, $"{velocity.z:0.00}", "m/s");
+            SetValue(verticalSpeedValue, $"{velocity.y:0.00}", "m/s");
+            SetValue(horizontalSpeedValue, $"{new Vector2(velocity.x, velocity.z).magnitude:0.00}", "m/s");
+
+            var origin = model.GetFrame(0);
+            if (sample.HasUsableCoordinates && TelemetryPositionUtility.HasUsableCoordinates(origin))
+            {
+                var localPosition = LocalMissionCoordinateConverter.ToLocalPosition(
+                    sample.LongitudeDeg,
+                    sample.LatitudeDeg,
+                    sample.DepthM,
+                    origin.LongitudeDeg,
+                    origin.LatitudeDeg);
+                SetValue(speedValue, FormatHorizontalDisplacement(new Vector2(localPosition.x, localPosition.z)), string.Empty);
+            }
+            else
+            {
+                SetValue(speedValue, "-", string.Empty);
+            }
+
+            SetValue(missionTimeValue, FormatDuration(sample.ElapsedSeconds - model.StartElapsedSeconds), "s");
+            var lowerIndex = Mathf.Clamp(sample.LowerIndex, 0, cumulativeDistanceMeters.Length - 1);
+            var upperIndex = Mathf.Clamp(sample.UpperIndex, 0, cumulativeDistanceMeters.Length - 1);
+            var distance = Mathf.Lerp(cumulativeDistanceMeters[lowerIndex], cumulativeDistanceMeters[upperIndex], sample.Interpolation01);
+            SetValue(distanceValue, $"{distance / 1000f:0.00}", "km");
+
+            if (sample.HasDiagnostics)
+            {
+                var current = sample.CurrentVelocityEndMps;
+                SetValue(oceanCurrentValue, $"东 {current.x:0.00} 北 {current.z:0.00}", "m/s");
+                SetValue(waterSpeedValue, $"{sample.WaterVelocityEndMps.magnitude:0.00}", "m/s");
+                SetValue(groundSpeedValue, $"{sample.GroundVelocityEndMps.magnitude:0.00}", "m/s");
+            }
+            else
+            {
+                var profileCurrent = RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation
+                    ? RuntimeDataSourceState.SimulationProfile?.OceanCurrentProfile?.GetVelocity(sample.DepthM)
+                    : null;
+                SetValue(oceanCurrentValue, profileCurrent.HasValue
+                    ? $"东 {profileCurrent.Value.x:0.00} 北 {profileCurrent.Value.y:0.00}"
+                    : "-", "m/s");
+                SetValue(waterSpeedValue, "-", "m/s");
+                SetValue(groundSpeedValue, "-", "m/s");
+            }
         }
 
         private void SetValue(Text value, string text, string unit)

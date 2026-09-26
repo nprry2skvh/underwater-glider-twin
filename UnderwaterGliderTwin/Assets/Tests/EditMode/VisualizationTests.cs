@@ -119,11 +119,18 @@ namespace UnderwaterGliderTwin.Tests
         public void GliderVisualController_DeflectsSurfacesAndShowsVectorsForSimulation()
         {
             var controller = GliderVisualBuilder.Build().AddComponent<GliderVisualController>();
-            var diagnostics = new SimulationDiagnostics(Vector3.forward, Vector3.right, 4f, 5f, 12f);
+            var diagnostics = new SimulationDiagnostics(
+                Vector3.forward,
+                Vector3.right,
+                4f,
+                5f,
+                12f,
+                controlSurfaceDeflectionDeg: new Vector3(4f, 6f, 8f));
             var frame = new TelemetryFrame(0, "t", 0f, 120d, 25d, 0f, 0f, 30f, -14f, 18f,
                 0f, 0f, 90f, "Parameter Simulation", "Glide", 1f, 30f, 10f, 0f, 0f, 0f, 20f, diagnostics);
+            var playback = CreatePlayback(new[] { frame });
 
-            controller.ApplyFrame(frame);
+            controller.Initialize(playback, new GeoCoordinateMapper(frame, 1f, 1f));
 
             Assert.That(controller.PortControlSurface.localRotation.eulerAngles.x, Is.Not.EqualTo(0f).Within(0.01f));
             Assert.That(controller.GroundVelocityVector.gameObject.activeSelf, Is.True);
