@@ -153,9 +153,9 @@ namespace UnderwaterGliderTwin.Telemetry
                 }
                 else
                 {
-                    elapsedSeconds += remainingSeconds;
+                    AdvanceSurfaceRemainder(remainingSeconds);
                     remainingSeconds = 0f;
-                    currentEndMps = ResolveCurrentAtState(state, elapsedSeconds);
+                    currentEndMps = state.EarthVelocityEndMps - state.WaterVelocityEndMps;
                     break;
                 }
                 var commands = EvaluateCommands();
@@ -515,6 +515,27 @@ namespace UnderwaterGliderTwin.Telemetry
             }
 
             return Vector2.zero;
+        }
+
+        private void AdvanceSurfaceRemainder(float seconds)
+        {
+            var remainingSeconds = Mathf.Max(0f, seconds);
+            var integrationStepSeconds = Mathf.Clamp(dynamics.IntegrationStepSeconds, 0.01f, 1f);
+            while (remainingSeconds > 0.0001f)
+            {
+                var stepSeconds = Mathf.Min(remainingSeconds, integrationStepSeconds);
+                var currentEndMps = ResolveCurrentAtState(state, elapsedSeconds + stepSeconds);
+                HoldAtSurface(ref state, currentEndMps);
+                state.PositionEndM += state.EarthVelocityEndMps * stepSeconds;
+                state.PositionEndM.y = 0f;
+
+                HoldAtSurface(ref plannedState, Vector3.zero);
+                plannedState.PositionEndM += plannedState.WaterVelocityEndMps * stepSeconds;
+                plannedState.PositionEndM.y = 0f;
+
+                elapsedSeconds += stepSeconds;
+                remainingSeconds -= stepSeconds;
+            }
         }
 
         private static void ConstrainAtSurface(ref GliderDynamicsState state, Vector3 currentEndMps)

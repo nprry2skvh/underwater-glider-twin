@@ -1,3 +1,4 @@
+using System.Linq;
 using NUnit.Framework;
 using UnderwaterGliderTwin.Telemetry;
 using UnityEngine;
@@ -62,10 +63,10 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void Load_LeavesOnlyOneSurfaceFrameBetweenCycles()
+        public void Load_StillLeavesOnlyOneSurfaceFrameBetweenCycles()
         {
             var profile = SimulationProfile.Default;
-            profile.CycleCount = 1;
+            profile.CycleCount = 2;
             profile.CycleDurationSeconds = 900f;
             profile.SampleIntervalSeconds = 5f;
             profile.TargetDepthM = 160f;
@@ -90,6 +91,46 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(maxSurfaceRun, Is.LessThanOrEqualTo(1));
             Assert.That(maxDepth, Is.GreaterThan(profile.TargetDepthM * 0.75f));
+        }
+
+        [Test]
+        public void TryAdvance_SurfaceRemainderDisplacementMatchesReportedEarthVelocity()
+        {
+            var profile = SurfaceRemainderProfile();
+            var seed = SurfaceRemainderSeed(profile);
+            var snapshot = SimulationStateSnapshot.FromFrame(seed, profile);
+
+            var generated = SimulationTrajectoryGenerator
+                .GenerateFutureSlices(snapshot, profile, frameSliceBudget: 1, maximumFrameCount: 1)
+                .SelectMany(slice => slice)
+                .Single();
+
+            Assert.That(TelemetryKinematicsUtility.TryGetHorizontalDisplacementMeters(seed, generated, out var displacement), Is.True);
+            var deltaSeconds = generated.ElapsedSeconds - seed.ElapsedSeconds;
+            var finiteDifference = displacement / deltaSeconds;
+            var diagnostics = generated.Diagnostics.Value;
+            var reportedGround = diagnostics.WaterVelocityEndMps + diagnostics.CurrentVelocityEndMps;
+
+            Assert.That(finiteDifference.x, Is.EqualTo(reportedGround.x).Within(0.03f));
+            Assert.That(finiteDifference.y, Is.EqualTo(reportedGround.z).Within(0.03f));
+        }
+
+        [Test]
+        public void TryAdvance_SurfaceRemainderKeepsDepthAndVerticalVelocityZero()
+        {
+            var profile = SurfaceRemainderProfile();
+            var snapshot = SimulationStateSnapshot.FromFrame(SurfaceRemainderSeed(profile), profile);
+
+            var generated = SimulationTrajectoryGenerator
+                .GenerateFutureSlices(snapshot, profile, frameSliceBudget: 1, maximumFrameCount: 1)
+                .SelectMany(slice => slice)
+                .Single();
+            var diagnostics = generated.Diagnostics.Value;
+
+            Assert.That(generated.DepthM, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(diagnostics.WaterVelocityEndMps.y, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(diagnostics.CurrentVelocityEndMps.y, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That((diagnostics.WaterVelocityEndMps + diagnostics.CurrentVelocityEndMps).y, Is.EqualTo(0f).Within(0.0001f));
         }
 
         [Test]
@@ -573,6 +614,59 @@ namespace UnderwaterGliderTwin.Tests
                 new OceanCurrentLayer(0f, 100f, 0.6f, 0f)
             });
             return profile;
+        }
+
+        private static SimulationProfile SurfaceRemainderProfile()
+        {
+            var profile = SimulationProfile.Default;
+            profile.CycleCount = 1;
+            profile.SampleIntervalSeconds = 20f;
+            profile.TargetDepthM = 20f;
+            profile.WaterColumnDepthM = 100f;
+            profile.HorizontalSpeedMps = 0.5f;
+            profile.StartHeadingDeg = 90f;
+            profile.Dynamics.IntegrationStepSeconds = 0.1f;
+            profile.OceanCurrentProfile = new OceanCurrentProfile(new[]
+            {
+                new OceanCurrentLayer(0f, 100f, 0.2f, 0f)
+            });
+            return profile;
+        }
+
+        private static TelemetryFrame SurfaceRemainderSeed(SimulationProfile profile)
+        {
+            var waterVelocity = new Vector3(0.5f, -1f, 0f);
+            var currentVelocity = new Vector3(0.2f, 0f, 0f);
+            var diagnostics = new SimulationDiagnostics(waterVelocity, currentVelocity, 8f, 0f, 0f);
+            return new TelemetryFrame(
+                0,
+                "seed",
+                0f,
+                profile.OriginLongitudeDeg,
+                profile.OriginLatitudeDeg,
+                0.1f,
+                profile.WaterColumnDepthM - 0.1f,
+                90f,
+                -10f,
+                0f,
+                28f,
+                0f,
+                90f,
+                "Parameter Simulation",
+                "Glide",
+                1f,
+                90f,
+                0f,
+                profile.WaterColumnDepthM,
+                0f,
+                0f,
+                0f,
+                diagnostics,
+                missionState: new SimulationMissionState
+                {
+                    Phase = SimulationMissionPhase.Ascent,
+                    CompletedCycles = 0
+                });
         }
 
         private static float MaximumAbsolutePitch(System.Collections.Generic.IReadOnlyList<TelemetryFrame> frames)
