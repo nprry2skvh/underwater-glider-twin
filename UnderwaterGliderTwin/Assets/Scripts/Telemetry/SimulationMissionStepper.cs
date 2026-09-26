@@ -7,7 +7,6 @@ namespace UnderwaterGliderTwin.Telemetry
 {
     internal sealed class SimulationMissionStepper
     {
-        private const double MetersPerDegreeLatitude = 111320.0;
         private const float ArrivalToleranceM = 1f;
         private const float EmergencyLegSafetyMultiplier = 3f;
 
@@ -375,16 +374,18 @@ namespace UnderwaterGliderTwin.Telemetry
         {
             var depthM = Mathf.Clamp(state.PositionEndM.y, 0f, waterColumnDepthM);
             var altitudeM = Mathf.Max(0f, waterColumnDepthM - depthM);
-            var latitudeDeg = coordinateProfile.OriginLatitudeDeg + state.PositionEndM.z / MetersPerDegreeLatitude;
-            var metersPerDegreeLongitude = MetersPerDegreeLatitude * Math.Cos(latitudeDeg * Math.PI / 180.0);
-            var longitudeDeg = Math.Abs(metersPerDegreeLongitude) > 0.001
-                ? coordinateProfile.OriginLongitudeDeg + state.PositionEndM.x / metersPerDegreeLongitude
-                : coordinateProfile.OriginLongitudeDeg;
-            var plannedLatitudeDeg = plannedOriginLatitudeDeg + plannedState.PositionEndM.z / MetersPerDegreeLatitude;
-            var plannedMetersPerDegreeLongitude = MetersPerDegreeLatitude * Math.Cos(plannedLatitudeDeg * Math.PI / 180.0);
-            var plannedLongitudeDeg = Math.Abs(plannedMetersPerDegreeLongitude) > 0.001
-                ? plannedOriginLongitudeDeg + plannedState.PositionEndM.x / plannedMetersPerDegreeLongitude
-                : plannedOriginLongitudeDeg;
+            LocalMissionCoordinateConverter.ToGeodetic(
+                state.PositionEndM,
+                coordinateProfile.OriginLongitudeDeg,
+                coordinateProfile.OriginLatitudeDeg,
+                out var longitudeDeg,
+                out var latitudeDeg);
+            LocalMissionCoordinateConverter.ToGeodetic(
+                plannedState.PositionEndM,
+                plannedOriginLongitudeDeg,
+                plannedOriginLatitudeDeg,
+                out var plannedLongitudeDeg,
+                out var plannedLatitudeDeg);
             var waterHorizontalVelocity = new Vector2(state.WaterVelocityEndMps.x, state.WaterVelocityEndMps.z);
             var groundHorizontalVelocity = new Vector2(state.EarthVelocityEndMps.x, state.EarthVelocityEndMps.z);
             var sideSlipDeg = waterHorizontalVelocity.sqrMagnitude > 0.0001f && groundHorizontalVelocity.sqrMagnitude > 0.0001f
@@ -431,7 +432,7 @@ namespace UnderwaterGliderTwin.Telemetry
                     + (missionState.Phase == SimulationMissionPhase.Surface && missionState.CompletedCycles > 0 ? 0 : 1),
                 targetHeadingDeg: NormalizeHeading(targetHeadingDeg),
                 targetDepthM: targetDepthM,
-                targetAltitudeM: altitudeM,
+                targetAltitudeM: waterColumnDepthM - Mathf.Clamp(targetDepthM, 0f, waterColumnDepthM),
                 propellerRpm: runState == "Surface" ? 0f : 285f,
                 pistonMm: state.PistonPositionMm,
                 turnAngleDeg: profile.HeadingDeltaPerCycleDeg,
@@ -443,11 +444,12 @@ namespace UnderwaterGliderTwin.Telemetry
 
         private Vector3 ResolveCurrentAtState(GliderDynamicsState currentState, float timeSeconds)
         {
-            var latitudeDeg = coordinateProfile.OriginLatitudeDeg + currentState.PositionEndM.z / MetersPerDegreeLatitude;
-            var metersPerDegreeLongitude = MetersPerDegreeLatitude * Math.Cos(latitudeDeg * Math.PI / 180.0);
-            var longitudeDeg = Math.Abs(metersPerDegreeLongitude) > 0.001
-                ? coordinateProfile.OriginLongitudeDeg + currentState.PositionEndM.x / metersPerDegreeLongitude
-                : coordinateProfile.OriginLongitudeDeg;
+            LocalMissionCoordinateConverter.ToGeodetic(
+                currentState.PositionEndM,
+                coordinateProfile.OriginLongitudeDeg,
+                coordinateProfile.OriginLatitudeDeg,
+                out var longitudeDeg,
+                out var latitudeDeg);
             var current = ResolveCurrentVelocity(
                 profile,
                 longitudeDeg,

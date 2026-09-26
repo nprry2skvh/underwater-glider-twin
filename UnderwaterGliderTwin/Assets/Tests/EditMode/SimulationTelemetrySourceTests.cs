@@ -7,6 +7,24 @@ namespace UnderwaterGliderTwin.Tests
     public sealed class SimulationTelemetrySourceTests
     {
         [Test]
+        public void GeneratedFrame_TargetAltitudeComesFromTargetDepth()
+        {
+            var profile = SimulationProfile.Default;
+            profile.CycleCount = 1;
+            profile.CycleDurationSeconds = 600f;
+            profile.SampleIntervalSeconds = 10f;
+            profile.TargetDepthM = 40f;
+            profile.WaterColumnDepthM = 100f;
+
+            var frames = new SimulationTelemetrySource(profile).Load().Frames;
+            var commandedFrame = frames[1];
+
+            Assert.That(commandedFrame.TargetDepthM, Is.EqualTo(40f));
+            Assert.That(commandedFrame.DepthM, Is.Not.EqualTo(commandedFrame.TargetDepthM).Within(0.1f));
+            Assert.That(commandedFrame.TargetAltitudeM, Is.EqualTo(60f).Within(0.001f));
+        }
+
+        [Test]
         public void Load_RejectsInvalidInitialDynamicsProfileBeforeGeneratingFrames()
         {
             var profile = SimulationProfile.Default;
