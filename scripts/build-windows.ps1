@@ -14,6 +14,7 @@ if (-not (Test-Path -LiteralPath $projectPath -PathType Container)) {
 
 . "$PSScriptRoot\ResolveUnityEditor.ps1"
 $UnityPath = Resolve-UnityEditorPath -UnityPath $UnityPath -ProjectPath $projectPath
+Initialize-UnityPackageManagerEnvironment
 
 New-Item -ItemType Directory -Force -Path $resultsDirectory | Out-Null
 Remove-Item -Force -ErrorAction SilentlyContinue $logPath
