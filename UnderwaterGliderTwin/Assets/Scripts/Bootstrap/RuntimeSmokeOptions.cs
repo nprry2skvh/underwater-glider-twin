@@ -84,7 +84,7 @@ namespace UnderwaterGliderTwin.Bootstrap
         public static SimulationProfile BuildSmokeRebuildProfile(SimulationProfile baseProfile)
         {
             var profile = (baseProfile ?? SimulationProfile.Default).Clone();
-            profile.CycleCount = 1;
+            profile.CycleCount = Math.Max(1, profile.CycleCount);
             profile.CycleDurationSeconds = Math.Max(20f, profile.SampleIntervalSeconds * 4f);
             profile.SampleIntervalSeconds = Math.Max(1f, Mathf.Min(profile.SampleIntervalSeconds, 5f));
             profile.TargetDepthM = Math.Max(20f, Mathf.Min(profile.TargetDepthM, 120f));

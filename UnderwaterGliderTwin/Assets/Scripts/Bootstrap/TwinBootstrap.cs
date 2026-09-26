@@ -63,6 +63,7 @@ namespace UnderwaterGliderTwin.Bootstrap
 
             var loadTimer = System.Diagnostics.Stopwatch.StartNew();
             var commandLineArgs = Environment.GetCommandLineArgs();
+            RuntimeDataSourceState.ApplyCommandLineArguments(commandLineArgs);
             var screenshotOptions = RuntimeScreenshotOptions.Parse(commandLineArgs);
             var smokeOptions = RuntimeSmokeOptions.Parse(commandLineArgs);
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)

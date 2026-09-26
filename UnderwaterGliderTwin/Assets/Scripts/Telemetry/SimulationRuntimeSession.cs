@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnderwaterGliderTwin.Playback;
+using UnityEngine;
 
 namespace UnderwaterGliderTwin.Telemetry
 {
@@ -272,8 +273,11 @@ namespace UnderwaterGliderTwin.Telemetry
                     pendingSeedContinuousElapsedSeconds - playbackSeedFrame.ElapsedSeconds,
                     out var preciseFrame))
                 {
-                    generationSeedFrame = preciseFrame;
-                    fractionalSeedFrame = preciseFrame;
+                    var continuousSample = ContinuousMotionSampler.Sample(
+                        committedFrames,
+                        pendingSeedContinuousElapsedSeconds);
+                    generationSeedFrame = PreserveContinuousMotion(preciseFrame, continuousSample);
+                    fractionalSeedFrame = generationSeedFrame;
                 }
             }
 
@@ -335,6 +339,62 @@ namespace UnderwaterGliderTwin.Telemetry
             };
             frames.AddRange(result.Frames);
             return SimulationRebuildResult.Success(frames);
+        }
+
+        private static TelemetryFrame PreserveContinuousMotion(
+            TelemetryFrame generatedFrame,
+            ContinuousMotionSample sample)
+        {
+            SimulationDiagnostics? diagnostics = null;
+            if (sample.HasDiagnostics)
+            {
+                var generatedDiagnostics = generatedFrame.Diagnostics ?? default;
+                diagnostics = new SimulationDiagnostics(
+                    sample.WaterVelocityEndMps,
+                    sample.CurrentVelocityEndMps,
+                    generatedDiagnostics.NetBuoyancyForceN,
+                    generatedDiagnostics.EnergyWatts,
+                    generatedDiagnostics.SideSlipDeg,
+                    generatedDiagnostics.AngleOfAttackDeg,
+                    generatedDiagnostics.LiftForceN,
+                    generatedDiagnostics.DragForceN,
+                    generatedDiagnostics.SideForceN,
+                    generatedDiagnostics.AngularVelocityRadPerSecond,
+                    generatedDiagnostics.HydrodynamicMomentNm,
+                    generatedDiagnostics.PistonPositionMm,
+                    sample.ControlSurfaceDeflectionDeg,
+                    generatedDiagnostics.ActuatorPowerWatts);
+            }
+
+            var waterColumnDepthM = generatedFrame.DepthM + generatedFrame.AltitudeM;
+            return new TelemetryFrame(
+                generatedFrame.RowIndex,
+                generatedFrame.RawTime,
+                sample.ElapsedSeconds,
+                sample.LongitudeDeg,
+                sample.LatitudeDeg,
+                sample.DepthM,
+                Mathf.Max(0f, waterColumnDepthM - sample.DepthM),
+                sample.HeadingDeg,
+                sample.PitchDeg,
+                sample.RollDeg,
+                generatedFrame.Voltage24V,
+                generatedFrame.Current24A,
+                generatedFrame.BatteryPercent,
+                generatedFrame.WorkMode,
+                generatedFrame.RunState,
+                generatedFrame.TargetSegment,
+                generatedFrame.TargetHeadingDeg,
+                generatedFrame.TargetDepthM,
+                generatedFrame.TargetAltitudeM,
+                generatedFrame.PropellerRpm,
+                generatedFrame.PistonMm,
+                generatedFrame.TurnAngleDeg,
+                diagnostics,
+                generatedFrame.PlannedLongitudeDeg,
+                generatedFrame.PlannedLatitudeDeg,
+                generatedFrame.MissionState,
+                generatedFrame.ProfileSequence);
         }
 
         public bool TryEnsureFutureHorizon()
