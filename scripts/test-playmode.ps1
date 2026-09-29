@@ -13,6 +13,7 @@ $resultPath = Join-Path $resultsDirectory "PlayModeResults.xml"
 $logPath = Join-Path $resultsDirectory "PlayMode.log"
 . "$PSScriptRoot\ResolveUnityEditor.ps1"
 $UnityPath = Resolve-UnityEditorPath -UnityPath $UnityPath -ProjectPath $projectPath
+Initialize-UnityPackageManagerEnvironment
 New-Item -ItemType Directory -Force -Path $resultsDirectory | Out-Null
 Remove-Item -Force -ErrorAction SilentlyContinue $resultPath, $logPath
 $arguments = @("-batchmode", "-projectPath", $projectPath, "-runTests", "-testPlatform", "PlayMode", "-testResults", $resultPath, "-logFile", $logPath)

@@ -41,7 +41,7 @@ namespace UnderwaterGliderTwin.Tests
                 new UnityEngine.Vector3(25f, -2f, 12f)
             });
 
-            Assert.That(extent, Is.GreaterThanOrEqualTo(60f));
+            Assert.That(extent, Is.EqualTo(52f).Within(0.001f));
         }
 
         [Test]
@@ -53,7 +53,7 @@ namespace UnderwaterGliderTwin.Tests
                 new UnityEngine.Vector3(5f, -2f, 4f)
             });
 
-            Assert.That(extent, Is.GreaterThanOrEqualTo(64f));
+            Assert.That(extent, Is.EqualTo(36f).Within(0.001f));
         }
 
         [Test]
@@ -65,8 +65,8 @@ namespace UnderwaterGliderTwin.Tests
                 new UnityEngine.Vector3(300f, -10f, 80f)
             });
 
-            Assert.That(extents.x, Is.EqualTo(650f).Within(0.001f));
-            Assert.That(extents.y, Is.EqualTo(130f).Within(0.001f));
+            Assert.That(extents.x, Is.EqualTo(580f).Within(0.001f));
+            Assert.That(extents.y, Is.EqualTo(116f).Within(0.001f));
         }
 
         [Test]

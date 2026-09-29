@@ -68,3 +68,18 @@ function Resolve-UnityEditorPath {
     $versionText = if ($projectVersion) { " $projectVersion" } else { "" }
     throw "Unity editor$versionText was not found. Install it with Unity Hub or pass -UnityPath 'C:\Path\To\Unity.exe'."
 }
+
+function Initialize-UnityPackageManagerEnvironment {
+    if (-not [string]::IsNullOrWhiteSpace($env:ALLUSERSPROFILE)) {
+        return
+    }
+
+    # Unity's Windows Package Manager uses this value when locating its global config.
+    $commonApplicationData = [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)
+    if ([string]::IsNullOrWhiteSpace($commonApplicationData) -or
+        -not (Test-Path -LiteralPath $commonApplicationData -PathType Container)) {
+        throw "Unity Package Manager requires ALLUSERSPROFILE, but the common application data directory is unavailable."
+    }
+
+    $env:ALLUSERSPROFILE = $commonApplicationData
+}

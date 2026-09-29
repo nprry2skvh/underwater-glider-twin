@@ -20,6 +20,7 @@ namespace UnderwaterGliderTwin.Playback
         public event Action<TelemetryFrame, int, float> FrameChanged;
         public event Action<TelemetryFrame, int, float, FrameUpdateReason> FrameChangedWithReason;
         public event Action<SimulationTimelineSnapshot> TimelineChanged;
+        public event Action<float, float, FrameUpdateReason> ContinuousChanged;
 
         public PlaybackModel Model => model;
 
@@ -85,9 +86,25 @@ namespace UnderwaterGliderTwin.Playback
 
         public void Step(float deltaSeconds)
         {
-            if (model != null && model.Tick(deltaSeconds))
+            if (model == null)
             {
-                Publish(FrameUpdateReason.Playback);
+                return;
+            }
+
+            var previousIndex = model.CurrentIndex;
+            var previousContinuousIndex = model.ContinuousIndex;
+            var ticked = model.Tick(deltaSeconds);
+            var continuousChanged = !Mathf.Approximately(previousContinuousIndex, model.ContinuousIndex);
+            if (ticked || continuousChanged)
+            {
+                if (model.CurrentIndex != previousIndex)
+                {
+                    Publish(FrameUpdateReason.Playback);
+                }
+                else
+                {
+                    ContinuousChanged?.Invoke(model.ContinuousIndex, model.Progress01, FrameUpdateReason.Playback);
+                }
             }
         }
 
@@ -123,6 +140,7 @@ namespace UnderwaterGliderTwin.Playback
         {
             FrameChangedWithReason?.Invoke(model.CurrentFrame, model.CurrentIndex, model.Progress01, reason);
             FrameChanged?.Invoke(model.CurrentFrame, model.CurrentIndex, model.Progress01);
+            ContinuousChanged?.Invoke(model.ContinuousIndex, model.Progress01, reason);
         }
     }
 }

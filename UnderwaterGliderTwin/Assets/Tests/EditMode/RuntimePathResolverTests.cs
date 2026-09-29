@@ -4,6 +4,7 @@ using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnderwaterGliderTwin.Bootstrap;
+using UnderwaterGliderTwin.Telemetry;
 
 namespace UnderwaterGliderTwin.Tests
 {
@@ -114,6 +115,38 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void RuntimeScreenshotOptions_ParsesDelayedAutoplayCapture()
+        {
+            var options = RuntimeScreenshotOptions.Parse(new[]
+            {
+                "player.exe", "--screenshot", @"C:\\capture\\moving.png",
+                "--autoplay-screenshot", "--screenshot-speed", "10",
+                "--screenshot-delay", "4.5"
+            });
+
+            Assert.That(options.AutoPlay, Is.True);
+            Assert.That(options.PlaybackSpeed, Is.EqualTo(10f));
+            Assert.That(options.CaptureDelaySeconds, Is.EqualTo(4.5f));
+        }
+
+        [Test]
+        public void RuntimeScreenshotOptions_ParsesReverseAutoplayCapture()
+        {
+            var options = RuntimeScreenshotOptions.Parse(new[]
+            {
+                "player.exe", "--screenshot", @"C:\\capture\\reverse.png",
+                "--autoplay-screenshot", "--reverse-screenshot", "--screenshot-progress", "0.35",
+                "--close-top-screenshot", "--no-wake-screenshot"
+            });
+
+            Assert.That(options.AutoPlay, Is.True);
+            Assert.That(options.ReversePlayback, Is.True);
+            Assert.That(options.StartProgress01, Is.EqualTo(0.35f));
+            Assert.That(options.CloseTopView, Is.True);
+            Assert.That(options.DisableWake, Is.True);
+        }
+
+        [Test]
         public void RuntimeScreenshotCapture_WarmsUpBeforeCapturingTheInitialVisualizationFrame()
         {
             var field = typeof(RuntimeScreenshotCapture).GetField("WarmupFrameCount", BindingFlags.Static | BindingFlags.Public);
@@ -170,6 +203,72 @@ namespace UnderwaterGliderTwin.Tests
             {
                 RuntimeDataSourceState.UseCsvPath("telemetry.csv");
             }
+        }
+
+        [Test]
+        public void RuntimeDataSourceState_ExplicitCsvOverridesSimulation()
+        {
+            var directory = CreateTempDirectory();
+            var csvPath = Path.Combine(directory, "telemetry.csv");
+            File.WriteAllText(csvPath, "header");
+            var previousMode = RuntimeDataSourceState.CurrentMode;
+            var previousCsvPath = RuntimeDataSourceState.LastCsvPath;
+            var previousProfile = RuntimeDataSourceState.SimulationProfile.Clone();
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+
+            try
+            {
+                var applied = RuntimeDataSourceState.ApplyCommandLineArguments(
+                    new[] { "player.exe", "--csv", csvPath });
+
+                Assert.That(applied, Is.True);
+                Assert.That(RuntimeDataSourceState.CurrentMode, Is.EqualTo(RuntimeDataSourceMode.Csv));
+                Assert.That(RuntimeDataSourceState.LastCsvPath, Is.EqualTo(Path.GetFullPath(csvPath)));
+            }
+            finally
+            {
+                RestoreRuntimeDataSourceState(previousMode, previousCsvPath, previousProfile);
+                Directory.Delete(directory, true);
+            }
+        }
+
+        [Test]
+        public void RuntimeDataSourceState_NoLaunchModeRetainsInAppCsvSelection()
+        {
+            var previousMode = RuntimeDataSourceState.CurrentMode;
+            var previousCsvPath = RuntimeDataSourceState.LastCsvPath;
+            var previousProfile = RuntimeDataSourceState.SimulationProfile.Clone();
+            RuntimeDataSourceState.UseCsvPath("selected.csv");
+
+            try
+            {
+                var applied = RuntimeDataSourceState.ApplyCommandLineArguments(
+                    new[] { "player.exe", "--screenshot", "capture.png" });
+
+                Assert.That(applied, Is.False);
+                Assert.That(RuntimeDataSourceState.CurrentMode, Is.EqualTo(RuntimeDataSourceMode.Csv));
+            }
+            finally
+            {
+                RestoreRuntimeDataSourceState(previousMode, previousCsvPath, previousProfile);
+            }
+        }
+
+        private static void RestoreRuntimeDataSourceState(
+            RuntimeDataSourceMode mode,
+            string csvPath,
+            SimulationProfile profile)
+        {
+            RuntimeDataSourceState.UseSimulation(profile);
+            if (mode == RuntimeDataSourceMode.Csv)
+            {
+                RuntimeDataSourceState.UseCsvPath(csvPath);
+            }
+
+            typeof(RuntimeDataSourceState)
+                .GetProperty(nameof(RuntimeDataSourceState.LastCsvPath), BindingFlags.Public | BindingFlags.Static)
+                .GetSetMethod(true)
+                .Invoke(null, new object[] { csvPath });
         }
 
         [Test]

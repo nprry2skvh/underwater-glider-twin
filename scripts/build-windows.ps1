@@ -14,6 +14,7 @@ if (-not (Test-Path -LiteralPath $projectPath -PathType Container)) {
 
 . "$PSScriptRoot\ResolveUnityEditor.ps1"
 $UnityPath = Resolve-UnityEditorPath -UnityPath $UnityPath -ProjectPath $projectPath
+Initialize-UnityPackageManagerEnvironment
 
 New-Item -ItemType Directory -Force -Path $resultsDirectory | Out-Null
 Remove-Item -Force -ErrorAction SilentlyContinue $logPath
@@ -58,6 +59,10 @@ if (-not $unityProcess.WaitForExit($timeoutSeconds * 1000)) {
 }
 
 $unityExitCode = $unityProcess.ExitCode
+if ($unityExitCode -ne 0) {
+    throw "Unity Windows build failed with exit code $unityExitCode. See $logPath"
+}
+
 $buildSucceeded = Test-Path -LiteralPath $logPath -PathType Leaf
 if ($buildSucceeded) {
     $buildSucceeded = Select-String -LiteralPath $logPath -SimpleMatch -Quiet "Build Finished, Result: Success"
@@ -67,8 +72,16 @@ if (-not $buildSucceeded) {
     throw "Windows build did not report success. See $logPath"
 }
 
-if ($unityExitCode -ne 0) {
-    Write-Warning "Unity returned exit code $unityExitCode after reporting a successful build. See $logPath"
+$buildOutputDirectory = Join-Path $workspaceRoot "Builds\UnderwaterGliderTwin"
+$requiredBuildPaths = @(
+    (Join-Path $buildOutputDirectory "UnderwaterGliderTwin.exe")
+    (Join-Path $buildOutputDirectory "UnderwaterGliderTwin_Data")
+    (Join-Path $buildOutputDirectory "UnityPlayer.dll")
+)
+foreach ($requiredBuildPath in $requiredBuildPaths) {
+    if (-not (Test-Path -LiteralPath $requiredBuildPath)) {
+        throw "Windows build output is incomplete. Missing: $requiredBuildPath"
+    }
 }
 
 Write-Host "Windows build succeeded. See $logPath"

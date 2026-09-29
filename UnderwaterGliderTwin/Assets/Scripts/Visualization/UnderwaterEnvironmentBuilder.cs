@@ -1,12 +1,17 @@
 using UnityEngine;
+using UnderwaterGliderTwin.Playback;
 
 namespace UnderwaterGliderTwin.Visualization
 {
     public sealed class UnderwaterEnvironmentBuilder : MonoBehaviour
     {
         private ParticleSystem marineSnow;
+        private Material marineSnowMaterial;
+        private WaterSurfaceView waterSurface;
 
         public bool ParticlesEnabled => marineSnow != null && marineSnow.gameObject.activeSelf;
+        public bool WaterEnabled => waterSurface != null && waterSurface.IsVisible;
+        public WaterSurfaceView WaterSurface => waterSurface;
 
         public void Build()
         {
@@ -19,6 +24,12 @@ namespace UnderwaterGliderTwin.Visualization
             CreateSeabed();
             CreateDirectionalLight();
             CreateMarineSnow();
+            CreateWaterSurface();
+        }
+
+        public void Initialize(PlaybackController playbackController, Camera targetCamera, Transform surfaceInteractionTarget = null)
+        {
+            waterSurface?.Bind(playbackController, targetCamera, surfaceInteractionTarget);
         }
 
         public void SetFogEnabled(bool enabled)
@@ -32,6 +43,11 @@ namespace UnderwaterGliderTwin.Visualization
             {
                 marineSnow.gameObject.SetActive(enabled);
             }
+        }
+
+        public void SetWaterEnabled(bool enabled)
+        {
+            waterSurface?.SetVisible(enabled);
         }
 
         private void CreateSeabed()
@@ -65,15 +81,37 @@ namespace UnderwaterGliderTwin.Visualization
             var main = marineSnow.main;
             main.startLifetime = 18f;
             main.startSpeed = 0.25f;
-            main.startSize = 0.08f;
-            main.maxParticles = 900;
+            main.startSize = 0.035f;
+            main.startColor = new Color(0.68f, 0.84f, 0.88f, 0.22f);
+            main.maxParticles = 450;
 
             var emission = marineSnow.emission;
-            emission.rateOverTime = 60f;
+            emission.rateOverTime = 18f;
 
             var shape = marineSnow.shape;
             shape.shapeType = ParticleSystemShapeType.Box;
             shape.scale = new Vector3(60f, 18f, 60f);
+
+            marineSnowMaterial = RuntimeMaterialFactory.Line(
+                "Marine Snow Material",
+                new Color(0.68f, 0.84f, 0.88f, 0.22f));
+            var particleRenderer = marineSnow.GetComponent<ParticleSystemRenderer>();
+            particleRenderer.renderMode = ParticleSystemRenderMode.Billboard;
+            particleRenderer.sharedMaterial = marineSnowMaterial;
+        }
+
+        private void OnDestroy()
+        {
+            DestroyRuntimeObject(marineSnowMaterial);
+            marineSnowMaterial = null;
+        }
+
+        private void CreateWaterSurface()
+        {
+            var waterObject = new GameObject("WaterSurface");
+            waterObject.transform.SetParent(transform, false);
+            waterSurface = waterObject.AddComponent<WaterSurfaceView>();
+            waterSurface.Build(WaterSurfaceSettings.CreateDefault());
         }
 
         private static void DestroyRuntimeObject(Object target)

@@ -74,7 +74,7 @@ namespace UnderwaterGliderTwin.Tests
             var smokeProfile = RuntimeSmokeProfileUpdate.BuildSmokeRebuildProfile(profile);
 
             Assert.That(smokeProfile, Is.Not.SameAs(profile));
-            Assert.That(smokeProfile.CycleCount, Is.EqualTo(1));
+            Assert.That(smokeProfile.CycleCount, Is.EqualTo(profile.CycleCount));
             Assert.That(smokeProfile.CycleDurationSeconds, Is.LessThan(profile.CycleDurationSeconds));
             Assert.That(smokeProfile.TargetDepthM, Is.LessThanOrEqualTo(120f));
             Assert.That(smokeProfile.WaterColumnDepthM, Is.GreaterThanOrEqualTo(smokeProfile.TargetDepthM + 20f));

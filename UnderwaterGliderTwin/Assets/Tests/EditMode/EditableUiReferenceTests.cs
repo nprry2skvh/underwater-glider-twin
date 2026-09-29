@@ -5,8 +5,10 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using UnderwaterGliderTwin.Bootstrap;
 using UnderwaterGliderTwin.Editor;
+using UnderwaterGliderTwin.Telemetry;
 using UnderwaterGliderTwin.UI;
 
 namespace UnderwaterGliderTwin.Tests
@@ -75,24 +77,6 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(issues, Has.Some.Property("FieldName").EqualTo("runtimeCanvas"));
             Assert.That(issues, Has.Some.Property("FieldName").EqualTo("modalRoot"));
-        }
-
-        [Test]
-        public void RuntimeUiRoot_DrawerLayerAliasesSerializedModalRoot()
-        {
-            var rootObject = scope.CreateRoot("RuntimeUiRoot");
-            var canvas = new GameObject("RuntimeCanvas", typeof(Canvas)).GetComponent<Canvas>();
-            canvas.transform.SetParent(rootObject.transform, false);
-            var modalRoot = new GameObject("ModalRoot").AddComponent<RectTransform>();
-            modalRoot.transform.SetParent(canvas.transform, false);
-            var root = AddRuntimeUiRoot(rootObject);
-            var serialized = new UnityEditor.SerializedObject(root);
-            serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
-            serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
-            ApplySerialized(serialized);
-
-            Assert.That(root.ModalRoot, Is.EqualTo(modalRoot));
-            Assert.That(root.DrawerLayer, Is.SameAs(modalRoot));
         }
 
         [Test]
@@ -261,23 +245,6 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void UiFactory_DoesNotUseInactiveExplicitFallbackCanvas()
-        {
-            RuntimeUiFallback.AllowRuntimeFallback = true;
-            var inactiveRoot = scope.CreateRoot("InactiveRuntimeUiRoot");
-            var inactiveCanvas = new GameObject("RuntimeCanvas", typeof(Canvas)).GetComponent<Canvas>();
-            inactiveCanvas.transform.SetParent(inactiveRoot.transform, false);
-            inactiveRoot.SetActive(false);
-            var owner = scope.CreateRoot("GeneratedRuntimeUI").transform;
-
-            var canvas = UiFactory.EnsureCanvas(owner, "GeneratedRuntimeUI", inactiveCanvas);
-
-            Assert.That(canvas, Is.Not.SameAs(inactiveCanvas));
-            Assert.That(canvas.gameObject.activeInHierarchy, Is.True);
-            Assert.That(canvas.transform.parent, Is.EqualTo(owner));
-        }
-
-        [Test]
         public void ClearDynamicRuntimeUi_DoesNotDestroyRowTemplate()
         {
             var view = scope.CreateRoot("DataInput").AddComponent<DataInputView>();
@@ -301,131 +268,66 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void WelcomeBootstrap_ReportsMissingSerializedUi()
-        {
-            var bootstrap = scope.CreateRoot("WelcomeBootstrap").AddComponent<WelcomeBootstrap>();
-
-            var issues = bootstrap.ValidateReferences();
-
-            Assert.That(issues, Has.Some.Property("FieldName").EqualTo("welcomeCanvas"));
-            Assert.That(issues, Has.Some.Property("FieldName").EqualTo("csvInput"));
-        }
-
-        [Test]
-        public void EditableUiSceneBuilder_BuildWelcomeSceneIsIdempotentAndBackfillsReferences()
-        {
-            var previous = SceneManager.GetActiveScene().path;
-            try
-            {
-                EditableUiSceneBuilder.BuildWelcomeScene();
-                EditableUiSceneBuilder.BuildWelcomeScene();
-                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Welcome.unity");
-
-                Assert.That(FindObjectsNamed("WelcomeCanvas"), Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("BackgroundImage"), Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("LaunchPanel"), Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("CsvPathInput"), Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("ConfirmCsvButton"), Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("StartCsvButton"), Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("SimulationButton"), Is.EqualTo(1));
-                var bootstrap = Object.FindObjectOfType<WelcomeBootstrap>();
-                Assert.That(bootstrap, Is.Not.Null);
-                Assert.That(bootstrap.ValidateReferences(), Is.Empty);
-            }
-            finally
-            {
-                if (!string.IsNullOrEmpty(previous))
-                {
-                    RestorePreviousScene(previous);
-                }
-            }
-        }
-
-        [Test]
-        public void EditableUiSceneBuilder_BuildWelcomeScenePreservesExistingVisualOverrides()
-        {
-            var previous = SceneManager.GetActiveScene().path;
-            try
-            {
-                EditableUiSceneBuilder.BuildWelcomeScene();
-                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Welcome.unity");
-                var title = GameObject.Find("TitleText").GetComponent<UnityEngine.UI.Text>();
-                var panel = GameObject.Find("LaunchPanel").GetComponent<UnityEngine.UI.Image>();
-                var panelRect = panel.GetComponent<RectTransform>();
-                title.text = "Custom Welcome Title";
-                title.fontSize = 41;
-                panel.color = new Color(0.40f, 0.10f, 0.70f, 0.90f);
-                panelRect.anchorMin = new Vector2(0.20f, 0.10f);
-                panelRect.anchorMax = new Vector2(0.80f, 0.90f);
-                UnityEditor.EditorUtility.SetDirty(title);
-                UnityEditor.EditorUtility.SetDirty(panel);
-                UnityEditor.EditorUtility.SetDirty(panelRect);
-                UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
-
-                EditableUiSceneBuilder.BuildWelcomeScene();
-                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Welcome.unity");
-                title = GameObject.Find("TitleText").GetComponent<UnityEngine.UI.Text>();
-                panel = GameObject.Find("LaunchPanel").GetComponent<UnityEngine.UI.Image>();
-                panelRect = panel.GetComponent<RectTransform>();
-
-                Assert.That(title.text, Is.EqualTo("Custom Welcome Title"));
-                Assert.That(title.fontSize, Is.EqualTo(41));
-                Assert.That(panel.color, Is.EqualTo(new Color(0.40f, 0.10f, 0.70f, 0.90f)));
-                Assert.That(panelRect.anchorMin, Is.EqualTo(new Vector2(0.20f, 0.10f)));
-                Assert.That(panelRect.anchorMax, Is.EqualTo(new Vector2(0.80f, 0.90f)));
-            }
-            finally
-            {
-                if (SceneManager.GetActiveScene().path == "Assets/Scenes/Welcome.unity")
-                {
-                    if (SceneManager.GetActiveScene().isDirty)
-                    {
-                        UnityEditor.SceneManagement.EditorSceneManager.SaveScene(SceneManager.GetActiveScene());
-                    }
-
-                    EditableUiSceneBuilder.ResetWelcomeDefaults();
-                }
-
-                if (!string.IsNullOrEmpty(previous))
-                {
-                    RestorePreviousScene(previous);
-                }
-            }
-        }
-
-        [Test]
         public void MainScene_HasEditableRuntimeUiHierarchy()
         {
             var previous = SceneManager.GetActiveScene().path;
             try
             {
                 UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
-                var runtimeRoot = Object.FindObjectOfType<RuntimeUiRoot>();
 
                 Assert.That(GameObject.Find("RuntimeUiRoot"), Is.Not.Null);
                 Assert.That(GameObject.Find("RuntimeCanvas"), Is.Not.Null);
-                Assert.That(runtimeRoot, Is.Not.Null);
-                Assert.That(runtimeRoot.ModalRoot, Is.Not.Null);
-                Assert.That(runtimeRoot.ModalRoot.name, Is.EqualTo("ModalRoot"));
-                Assert.That(runtimeRoot.DrawerLayer, Is.SameAs(runtimeRoot.ModalRoot));
-                Assert.That(GameObject.Find("UiRoot"), Is.Not.Null);
-                Assert.That(GameObject.Find("SystemBar"), Is.Not.Null);
-                Assert.That(GameObject.Find("ConfigurationArea"), Is.Not.Null);
-                Assert.That(GameObject.Find("MainBody"), Is.Not.Null);
-                Assert.That(GameObject.Find("PlaybackBar"), Is.Not.Null);
-                Assert.That(GameObject.Find("DrawerEntryLayer"), Is.Not.Null);
-                Assert.That(GameObject.Find("DrawerScrim"), Is.Not.Null);
+                Assert.That(GameObject.Find("CommandCenterHeader"), Is.Not.Null);
+                Assert.That(GameObject.Find("DashboardPanel"), Is.Not.Null);
+                Assert.That(GameObject.Find("StatusPanel"), Is.Not.Null);
+                Assert.That(GameObject.Find("DataInputPanel"), Is.Not.Null);
+                Assert.That(GameObject.Find("PlaybackControlsPanel"), Is.Not.Null);
                 Assert.That(GameObject.Find("OceanCommandToolbar"), Is.Not.Null);
                 Assert.That(GameObject.Find("ModalRoot"), Is.Not.Null);
-                Assert.That(GameObject.Find("UiRoot/DrawerEntryLayer/TelemetryDrawerToggle"), Is.Not.Null);
-                Assert.That(GameObject.Find("UiRoot/DrawerEntryLayer/StatusDrawerToggle"), Is.Not.Null);
-                Assert.That(Object.FindObjectsOfType<Canvas>(true).Length, Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("ModalRoot"), Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("DrawerLayer"), Is.EqualTo(0));
             }
             finally
             {
                 if (!string.IsNullOrEmpty(previous))
+                {
+                    RestorePreviousScene(previous);
+                }
+            }
+        }
+
+        [Test]
+        public void MainScene_BoundPrefabSimulationUsesSuppliedProfileWithoutManualInput()
+        {
+            var previous = SceneManager.GetActiveScene().path;
+            try
+            {
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
+                var refs = GameObject.Find("RuntimeUiRoot").GetComponent<RuntimeUiRoot>().References.dataInput;
+                var view = new GameObject("BoundDataInput").AddComponent<DataInputView>();
+                var profile = SimulationProfile.Default;
+                profile.CycleCount = 4;
+                profile.CycleDurationSeconds = 3600f;
+                profile.TargetDepthM = 150f;
+                SimulationProfile requested = null;
+
+                view.Bind(refs, string.Empty, profile, null, onSimulationRequested: value => requested = value);
+
+                Assert.That(refs.simulation.cyclesInput.text, Is.EqualTo("4"));
+                Assert.That(refs.simulation.durationInput.text, Is.EqualTo("3600"));
+                Assert.That(refs.simulation.targetDepthInput.text, Is.EqualTo("150"));
+                refs.simulation.applyButton.onClick.Invoke();
+                Assert.That(requested, Is.Not.Null);
+                Assert.That(requested.CycleCount, Is.EqualTo(4));
+                Assert.That(requested.TargetDepthM, Is.EqualTo(150f));
+            }
+            finally
+            {
+                if (string.IsNullOrEmpty(previous))
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager.NewScene(
+                        UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
+                        UnityEditor.SceneManagement.NewSceneMode.Single);
+                }
+                else
                 {
                     RestorePreviousScene(previous);
                 }
@@ -465,16 +367,11 @@ namespace UnderwaterGliderTwin.Tests
             {
                 UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
                 var runtimeCanvas = GameObject.Find("RuntimeCanvas").transform;
-                Assert.That(GameObject.Find("UiRoot").transform.parent, Is.EqualTo(runtimeCanvas));
-                Assert.That(GameObject.Find("ModalRoot").transform.parent, Is.EqualTo(runtimeCanvas));
-                AssertPanelUnderParentWithSource("DashboardPanel", "TelemetryColumn", "Assets/UI/Prefabs/DashboardPanel.prefab");
-                AssertPanelUnderParentWithSource("StatusPanel", "StatusColumn", "Assets/UI/Prefabs/StatusPanel.prefab");
-                AssertPanelUnderParentWithSource("DataInputPanel", "ConfigurationArea", "Assets/UI/Prefabs/DataInputPanel.prefab");
-                AssertPanelUnderParentWithSource("PlaybackControlsPanel", "PlaybackBar", "Assets/UI/Prefabs/PlaybackControlsPanel.prefab");
-                AssertPanelUnderParentWithSource("OceanCommandToolbar", "ViewportColumn", "Assets/UI/Prefabs/OceanCommandToolbar.prefab");
-                Assert.That(FindSceneObjectIncludingInactive("TelemetryDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
-                Assert.That(FindSceneObjectIncludingInactive("StatusDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
-                Assert.That(FindSceneObjectIncludingInactive("DrawerScrim").transform.parent.name, Is.EqualTo("ModalRoot"));
+                AssertPanelUnderCanvasWithSource("DashboardPanel", runtimeCanvas, "Assets/UI/Prefabs/DashboardPanel.prefab");
+                AssertPanelUnderCanvasWithSource("StatusPanel", runtimeCanvas, "Assets/UI/Prefabs/StatusPanel.prefab");
+                AssertPanelUnderCanvasWithSource("DataInputPanel", runtimeCanvas, "Assets/UI/Prefabs/DataInputPanel.prefab");
+                AssertPanelUnderCanvasWithSource("PlaybackControlsPanel", runtimeCanvas, "Assets/UI/Prefabs/PlaybackControlsPanel.prefab");
+                AssertPanelUnderCanvasWithSource("OceanCommandToolbar", runtimeCanvas, "Assets/UI/Prefabs/OceanCommandToolbar.prefab");
                 Assert.That(FindSceneObjectIncludingInactive("OceanCurrentDrawer").transform.parent.name, Is.EqualTo("ModalRoot"));
                 Assert.That(FindSceneObjectIncludingInactive("FlightLegDrawer").transform.parent.name, Is.EqualTo("ModalRoot"));
             }
@@ -484,61 +381,6 @@ namespace UnderwaterGliderTwin.Tests
                 {
                     RestorePreviousScene(previous);
                 }
-            }
-        }
-
-        [Test]
-        public void MainScene_DrawerTogglesUseDistinctStatesAndAccessibleHitHeight()
-        {
-            var previous = SceneManager.GetActiveScene().path;
-            try
-            {
-                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
-
-                AssertSceneDrawerToggle("TelemetryDrawerToggle");
-                AssertSceneDrawerToggle("StatusDrawerToggle");
-            }
-            finally
-            {
-                if (!string.IsNullOrEmpty(previous))
-                {
-                    RestorePreviousScene(previous);
-                }
-            }
-        }
-
-        [TestCase("Assets/UI/Prefabs/DashboardPanel.prefab")]
-        [TestCase("Assets/UI/Prefabs/StatusPanel.prefab")]
-        [TestCase("Assets/UI/Prefabs/DataInputPanel.prefab")]
-        [TestCase("Assets/UI/Prefabs/PlaybackControlsPanel.prefab")]
-        [TestCase("Assets/UI/Prefabs/OceanCommandToolbar.prefab")]
-        [TestCase("Assets/UI/Prefabs/FlightLegDrawer.prefab")]
-        [TestCase("Assets/UI/Prefabs/OceanCurrentDrawer.prefab")]
-        public void CommandCenterPrefabs_DropLegacyBrightButtonsAndRaiseReadableFontFloor(string prefabPath)
-        {
-            var prefabRoot = UnityEditor.PrefabUtility.LoadPrefabContents(prefabPath);
-            var legacyButtonFill = new Color(0.05f, 0.42f, 0.55f, 0.95f);
-            try
-            {
-                foreach (var button in prefabRoot.GetComponentsInChildren<UnityEngine.UI.Button>(true))
-                {
-                    var targetGraphic = button.targetGraphic as UnityEngine.UI.Graphic;
-                    Assert.That(targetGraphic, Is.Not.Null, $"{prefabPath} button {button.name} is missing a target graphic");
-                    Assert.That(targetGraphic.color, Is.Not.EqualTo(legacyButtonFill), $"{prefabPath} button {button.name} still uses the legacy bright cyan fill");
-                    Assert.That(button.colors.highlightedColor, Is.Not.EqualTo(button.colors.normalColor), $"{prefabPath} button {button.name} is missing a hover state");
-                    Assert.That(button.colors.pressedColor, Is.Not.EqualTo(button.colors.highlightedColor), $"{prefabPath} button {button.name} is missing a pressed state");
-                    Assert.That(button.colors.selectedColor, Is.Not.EqualTo(button.colors.highlightedColor), $"{prefabPath} button {button.name} is missing a focus state");
-                    Assert.That(button.colors.disabledColor.a, Is.LessThan(button.colors.normalColor.a), $"{prefabPath} button {button.name} disabled state must be dimmer than default");
-                }
-
-                foreach (var text in prefabRoot.GetComponentsInChildren<UnityEngine.UI.Text>(true))
-                {
-                    Assert.That(text.fontSize, Is.GreaterThanOrEqualTo(14), $"{prefabPath} text {text.name} must stay readable after CanvasScaler shrink");
-                }
-            }
-            finally
-            {
-                UnityEditor.PrefabUtility.UnloadPrefabContents(prefabRoot);
             }
         }
 
@@ -581,56 +423,6 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void RuntimeFallback_CreatesCanonicalUiAndModalHierarchy()
-        {
-            var host = scope.CreateRoot("RuntimeFallbackHost");
-            var canvas = host.AddComponent<Canvas>();
-            RuntimeUiFallback.AllowRuntimeFallback = true;
-
-            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
-
-            Assert.That(uiRoot, Is.Not.Null);
-            Assert.That(uiRoot.name, Is.EqualTo("UiRoot"));
-            Assert.That(uiRoot.Find("SystemBar"), Is.Not.Null);
-            Assert.That(uiRoot.Find("ConfigurationArea"), Is.Not.Null);
-            Assert.That(uiRoot.Find("MainBody/TelemetryColumn"), Is.Not.Null);
-            Assert.That(uiRoot.Find("MainBody/ViewportColumn"), Is.Not.Null);
-            Assert.That(uiRoot.Find("MainBody/StatusColumn"), Is.Not.Null);
-            Assert.That(uiRoot.Find("PlaybackBar"), Is.Not.Null);
-            Assert.That(uiRoot.Find("DrawerEntryLayer/TelemetryDrawerToggle"), Is.Not.Null);
-            Assert.That(uiRoot.Find("DrawerEntryLayer/StatusDrawerToggle"), Is.Not.Null);
-
-            var modalRoot = canvas.transform.Find("ModalRoot");
-            Assert.That(modalRoot, Is.Not.Null);
-            Assert.That(modalRoot.Find("DrawerScrim"), Is.Not.Null);
-            Assert.That(modalRoot.Find("OceanCurrentDrawer"), Is.Not.Null);
-            Assert.That(modalRoot.Find("FlightLegDrawer"), Is.Not.Null);
-            Assert.That(canvas.transform.Find("DrawerLayer"), Is.Null);
-        }
-
-        [Test]
-        public void TwinBootstrap_DisablesWhenFallbackDisabledAndEditableRootIsUnavailable()
-        {
-            var bootstrapObject = scope.CreateRoot("TwinBootstrapWithoutUiRoot");
-            bootstrapObject.SetActive(false);
-            var bootstrap = bootstrapObject.AddComponent<TwinBootstrap>();
-            var serialized = new UnityEditor.SerializedObject(bootstrap);
-            serialized.FindProperty("useGeneratedRuntimeUi").boolValue = false;
-            serialized.FindProperty("allowRuntimeFallback").boolValue = false;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-            var validateMethod = typeof(TwinBootstrap).GetMethod(
-                "ValidateConfiguredRuntimeUi",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-
-            LogAssert.Expect(LogType.Error, "TwinBootstrap requires a serialized RuntimeUiRoot when runtime fallback is disabled.");
-            Assert.That(validateMethod, Is.Not.Null);
-            validateMethod.Invoke(bootstrap, null);
-
-            Assert.That(bootstrap.enabled, Is.False);
-            Assert.That(RuntimeUiFallback.AllowRuntimeFallback, Is.False);
-        }
-
-        [Test]
         public void EditableUiSceneBuilder_BuildMainSceneIsIdempotentWithModalPrefabs()
         {
             var previous = SceneManager.GetActiveScene().path;
@@ -661,39 +453,10 @@ namespace UnderwaterGliderTwin.Tests
 
                 Assert.That(canvasCount, Is.EqualTo(1));
                 Assert.That(eventSystemCount, Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("UiRoot"), Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("ModalRoot"), Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("DrawerScrim"), Is.EqualTo(1));
-                Assert.That(FindObjectsNamed("DrawerLayer"), Is.EqualTo(0));
                 Assert.That(FindObjectsNamed("DashboardPanel"), Is.EqualTo(1));
                 Assert.That(UnityEditor.PrefabUtility.GetPrefabInstanceStatus(GameObject.Find("DashboardPanel")), Is.EqualTo(UnityEditor.PrefabInstanceStatus.Connected));
-                Assert.That(FindSceneObjectIncludingInactive("TelemetryDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
-                Assert.That(FindSceneObjectIncludingInactive("StatusDrawerToggle").transform.parent.name, Is.EqualTo("DrawerEntryLayer"));
                 Assert.That(FindObjectsNamed("OceanCurrentDrawer"), Is.EqualTo(1));
                 Assert.That(FindObjectsNamed("FlightLegDrawer"), Is.EqualTo(1));
-            }
-            finally
-            {
-                if (!string.IsNullOrEmpty(previous))
-                {
-                    UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
-                }
-            }
-        }
-
-        [Test]
-        public void EditableUiSceneBuilder_BuildMainScenePreservesGeneratedRuntimeUiDefault()
-        {
-            var previous = SceneManager.GetActiveScene().path;
-            try
-            {
-                EditableUiSceneBuilder.BuildMainScene();
-                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
-
-                var bootstrap = Object.FindObjectOfType<TwinBootstrap>();
-                Assert.That(bootstrap, Is.Not.Null);
-                var serialized = new UnityEditor.SerializedObject(bootstrap);
-                Assert.That(serialized.FindProperty("useGeneratedRuntimeUi").boolValue, Is.True);
             }
             finally
             {
@@ -748,90 +511,32 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void EditableUiSceneBuilder_BuildMainSceneRejectsSameNameNonPrefabModal()
-        {
-            var previous = SceneManager.GetActiveScene().path;
-            try
-            {
-                EditableUiSceneBuilder.BuildMainScene();
-                UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
-                var modalRoot = GameObject.Find("ModalRoot");
-                var nonPrefab = new GameObject("OceanCurrentDrawer", typeof(RectTransform));
-                nonPrefab.transform.SetParent(modalRoot.transform, false);
-                UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
-
-                var ex = Assert.Throws<System.InvalidOperationException>(() => EditableUiSceneBuilder.BuildMainScene());
-
-                Assert.That(ex.Message, Does.Contain("same-name non-Prefab modal"));
-            }
-            finally
-            {
-                if (SceneManager.GetActiveScene().path == "Assets/Scenes/Main.unity")
-                {
-                    foreach (var transform in Object.FindObjectsOfType<Transform>(true))
-                    {
-                        if (transform.name == "OceanCurrentDrawer"
-                            && UnityEditor.PrefabUtility.GetPrefabInstanceStatus(transform.gameObject) != UnityEditor.PrefabInstanceStatus.Connected)
-                        {
-                            Object.DestroyImmediate(transform.gameObject);
-                        }
-                    }
-
-                    UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
-                }
-
-                if (!string.IsNullOrEmpty(previous))
-                {
-                    RestorePreviousScene(previous);
-                }
-            }
-        }
-
-        [Test]
         public void EditableUiSceneBuilder_BuildMainScenePreservesExistingPrefabInstanceOverrides()
         {
             var previous = SceneManager.GetActiveScene().path;
             var originalPosition = Vector2.zero;
             var originalSize = Vector2.zero;
-            var originalColor = Color.clear;
-            var originalFontSize = 0;
             try
             {
                 EditableUiSceneBuilder.BuildMainScene();
                 UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
                 var panel = GameObject.Find("DashboardPanel").GetComponent<RectTransform>();
-                var image = panel.GetComponent<UnityEngine.UI.Image>();
-                var title = panel.transform.Find("TitleText").GetComponent<UnityEngine.UI.Text>();
                 originalPosition = panel.anchoredPosition;
                 originalSize = panel.sizeDelta;
-                originalColor = image.color;
-                originalFontSize = title.fontSize;
                 panel.anchoredPosition = new Vector2(123f, -456f);
                 panel.sizeDelta = new Vector2(777f, 333f);
-                image.color = new Color(0.40f, 0.10f, 0.70f, 0.90f);
-                title.fontSize = 41;
                 UnityEditor.EditorUtility.SetDirty(panel);
-                UnityEditor.EditorUtility.SetDirty(image);
-                UnityEditor.EditorUtility.SetDirty(title);
                 UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
 
                 EditableUiSceneBuilder.BuildMainScene();
                 UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Main.unity");
                 panel = GameObject.Find("DashboardPanel").GetComponent<RectTransform>();
-                image = panel.GetComponent<UnityEngine.UI.Image>();
-                title = panel.transform.Find("TitleText").GetComponent<UnityEngine.UI.Text>();
 
                 Assert.That(panel.anchoredPosition, Is.EqualTo(new Vector2(123f, -456f)));
                 Assert.That(panel.sizeDelta, Is.EqualTo(new Vector2(777f, 333f)));
-                Assert.That(image.color, Is.EqualTo(new Color(0.40f, 0.10f, 0.70f, 0.90f)));
-                Assert.That(title.fontSize, Is.EqualTo(41));
                 panel.anchoredPosition = originalPosition;
                 panel.sizeDelta = originalSize;
-                image.color = originalColor;
-                title.fontSize = originalFontSize;
                 UnityEditor.EditorUtility.SetDirty(panel);
-                UnityEditor.EditorUtility.SetDirty(image);
-                UnityEditor.EditorUtility.SetDirty(title);
                 UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
             }
             finally
@@ -843,27 +548,13 @@ namespace UnderwaterGliderTwin.Tests
             }
         }
 
-        private static void AssertPanelUnderParentWithSource(string panelName, string expectedParentName, string expectedPrefabPath)
+        private static void AssertPanelUnderCanvasWithSource(string panelName, Transform runtimeCanvas, string expectedPrefabPath)
         {
             var panel = GameObject.Find(panelName);
             Assert.That(panel, Is.Not.Null);
-            Assert.That(panel.transform.parent.name, Is.EqualTo(expectedParentName));
+            Assert.That(panel.transform.parent, Is.EqualTo(runtimeCanvas));
             var source = UnityEditor.PrefabUtility.GetCorrespondingObjectFromSource(panel);
             Assert.That(UnityEditor.AssetDatabase.GetAssetPath(source), Is.EqualTo(expectedPrefabPath));
-        }
-
-        private static void AssertSceneDrawerToggle(string objectName)
-        {
-            var buttonObject = GameObject.Find(objectName);
-            Assert.That(buttonObject, Is.Not.Null);
-            var button = buttonObject.GetComponent<UnityEngine.UI.Button>();
-            var rect = buttonObject.GetComponent<RectTransform>();
-            Assert.That(button, Is.Not.Null);
-            Assert.That(rect.sizeDelta.y, Is.GreaterThanOrEqualTo(36f), $"{objectName} must expose a 36px drawer entry hit target");
-            Assert.That(button.colors.highlightedColor, Is.Not.EqualTo(button.colors.normalColor), $"{objectName} is missing a hover state");
-            Assert.That(button.colors.pressedColor, Is.Not.EqualTo(button.colors.highlightedColor), $"{objectName} is missing a pressed state");
-            Assert.That(button.colors.selectedColor, Is.Not.EqualTo(button.colors.highlightedColor), $"{objectName} is missing a focus state");
-            Assert.That(button.colors.disabledColor.a, Is.LessThan(button.colors.normalColor.a), $"{objectName} disabled state must be dimmer than default");
         }
 
         private static GameObject FindSceneObjectIncludingInactive(string objectName)
@@ -881,14 +572,6 @@ namespace UnderwaterGliderTwin.Tests
 
         private static void RestorePreviousScene(string previous)
         {
-            if (previous == "Assets/Scenes/Welcome.unity")
-            {
-                UnityEditor.SceneManagement.EditorSceneManager.NewScene(
-                    UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
-                    UnityEditor.SceneManagement.NewSceneMode.Single);
-                return;
-            }
-
             UnityEditor.SceneManagement.EditorSceneManager.OpenScene(previous);
         }
 

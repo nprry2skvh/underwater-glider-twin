@@ -7,7 +7,7 @@ namespace UnderwaterGliderTwin.Editor
 {
     public static class BuildWindows
     {
-        public static readonly string[] BuildScenePaths = { "Assets/Scenes/Welcome.unity", "Assets/Scenes/Main.unity" };
+        public static readonly string[] BuildScenePaths = { "Assets/Scenes/Main.unity" };
 
         public static void Build()
         {
@@ -107,6 +107,7 @@ namespace UnderwaterGliderTwin.Editor
             Directory.CreateDirectory(parent);
             var backupDirectory = destinationDirectory + ".backup-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N");
             var hasBackup = false;
+            var publishedNewDirectory = false;
 
             try
             {
@@ -117,21 +118,36 @@ namespace UnderwaterGliderTwin.Editor
                 }
 
                 Directory.Move(stagingDirectory, destinationDirectory);
+                publishedNewDirectory = true;
                 validatePublishedDirectory?.Invoke();
-                if (hasBackup)
-                {
-                    DeleteDirectoryIfExists(backupDirectory);
-                }
             }
             catch
             {
-                DeleteDirectoryIfExists(destinationDirectory);
+                if (publishedNewDirectory)
+                {
+                    DeleteDirectoryIfExists(destinationDirectory);
+                }
+
                 if (hasBackup && Directory.Exists(backupDirectory))
                 {
                     Directory.Move(backupDirectory, destinationDirectory);
                 }
 
                 throw;
+            }
+
+            if (hasBackup)
+            {
+                try
+                {
+                    DeleteDirectoryIfExists(backupDirectory);
+                }
+                catch (Exception cleanupError)
+                {
+                    UnityEngine.Debug.LogWarning(
+                        "Windows build published successfully, but the previous output could not be deleted. " +
+                        "The backup was preserved at '" + backupDirectory + "'. Details: " + cleanupError.Message);
+                }
             }
         }
 

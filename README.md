@@ -8,17 +8,17 @@ short-horizon prediction.
 
 - Unity 2022.3.62f3c1
 - Windows
-- Data file: `2.csv` encoded as GBK
+- Optional CSV replay data: `2.csv` encoded as GBK
 - The helper scripts auto-detect the matching Unity Hub installation.
 
 ## Launch and Run
 
-The first build scene is `Welcome.unity`; it provides path input for CSV replay,
-a last/default CSV shortcut, simulation mode, and project notes. CSV files must
-use GBK encoding. The last CSV path is remembered only after Main successfully
-loads at least one usable telemetry frame.
+The first build scene is `Main.unity`. Launching without a data-source argument
+starts the default parameter simulation; no CSV file is required. Use `--csv`
+to replay a GBK-encoded telemetry file. The last CSV path is remembered only
+after Main successfully loads at least one usable telemetry frame.
 
-Valid command-line launch arguments skip Welcome:
+Data-source launch arguments:
 
 ```powershell
 .\UnderwaterGliderTwin.exe --csv ".\2.csv"
@@ -26,22 +26,23 @@ Valid command-line launch arguments skip Welcome:
 .\UnderwaterGliderTwin.exe --simulation
 ```
 
-Simulation arguments take precedence over CSV arguments. Invalid CSV arguments
-stay on Welcome and show an inline error.
+Simulation arguments take precedence over CSV arguments. When CSV is selected,
+an invalid `--csv` argument stops initialization and is recorded in the Player
+load log; it does not silently select the default simulation.
 
 ## Run In Unity
 
 1. Open `UnderwaterGliderTwin` in Unity Hub.
 2. Open `Assets/Scenes/Main.unity`.
-3. Press Play; use Welcome to enter a CSV path or choose simulation mode.
-4. Press Play.
+3. Press Play to start the default simulation. Use the data input controls to
+   load CSV telemetry or change the simulation profile.
 
 ## Run Build
 
 Run:
 
 ```powershell
-.\Builds\UnderwaterGliderTwin\UnderwaterGliderTwin.exe --csv ".\2.csv"
+.\Builds\UnderwaterGliderTwin\UnderwaterGliderTwin.exe
 ```
 
 To produce the Windows build again:

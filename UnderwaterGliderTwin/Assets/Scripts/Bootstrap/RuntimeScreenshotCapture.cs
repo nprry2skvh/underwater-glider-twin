@@ -7,9 +7,11 @@ namespace UnderwaterGliderTwin.Bootstrap
 {
     public sealed class RuntimeScreenshotCapture : MonoBehaviour
     {
-        public const int WarmupFrameCount = 30;
+        public const int WarmupFrameCount = 2;
 
         private RuntimeScreenshotOptions options;
+        private Transform closeTopTarget;
+        private Camera closeTopCamera;
 
         public void Initialize(RuntimeScreenshotOptions screenshotOptions)
         {
@@ -19,12 +21,27 @@ namespace UnderwaterGliderTwin.Bootstrap
                 return;
             }
 
-            Screen.SetResolution(options.Width, options.Height, FullScreenMode.Windowed);
-            StartCoroutine(CaptureAtEndOfFrame(options.OutputPath, options.QuitAfterCapture));
+            if (options.CloseTopView)
+            {
+                var waterSurface = FindObjectOfType<UnderwaterGliderTwin.Visualization.WaterSurfaceView>();
+                closeTopTarget = waterSurface != null ? waterSurface.InteractionTarget : null;
+                closeTopCamera = Camera.main;
+            }
+
+            Screen.SetResolution(RuntimeScreenshotOptions.CaptureWidth, RuntimeScreenshotOptions.CaptureHeight, FullScreenMode.Windowed);
+            StartCoroutine(CaptureAtEndOfFrame(
+                options.OutputPath,
+                options.QuitAfterCapture,
+                options.CaptureDelaySeconds));
         }
 
         private void Update()
         {
+            if (closeTopTarget != null && closeTopCamera != null)
+            {
+                closeTopCamera.transform.position = closeTopTarget.position + Vector3.up * 20f;
+            }
+
             if (Input.GetKeyDown(KeyCode.F12))
             {
                 CaptureManual();
@@ -35,7 +52,7 @@ namespace UnderwaterGliderTwin.Bootstrap
         {
             var path = Path.Combine(RuntimePathResolver.ResolveExportDirectory(),
                 $"glider-shot-{DateTime.Now:yyyyMMdd-HHmmss}.png");
-            StartCoroutine(CaptureAtEndOfFrame(path, quitAfterCapture: false));
+            StartCoroutine(CaptureAtEndOfFrame(path, quitAfterCapture: false, captureDelaySeconds: 0f));
             return path;
         }
 
@@ -69,7 +86,7 @@ namespace UnderwaterGliderTwin.Bootstrap
             completed?.Invoke(success, error);
         }
 
-        private IEnumerator CaptureAtEndOfFrame(string path, bool quitAfterCapture)
+        private IEnumerator CaptureAtEndOfFrame(string path, bool quitAfterCapture, float captureDelaySeconds)
         {
             var directory = Path.GetDirectoryName(path);
             if (!string.IsNullOrWhiteSpace(directory))
@@ -82,7 +99,36 @@ namespace UnderwaterGliderTwin.Bootstrap
                 yield return null;
             }
 
+            if (captureDelaySeconds > 0f)
+            {
+                var captureAt = Time.realtimeSinceStartup + captureDelaySeconds;
+                while (Time.realtimeSinceStartup < captureAt)
+                {
+                    yield return null;
+                }
+            }
+
             yield return new WaitForEndOfFrame();
+            if (options != null && options.AutoPlay)
+            {
+                var waterSurface = FindObjectOfType<UnderwaterGliderTwin.Visualization.WaterSurfaceView>();
+                if (waterSurface != null)
+                {
+                    var playback = FindObjectOfType<UnderwaterGliderTwin.Playback.PlaybackController>();
+                    var isPlaying = playback != null && playback.Model != null && playback.Model.IsPlaying;
+                    var velocity = waterSurface.InteractionTarget != null && waterSurface.InteractionTarget.GetComponent<UnderwaterGliderTwin.Visualization.GliderTransformDriver>() is UnderwaterGliderTwin.Visualization.GliderTransformDriver driver
+                        ? driver.PlaybackVelocity
+                        : Vector3.zero;
+                    Debug.Log($"Water interaction capture: playing={isPlaying}, speed={waterSurface.InteractionSpeedMps:0.000} m/s, depth={waterSurface.InteractionDepthM:0.000} Unity m, velocity=({velocity.x:0.000},{velocity.y:0.000},{velocity.z:0.000}) Unity m/s.", waterSurface);
+                    if (options.CloseTopView && Camera.main != null && waterSurface.InteractionTarget != null)
+                    {
+                        var diagnosticCamera = Camera.main;
+                        var targetViewport = diagnosticCamera.WorldToViewportPoint(waterSurface.InteractionTarget.position);
+                        Debug.Log($"Close-top screenshot camera: orthographic={diagnosticCamera.orthographic}, position={diagnosticCamera.transform.position}, target={waterSurface.InteractionTarget.position}, targetViewport={targetViewport}.", diagnosticCamera);
+                    }
+                }
+            }
+
             ScreenCapture.CaptureScreenshot(path, 1);
 
             if (!quitAfterCapture)

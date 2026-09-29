@@ -21,6 +21,7 @@ namespace UnderwaterGliderTwin.Visualization
         private PlaybackController playback;
         private PredictionController prediction;
         private GeoCoordinateMapper mapper;
+        private FittedTrajectory fittedTrajectory;
         private Vector3[] actualBuffer = Array.Empty<Vector3>();
         private Vector3[] futureBuffer = Array.Empty<Vector3>();
         private Vector3[] intendedBuffer = Array.Empty<Vector3>();
@@ -40,6 +41,7 @@ namespace UnderwaterGliderTwin.Visualization
         private readonly List<Vector3> predictedHistoryBuffer = new List<Vector3>();
 
         public Vector3[] FullTrajectoryPoints { get; private set; } = Array.Empty<Vector3>();
+        public FittedTrajectory FittedTrajectory => fittedTrajectory;
 
         public void Initialize(IReadOnlyList<TelemetryFrame> frames, GeoCoordinateMapper mapper, PlaybackController playbackController, PredictionController predictionController)
         {
@@ -53,7 +55,8 @@ namespace UnderwaterGliderTwin.Visualization
             replacementPreservedIndex = -1;
             replacementHistoryPointCount = 0;
             replacementMappedThroughIndex = -1;
-            FullTrajectoryPoints = TrajectorySampler.SampleSmooth(frames, mapper, 1200);
+            fittedTrajectory = TrajectorySampler.Fit(frames, mapper, 1200);
+            FullTrajectoryPoints = new List<Vector3>(fittedTrajectory.Points).ToArray();
             intendedBuffer = BuildIntendedPoints(frames, mapper);
             actualBuffer = new Vector3[FullTrajectoryPoints.Length];
             futureBuffer = new Vector3[FullTrajectoryPoints.Length];
@@ -83,6 +86,7 @@ namespace UnderwaterGliderTwin.Visualization
             }
 
             playback.FrameChangedWithReason += OnFrameChangedWithReason;
+            playback.ContinuousChanged += OnContinuousChanged;
             if (prediction != null)
             {
                 prediction.SnapshotUpdated += OnPredictionUpdated;
@@ -138,9 +142,10 @@ namespace UnderwaterGliderTwin.Visualization
             CaptureRenderedHistory(frames, preservedIndex);
             replacementPreservedIndex = preservedIndex;
             replacementMappedThroughIndex = preservedIndex;
-            FullTrajectoryPoints = BuildCombinedTrajectory(frames, preservedIndex);
+            fittedTrajectory = TrajectorySampler.Fit(frames, mapper, 1200);
+            FullTrajectoryPoints = new List<Vector3>(fittedTrajectory.Points).ToArray();
             intendedBuffer = BuildIntendedPoints(frames, mapper);
-            futureBuffer = TrajectorySampler.SampleSmooth(frames.Skip(preservedIndex).ToArray(), mapper, 1200);
+            futureBuffer = new List<Vector3>(TrajectorySampler.Fit(frames.Skip(preservedIndex).ToArray(), mapper, 1200).Points).ToArray();
             UpdateBackdropAndTarget();
             if (intendedLine != null)
             {
@@ -176,6 +181,7 @@ namespace UnderwaterGliderTwin.Visualization
             if (playback != null)
             {
                 playback.FrameChangedWithReason -= OnFrameChangedWithReason;
+                playback.ContinuousChanged -= OnContinuousChanged;
             }
 
             if (prediction != null)
@@ -201,15 +207,24 @@ namespace UnderwaterGliderTwin.Visualization
             var count = Mathf.Clamp(Mathf.CeilToInt(progress01 * (FullTrajectoryPoints.Length - 1)) + 1, 1, FullTrajectoryPoints.Length);
             if (count == lastActualCount)
             {
+                currentActualWorldPoint = ResolveFittedPosition(frame);
+                if (actualLine.positionCount > 0)
+                {
+                    actualLine.SetPosition(actualLine.positionCount - 1, currentActualWorldPoint);
+                }
+                if (currentMarker != null)
+                {
+                    currentMarker.transform.position = currentActualWorldPoint;
+                }
                 RebuildPredictedHistory();
                 return;
             }
 
             actualLine.positionCount = count;
-            actualLine.SetPositions(actualBuffer);
-            currentActualWorldPoint = mapper != null && TelemetryPositionUtility.HasUsableCoordinates(frame)
-                ? mapper.Map(frame)
-                : actualBuffer[Mathf.Max(0, count - 1)];
+            var visibleBuffer = new Vector3[count];
+            Array.Copy(actualBuffer, visibleBuffer, count);
+            actualLine.SetPositions(visibleBuffer);
+            currentActualWorldPoint = ResolveFittedPosition(frame);
             actualLine.SetPosition(count - 1, currentActualWorldPoint);
             if (currentMarker != null)
             {
@@ -219,6 +234,18 @@ namespace UnderwaterGliderTwin.Visualization
             RebuildPredictedHistory();
             UpdatePlannedLine();
             lastActualCount = count;
+        }
+
+        private Vector3 ResolveFittedPosition(TelemetryFrame frame)
+        {
+            if (fittedTrajectory != null && playback != null)
+            {
+                return fittedTrajectory.PositionAt(playback.Model.ContinuousElapsedSeconds);
+            }
+
+            return mapper != null && TelemetryPositionUtility.HasUsableCoordinates(frame)
+                ? mapper.Map(frame)
+                : actualBuffer.Length > 0 ? actualBuffer[Mathf.Max(0, actualBuffer.Length - 1)] : Vector3.zero;
         }
 
         private void OnFrameChangedWithReason(
@@ -233,6 +260,16 @@ namespace UnderwaterGliderTwin.Visualization
             }
 
             OnFrameChanged(frame, index, progress01);
+        }
+
+        private void OnContinuousChanged(float continuousIndex, float progress01, FrameUpdateReason reason)
+        {
+            if (reason == FrameUpdateReason.Rebuild)
+            {
+                return;
+            }
+
+            OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, progress01);
         }
 
         private void OnPredictionUpdated(PredictionSnapshot snapshot)
@@ -407,7 +444,7 @@ namespace UnderwaterGliderTwin.Visualization
                 var remainingFrames = playback != null
                     ? playback.Model.Frames.Skip(Mathf.Clamp(currentPlaybackIndex, 0, playback.Model.FrameCount - 1)).ToArray()
                     : Array.Empty<TelemetryFrame>();
-                futureBuffer = TrajectorySampler.SampleSmooth(remainingFrames, mapper, 1200);
+                futureBuffer = new List<Vector3>(TrajectorySampler.Fit(remainingFrames, mapper, 1200).Points).ToArray();
                 futureActualLine.positionCount = futureBuffer.Length;
                 if (futureBuffer.Length > 0)
                 {
@@ -445,7 +482,7 @@ namespace UnderwaterGliderTwin.Visualization
             }
             else
             {
-                actualBuffer = TrajectorySampler.SampleSmooth(frames.Take(preservedIndex + 1).ToArray(), mapper, 1200);
+                actualBuffer = new List<Vector3>(TrajectorySampler.Fit(frames.Take(preservedIndex + 1).ToArray(), mapper, 1200).Points).ToArray();
             }
 
             replacementHistoryPointCount = actualBuffer.Length;
@@ -454,8 +491,8 @@ namespace UnderwaterGliderTwin.Visualization
 
         private Vector3[] BuildCombinedTrajectory(IReadOnlyList<TelemetryFrame> frames, int preservedIndex)
         {
-            var history = TrajectorySampler.SampleSmooth(frames.Take(preservedIndex + 1).ToArray(), mapper, 1200);
-            var future = TrajectorySampler.SampleSmooth(frames.Skip(preservedIndex).ToArray(), mapper, 1200);
+            var history = new List<Vector3>(TrajectorySampler.Fit(frames.Take(preservedIndex + 1).ToArray(), mapper, 1200).Points).ToArray();
+            var future = new List<Vector3>(TrajectorySampler.Fit(frames.Skip(preservedIndex).ToArray(), mapper, 1200).Points).ToArray();
             if (history.Length == 0)
             {
                 return future;
@@ -509,7 +546,9 @@ namespace UnderwaterGliderTwin.Visualization
             for (var frameIndex = startIndex; frameIndex <= index; frameIndex++)
             {
                 var targetIndex = replacementHistoryPointCount + frameIndex - replacementPreservedIndex - 1;
-                actualBuffer[targetIndex] = mapper.Map(playback.Model.Frames[frameIndex]);
+                actualBuffer[targetIndex] = fittedTrajectory != null
+                    ? fittedTrajectory.PositionAt(playback.Model.Frames[frameIndex].ElapsedSeconds)
+                    : mapper.Map(playback.Model.Frames[frameIndex]);
             }
 
             replacementMappedThroughIndex = Mathf.Max(replacementMappedThroughIndex, index);
@@ -521,9 +560,7 @@ namespace UnderwaterGliderTwin.Visualization
                 actualLine.SetPositions(visible);
             }
 
-            currentActualWorldPoint = mapper != null && TelemetryPositionUtility.HasUsableCoordinates(frame)
-                ? mapper.Map(frame)
-                : actualBuffer[Mathf.Max(0, targetCount - 1)];
+            currentActualWorldPoint = ResolveFittedPosition(frame);
             if (currentMarker != null)
             {
                 currentMarker.transform.position = currentActualWorldPoint;

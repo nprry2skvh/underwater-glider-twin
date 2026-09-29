@@ -8,6 +8,10 @@ namespace UnderwaterGliderTwin.Visualization
 {
     public sealed class OceanVolumeView : MonoBehaviour
     {
+        public const float VisualDepthExpansion = 1.5f;
+        public const float MaximumVisualDepth = 48f;
+        public static readonly Color WaterFloorColor = new Color(0.03f, 0.14f, 0.13f, 0.32f);
+
         private OceanCurrentInstancedRenderer currentRenderer;
 
         public int VisibleCurrentArrowCount => currentRenderer != null ? currentRenderer.VisibleArrowCount : 0;
@@ -113,12 +117,19 @@ namespace UnderwaterGliderTwin.Visualization
             return selected;
         }
 
-        public static float CalculateVisualDepthScale(float missionDepthM, float preferredScale, float maximumVisualDepth = 32f)
+        public static float CalculateVisualDepthScale(float missionDepthM, float preferredScale, float maximumVisualDepth = MaximumVisualDepth)
         {
-            var safePreferredScale = Mathf.Max(0.001f, preferredScale);
+            var safePreferredScale = Mathf.Max(0.001f, preferredScale) * VisualDepthExpansion;
             var safeDepth = Mathf.Max(1f, missionDepthM);
-            var compressedScale = Mathf.Max(0.001f, maximumVisualDepth) / safeDepth;
+            var requestedMaximumDepth = Mathf.Max(0.001f, maximumVisualDepth);
+            var compressedScale = requestedMaximumDepth / safeDepth;
             return Mathf.Min(safePreferredScale, compressedScale);
+        }
+
+        public static float CalculateVisualVolumeDepth(float missionDepthM, float verticalScale)
+        {
+            var depth = Mathf.Max(20f, missionDepthM);
+            return Mathf.Max(2f, depth * Mathf.Max(0.001f, verticalScale));
         }
 
         public static IReadOnlyList<Vector3> BuildCurrentGridPoints(float width, int columns)
@@ -183,11 +194,11 @@ namespace UnderwaterGliderTwin.Visualization
             foreach (Transform child in transform) Destroy(child.gameObject);
             transform.position = new Vector3(horizontalCenter.x, 0f, horizontalCenter.z);
             var depth = Mathf.Max(20f, missionDepthM);
-            var worldDepth = Mathf.Max(2f, depth * Mathf.Max(0.001f, verticalScale));
+            var worldDepth = CalculateVisualVolumeDepth(depth, verticalScale);
             var size = new Vector2(Mathf.Max(20f, horizontalExtents.x), Mathf.Max(20f, horizontalExtents.y));
             CreateWaterVolume(size, worldDepth);
             CreateSurfaceGrid(size, 8);
-            CreateCube("海底", new Vector3(0f, -worldDepth, 0f), new Vector3(size.x, 1f, size.y), new Color(0.03f, 0.14f, 0.13f, 0.75f));
+            CreateCube("海底", new Vector3(0f, -worldDepth, 0f), new Vector3(size.x, 1f, size.y), WaterFloorColor);
             var visualSamples = SelectVisualLayerSamples(BuildLayerSamples(profile, depth), 12);
             foreach (var sample in visualSamples)
             {
@@ -213,11 +224,11 @@ namespace UnderwaterGliderTwin.Visualization
 
             transform.position = new Vector3(horizontalCenter.x, 0f, horizontalCenter.z);
             var depth = Mathf.Max(20f, missionDepthM);
-            var worldDepth = Mathf.Max(2f, depth * Mathf.Max(0.001f, verticalScale));
+            var worldDepth = CalculateVisualVolumeDepth(depth, verticalScale);
             var size = new Vector2(Mathf.Max(20f, horizontalExtents.x), Mathf.Max(20f, horizontalExtents.y));
             CreateWaterVolume(size, worldDepth);
             CreateSurfaceGrid(size, 8);
-            CreateCube("娴峰簳", new Vector3(0f, -worldDepth, 0f), new Vector3(size.x, 1f, size.y), new Color(0.03f, 0.14f, 0.13f, 0.75f));
+            CreateCube("海底", new Vector3(0f, -worldDepth, 0f), new Vector3(size.x, 1f, size.y), WaterFloorColor);
 
             currentRenderer = GetComponent<OceanCurrentInstancedRenderer>();
             if (currentRenderer == null)

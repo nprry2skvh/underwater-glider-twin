@@ -30,7 +30,7 @@ namespace UnderwaterGliderTwin.UI
             exportAction = beginExport;
             missionViewAction = onMissionViewRequested;
             var canvas = UiFactory.EnsureCanvas(transform);
-            var panel = UiFactory.CommandPanel("PlaybackControlsPanel", canvas.transform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 18f), new Vector2(-100f, 124f));
+            var panel = UiFactory.CommandPanel("PlaybackControlsPanel", canvas.transform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 36f), new Vector2(-36f, 124f));
             var groupColor = new Color(0.42f, 0.76f, 0.84f);
             UiFactory.Text("PlaybackGroupLabel", panel, "回放控制", 11, TextAnchor.MiddleLeft, groupColor, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -14f), new Vector2(120f, 18f));
 
@@ -50,7 +50,7 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.Button("CameraFollowButton", panel, "跟随", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -94f), new Vector2(88f, 28f)).onClick.AddListener(() => SetCameraMode(cameraController, trajectoryView, CameraMode.Follow));
             UiFactory.Button("CameraGlobalButton", panel, "全局", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(114f, -94f), new Vector2(88f, 28f)).onClick.AddListener(() => SetCameraMode(cameraController, trajectoryView, CameraMode.Global));
             UiFactory.Button("CameraOrbitButton", panel, "环绕", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(210f, -94f), new Vector2(88f, 28f)).onClick.AddListener(() => SetCameraMode(cameraController, trajectoryView, CameraMode.Orbit));
-            UiFactory.Button("MissionVolumeButton", panel, "海域", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(306f, -94f), new Vector2(72f, 28f)).onClick.AddListener(OnMissionViewClicked);
+            UiFactory.Button("MissionVolumeButton", panel, "海域", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -94f), new Vector2(72f, 28f)).onClick.AddListener(OnMissionViewClicked);
 
             UiFactory.Toggle("FogToggle", panel, "雾效", true, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(322f, -94f), new Vector2(84f, 26f)).onValueChanged.AddListener(environmentBuilder.SetFogEnabled);
             UiFactory.Toggle("ParticlesToggle", panel, "粒子", true, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(414f, -94f), new Vector2(110f, 26f)).onValueChanged.AddListener(environmentBuilder.SetParticlesEnabled);
@@ -68,12 +68,10 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.Text("LegendPredicted", panel, "预测历史", 12, TextAnchor.MiddleLeft, new Color(1f, 0.84f, 0.2f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1122f, -94f), new Vector2(96f, 20f));
             UiFactory.Text("LegendPlanned", panel, "计划", 12, TextAnchor.MiddleLeft, new Color(0.3f, 0.92f, 0.52f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1210f, -94f), new Vector2(66f, 20f));
             statusText = UiFactory.Text("PlaybackStatus", panel, "回放已就绪", 12, TextAnchor.MiddleRight, new Color(0.78f, 0.96f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -94f), new Vector2(490f, 20f));
-            UiFactory.ConfigureWrappedStatusText(statusText);
 
             trajectoryView.SetCameraMode(CameraMode.Follow);
             trajectoryView.SetVisible(true);
             HideLegacyCameraControls(panel);
-            ConfigureResponsiveLayout(panel);
 
             playback.FrameChanged += OnFrameChanged;
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01);
@@ -94,14 +92,6 @@ namespace UnderwaterGliderTwin.UI
             playPauseButton = refs.playPauseButton;
             progressSlider = refs.progressSlider;
             statusText = refs.statusText;
-            if (statusText != null)
-            {
-                // Keep the configured Prefab reference, while normalizing its runtime name
-                // to the generated-ui contract used by the responsive row binder.
-                statusText.gameObject.name = "PlaybackStatus";
-                statusText.text = "回放已就绪";
-            }
-            UiFactory.ConfigureWrappedStatusText(statusText);
             BindButton(refs.playPauseButton, OnPlayPauseClicked);
             BindButton(refs.reverseButton, OnReverseClicked);
             BindButton(refs.replayButton, OnReplayClicked);
@@ -109,8 +99,6 @@ namespace UnderwaterGliderTwin.UI
             BindButton(refs.exportButton, OnExportClicked);
             BindButton(refs.exitButton, OnExitClicked);
             BindButton(refs.missionVolumeButton, OnMissionViewClicked);
-            HideLegacyCameraControls(refs.panel);
-            ConfigureResponsiveLayout(refs.panel);
             BindCameraButton(refs.cameraFollowButton, cameraController, trajectoryView, CameraMode.Follow);
             BindCameraButton(refs.cameraGlobalButton, cameraController, trajectoryView, CameraMode.Global);
             BindCameraButton(refs.cameraOrbitButton, cameraController, trajectoryView, CameraMode.Orbit);
@@ -174,179 +162,6 @@ namespace UnderwaterGliderTwin.UI
                     legacyControl.gameObject.SetActive(false);
                 }
             }
-        }
-
-        private static void ConfigureResponsiveLayout(Transform panel)
-        {
-            if (panel == null)
-            {
-                return;
-            }
-
-            var operations = EnsureLayoutRow(panel, "PlaybackOperationsRow", new Vector2(0f, 0.66f), Vector2.one, UiVisualRole.CardFill);
-            var timeline = EnsureLayoutRow(panel, "PlaybackTimelineRow", new Vector2(0f, 0.34f), new Vector2(1f, 0.66f), UiVisualRole.InputFill);
-            var options = EnsureLayoutRow(panel, "PlaybackOptionsRow", Vector2.zero, new Vector2(1f, 0.34f), UiVisualRole.CardFill);
-
-            MoveToRow(panel, operations, "PlaybackGroupLabel", 86f, false, "TitleText");
-            MoveToRow(panel, operations, "PlayPauseButton", 82f);
-            MoveToRow(panel, operations, "ReverseButton", 82f);
-            MoveToRow(panel, operations, "ReplayButton", 82f);
-            MoveToRow(panel, operations, "ResetButton", 82f);
-            MoveToRow(panel, operations, "ExportButton", 82f);
-            MoveToRow(panel, operations, "ExitButton", 76f);
-
-            MoveToRow(panel, timeline, "ProgressSlider", 0f, true);
-            MoveToRow(panel, timeline, "PlaybackStatus", 220f);
-
-            MoveToRow(panel, options, "MissionVolumeButton", 76f);
-            MoveToRow(panel, options, "FogToggle", 76f);
-            MoveToRow(panel, options, "ParticlesToggle", 76f);
-            MoveToRow(panel, options, "TrajectoryToggle", 76f);
-            MoveToRow(panel, options, "SpeedGroupLabel", 48f);
-            MoveToRow(panel, options, "Speed05Button", 48f);
-            MoveToRow(panel, options, "Speed1Button", 48f);
-            MoveToRow(panel, options, "Speed2Button", 48f);
-            MoveToRow(panel, options, "Speed5Button", 48f);
-            MoveToRow(panel, options, "Speed10Button", 48f);
-            MoveToRow(panel, options, "LegendActual", 64f);
-            MoveToRow(panel, options, "LegendPredicted", 96f);
-            MoveToRow(panel, options, "LegendPlanned", 66f);
-
-            UiFactory.EnsureDivider(operations, "PlaybackOperationsDivider", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(8f, 0f), new Vector2(-8f, 1f));
-            UiFactory.EnsureDivider(timeline, "PlaybackTimelineDivider", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(8f, 0f), new Vector2(-8f, 1f));
-
-            ApplyButtonRole(panel, "PlayPauseButton", UiButtonRole.Primary);
-            ApplyButtonRole(panel, "ReverseButton", UiButtonRole.Secondary);
-            ApplyButtonRole(panel, "ReplayButton", UiButtonRole.Secondary);
-            ApplyButtonRole(panel, "ResetButton", UiButtonRole.Secondary);
-            ApplyButtonRole(panel, "ExportButton", UiButtonRole.Secondary);
-            ApplyButtonRole(panel, "ExitButton", UiButtonRole.Quiet);
-            ApplyButtonRole(panel, "MissionVolumeButton", UiButtonRole.Secondary);
-            UiFactory.ApplyRuntimePalette(panel);
-        }
-
-        private static RectTransform EnsureLayoutRow(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, UiVisualRole surfaceRole)
-        {
-            var row = parent.Find(name) as RectTransform;
-            if (row == null)
-            {
-                row = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
-                row.SetParent(parent, false);
-            }
-
-            row.anchorMin = anchorMin;
-            row.anchorMax = anchorMax;
-            row.offsetMin = new Vector2(12f, 0f);
-            row.offsetMax = new Vector2(-12f, 0f);
-            row.pivot = new Vector2(0.5f, 0.5f);
-            var rowImage = row.GetComponent<Image>();
-            if (rowImage == null)
-            {
-                rowImage = row.gameObject.AddComponent<Image>();
-                UiFactory.ApplyCommandPalette(rowImage, surfaceRole);
-            }
-            rowImage.raycastTarget = false;
-            var layout = row.GetComponent<HorizontalLayoutGroup>() ?? row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = 8f;
-            layout.childAlignment = TextAnchor.MiddleLeft;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = true;
-            return row;
-        }
-
-        private static void ApplyButtonRole(Transform panel, string name, UiButtonRole role)
-        {
-            var control = FindDescendant(panel, name);
-            UiFactory.ApplyButtonRole(control != null ? control.GetComponent<Button>() : null, role);
-        }
-
-        private static void MoveToRow(Transform panel, Transform row, string name, float preferredWidth, bool flexible = false, string alias = null)
-        {
-            var control = FindDescendant(panel, name);
-            if (control == null && !string.IsNullOrWhiteSpace(alias))
-            {
-                control = FindDescendant(panel, alias);
-            }
-            if (control == null || row == null)
-            {
-                return;
-            }
-
-            if (CanReparentConfiguredTransform(control))
-            {
-                control.SetParent(row, false);
-            }
-            control.anchorMin = Vector2.one;
-            control.anchorMax = Vector2.one;
-            control.offsetMin = Vector2.zero;
-            control.offsetMax = Vector2.zero;
-            var element = control.GetComponent<LayoutElement>() ?? control.gameObject.AddComponent<LayoutElement>();
-            element.minHeight = 30f;
-            element.preferredWidth = preferredWidth;
-            if (name == "PlaybackStatus")
-            {
-                var status = control.GetComponent<Text>();
-                if (status != null)
-                {
-                    status.verticalOverflow = VerticalWrapMode.Truncate;
-                }
-
-                element.minHeight = 24f;
-                element.preferredHeight = 24f;
-            }
-            element.minWidth = flexible ? 80f : preferredWidth;
-            element.flexibleWidth = flexible ? 1f : 0f;
-            ConfigureControlText(control);
-        }
-
-        private static bool CanReparentConfiguredTransform(Transform target)
-        {
-#if UNITY_EDITOR
-            return target == null || Application.isPlaying || !UnityEditor.PrefabUtility.IsPartOfPrefabInstance(target);
-#else
-            return true;
-#endif
-        }
-
-        private static void ConfigureControlText(RectTransform control)
-        {
-            foreach (var text in control.GetComponentsInChildren<Text>(true))
-            {
-                if (text.transform != control && text.transform.parent != control)
-                {
-                    continue;
-                }
-
-                text.rectTransform.anchorMin = Vector2.zero;
-                text.rectTransform.anchorMax = Vector2.one;
-                text.rectTransform.offsetMin = new Vector2(4f, 0f);
-                text.rectTransform.offsetMax = new Vector2(-4f, 0f);
-                text.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-                text.alignment = TextAnchor.MiddleCenter;
-                text.horizontalOverflow = HorizontalWrapMode.Wrap;
-                text.verticalOverflow = VerticalWrapMode.Truncate;
-                UiFactory.ApplyTextRole(text, UiTextRole.Button, RuntimeUiLayoutMode.CompressedThreeColumn);
-            }
-        }
-
-        private static RectTransform FindDescendant(Transform root, string name)
-        {
-            if (root == null)
-            {
-                return null;
-            }
-
-            foreach (var child in root.GetComponentsInChildren<Transform>(true))
-            {
-                if (child.name == name)
-                {
-                    return child as RectTransform;
-                }
-            }
-
-            return null;
         }
 
         private void AddSpeedButton(Transform panel, string name, string label, float x, float speed)
@@ -497,20 +312,9 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.SetButtonText(playPauseButton, playback != null && playback.Model.IsPlaying ? "暂停" : "开始");
             foreach (var entry in speedButtons)
             {
-                UiFactory.ApplyCommandPalette(
-                    entry.Value.image,
-                    playback != null && Mathf.Approximately(playback.Model.Speed, entry.Key)
-                        ? UiVisualRole.AccentFill
-                        : UiVisualRole.ButtonFill);
-                var label = entry.Value.GetComponentInChildren<Text>(true);
-                if (label != null)
-                {
-                    UiFactory.ApplyCommandPalette(
-                        label,
-                        playback != null && Mathf.Approximately(playback.Model.Speed, entry.Key)
-                            ? UiVisualRole.AccentText
-                            : UiVisualRole.Text);
-                }
+                entry.Value.image.color = playback != null && Mathf.Approximately(playback.Model.Speed, entry.Key)
+                    ? new Color(0.88f, 0.11f, 0.16f, 1f)
+                    : new Color(0.09f, 0.105f, 0.115f, 0.98f);
             }
         }
 
@@ -519,7 +323,6 @@ namespace UnderwaterGliderTwin.UI
             if (statusText != null)
             {
                 statusText.text = message;
-                UiFactory.ConfigureWrappedStatusText(statusText);
             }
         }
 

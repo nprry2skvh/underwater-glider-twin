@@ -1,6 +1,6 @@
 using UnityEngine;
+using UnderwaterGliderTwin.Mapping;
 using UnderwaterGliderTwin.Playback;
-using UnderwaterGliderTwin.Telemetry;
 
 namespace UnderwaterGliderTwin.Visualization
 {
@@ -8,6 +8,7 @@ namespace UnderwaterGliderTwin.Visualization
     {
         private const float VectorScale = 2.5f;
         private PlaybackController playback;
+        private GeoCoordinateMapper mapper;
 
         public Transform PortControlSurface { get; private set; }
         public Transform StarboardControlSurface { get; private set; }
@@ -16,30 +17,31 @@ namespace UnderwaterGliderTwin.Visualization
         public LineRenderer WaterVelocityVector { get; private set; }
         public LineRenderer GroundVelocityVector { get; private set; }
 
-        public void Initialize(PlaybackController playbackController)
+        public void Initialize(PlaybackController playbackController, GeoCoordinateMapper coordinateMapper)
         {
             if (playback != null)
             {
-                playback.FrameChangedWithReason -= OnFrameChanged;
+                playback.ContinuousChanged -= OnContinuousChanged;
             }
 
             playback = playbackController;
+            mapper = coordinateMapper;
             EnsureVisuals();
-            playback.FrameChangedWithReason += OnFrameChanged;
-            ApplyFrame(playback.Model.CurrentFrame);
+            playback.ContinuousChanged += OnContinuousChanged;
+            ApplySample(ContinuousMotionSampler.Sample(
+                playback.Model.Frames,
+                playback.Model.ContinuousElapsedSeconds));
         }
 
-        public void ApplyFrame(TelemetryFrame frame)
+        public void ApplySample(ContinuousMotionSample sample)
         {
             EnsureVisuals();
 
-            var pitchDeflection = Mathf.Clamp(-frame.PitchDeg * 0.35f, -16f, 16f);
-            var rollDeflection = Mathf.Clamp(frame.RollDeg * 0.35f, -12f, 12f);
-            PortControlSurface.localRotation = Quaternion.Euler(pitchDeflection + rollDeflection, 0f, 0f);
-            StarboardControlSurface.localRotation = Quaternion.Euler(pitchDeflection - rollDeflection, 0f, 0f);
-            VerticalTail.localRotation = Quaternion.Euler(0f, Mathf.Clamp(frame.TurnAngleDeg * 0.08f, -10f, 10f), 0f);
+            SetControlSurfaces(sample.HasDiagnostics
+                ? sample.ControlSurfaceDeflectionDeg
+                : Vector3.zero);
 
-            if (!frame.Diagnostics.HasValue)
+            if (!sample.HasDiagnostics || !sample.HasUsableCoordinates)
             {
                 SetVectorVisible(CurrentVector, false);
                 SetVectorVisible(WaterVelocityVector, false);
@@ -47,23 +49,34 @@ namespace UnderwaterGliderTwin.Visualization
                 return;
             }
 
-            var diagnostics = frame.Diagnostics.Value;
-            SetVector(CurrentVector, diagnostics.CurrentVelocityEndMps);
-            SetVector(WaterVelocityVector, diagnostics.WaterVelocityEndMps);
-            SetVector(GroundVelocityVector, diagnostics.WaterVelocityEndMps + diagnostics.CurrentVelocityEndMps);
+            SetVector(CurrentVector, sample.CurrentVelocityEndMps);
+            SetVector(WaterVelocityVector, sample.WaterVelocityEndMps);
+            SetVector(GroundVelocityVector, sample.GroundVelocityEndMps);
         }
 
         private void OnDestroy()
         {
             if (playback != null)
             {
-                playback.FrameChangedWithReason -= OnFrameChanged;
+                playback.ContinuousChanged -= OnContinuousChanged;
             }
         }
 
-        private void OnFrameChanged(TelemetryFrame frame, int index, float progress01, FrameUpdateReason reason)
+        private void OnContinuousChanged(float continuousIndex, float progress01, FrameUpdateReason reason)
         {
-            ApplyFrame(frame);
+            ApplySample(ContinuousMotionSampler.Sample(
+                playback.Model.Frames,
+                playback.Model.ContinuousElapsedSeconds));
+        }
+
+        private void SetControlSurfaces(Vector3 rollPitchYawDeg)
+        {
+            var portDeflection = Mathf.Clamp(rollPitchYawDeg.y + rollPitchYawDeg.x, -30f, 30f);
+            var starboardDeflection = Mathf.Clamp(rollPitchYawDeg.y - rollPitchYawDeg.x, -30f, 30f);
+            var tailDeflection = Mathf.Clamp(rollPitchYawDeg.z, -30f, 30f);
+            PortControlSurface.localRotation = Quaternion.Euler(portDeflection, 0f, 0f);
+            StarboardControlSurface.localRotation = Quaternion.Euler(starboardDeflection, 0f, 0f);
+            VerticalTail.localRotation = Quaternion.Euler(0f, tailDeflection, 0f);
         }
 
         private void EnsureVisuals()
@@ -81,7 +94,7 @@ namespace UnderwaterGliderTwin.Visualization
             var vectorObject = new GameObject(name);
             vectorObject.transform.SetParent(transform, false);
             var line = vectorObject.AddComponent<LineRenderer>();
-            line.useWorldSpace = true;
+            line.useWorldSpace = false;
             line.positionCount = 2;
             line.widthMultiplier = 0.035f;
             line.numCapVertices = 2;
@@ -90,17 +103,20 @@ namespace UnderwaterGliderTwin.Visualization
             return line;
         }
 
-        private void SetVector(LineRenderer line, Vector3 velocity)
+        private void SetVector(LineRenderer line, Vector3 dynamicsVelocityEndMps)
         {
-            var visible = velocity.sqrMagnitude > 0.0001f;
+            var worldVelocity = mapper != null
+                ? mapper.MapDynamicsVelocity(dynamicsVelocityEndMps)
+                : Vector3.zero;
+            var visible = worldVelocity.sqrMagnitude > 0.0001f;
             SetVectorVisible(line, visible);
             if (!visible)
             {
                 return;
             }
 
-            line.SetPosition(0, transform.position);
-            line.SetPosition(1, transform.position + velocity * VectorScale);
+            line.SetPosition(0, Vector3.zero);
+            line.SetPosition(1, transform.InverseTransformVector(worldVelocity * VectorScale));
         }
 
         private static void SetVectorVisible(LineRenderer line, bool visible)
