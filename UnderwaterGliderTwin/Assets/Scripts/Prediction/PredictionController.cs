@@ -128,11 +128,14 @@ namespace UnderwaterGliderTwin.Prediction
             var appendOnly = next.Count >= frames.Count;
             for (var index = 0; appendOnly && index < frames.Count; index++)
                 appendOnly = frames[index].Equals(next[index]);
-            if (!appendOnly)
+            var sequence = next[Math.Min(preservedIndex + 1, next.Count - 1)].ProfileSequence;
+            // A successful tail update preserves the entire old prefix too.
+            // Profile identity, not prefix equality, distinguishes it from refill.
+            var newProfile = !profileBranches.ContainsKey(sequence);
+            if (!appendOnly || newProfile)
             {
                 branchId = "branch-" + (++branchRevision);
                 observedThroughIndex = Math.Min(observedThroughIndex, preservedIndex);
-                var sequence = next[Math.Min(preservedIndex + 1, next.Count - 1)].ProfileSequence;
                 var profile = timeline != null && timeline.CommittedSnapshot.Segments.Count > 0
                     ? timeline.CommittedSnapshot.Segments[timeline.CommittedSnapshot.Segments.Count - 1].Profile
                     : RuntimeDataSourceState.SimulationProfile;

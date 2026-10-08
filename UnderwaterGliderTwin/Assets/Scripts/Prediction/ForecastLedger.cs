@@ -17,7 +17,8 @@ namespace UnderwaterGliderTwin.Prediction
         private readonly HashSet<(float, string, bool, string)> observationKeys = new HashSet<(float, string, bool, string)>();
         private readonly IReadOnlyList<FrozenForecast> forecastView;
         private readonly IReadOnlyList<ForecastScore> scoreView;
-        private float latestReceipt = float.NegativeInfinity;
+        private readonly Dictionary<(bool, string), ReceiptClock> receiptClocks = new Dictionary<(bool, string), ReceiptClock>();
+        private float latestRealReceipt = float.NegativeInfinity;
         private long observationOrder;
 
         public ForecastLedger(string runId, float timeToleranceSeconds = .5f,
@@ -55,11 +56,14 @@ namespace UnderwaterGliderTwin.Prediction
                 TimeToleranceSeconds, MaximumInterpolationGapSeconds, WaitDeadlineSeconds);
             requests.Add(requestKey, record); forecasts.Add(record);
             scoresByForecast.Add(record.ForecastId, new List<ForecastScore>());
+            var clock = Clock(isSimulation, branchId, origin.ElapsedSeconds);
             for (var index = 0; index < record.Frames.Count; index++)
             {
                 var target = new PendingTarget(record, index);
                 // First backward visits replay original receipt events before expiry.
-                if (TryFinalize(target, latestReceipt)) continue;
+                // Buffered real truth may reconcile a new hypothetical branch,
+                // but its absence must not inherit another branch's deadline.
+                if (TryFinalize(target, clock.Seconds, Math.Max(clock.Seconds, latestRealReceipt))) continue;
                 var time = record.Frames[index].ElapsedSeconds;
                 if (!pending.TryGetValue(time, out var list)) pending.Add(time, list = new List<PendingTarget>());
                 list.Add(target);
@@ -96,12 +100,38 @@ namespace UnderwaterGliderTwin.Prediction
                 list.Add(new Observation(frame, receivedSeconds, branchId, isSimulation,
                     hasPositionReference && ValidPosition(frame), truthGrade, observationOrder++));
             }
-            latestReceipt = Math.Max(latestReceipt, receivedSeconds); ProcessPending(latestReceipt);
+            var clock = Clock(isSimulation, branchId, receivedSeconds);
+            clock.Seconds = Math.Max(clock.Seconds, receivedSeconds);
+            if (!isSimulation)
+            {
+                latestRealReceipt = Math.Max(latestRealReceipt, receivedSeconds);
+                foreach (var existing in receiptClocks.Values)
+                    existing.Seconds = Math.Max(existing.Seconds, receivedSeconds);
+            }
+            ProcessPending(clock.Seconds);
         }
         public void Expire(float receivedSeconds)
         {
             if (!Finite(receivedSeconds)) return;
-            latestReceipt = Math.Max(latestReceipt, receivedSeconds); ProcessPending(latestReceipt);
+            // Compatibility: explicitly advance domains that already exist.
+            // This does not seed domains created by a later hot update.
+            foreach (var clock in receiptClocks.Values)
+                clock.Seconds = Math.Max(clock.Seconds, receivedSeconds);
+            ProcessPending(receivedSeconds);
+        }
+        public void ExpireBranch(float receivedSeconds, string branchId, bool isSimulation = true)
+        {
+            if (!Finite(receivedSeconds)) return;
+            var clock = Clock(isSimulation, branchId, receivedSeconds);
+            clock.Seconds = Math.Max(clock.Seconds, receivedSeconds);
+            ProcessPending(clock.Seconds);
+        }
+        private ReceiptClock Clock(bool simulation, string branch, float initialSeconds)
+        {
+            var key = (simulation, simulation ? branch ?? string.Empty : string.Empty);
+            if (!receiptClocks.TryGetValue(key, out var clock))
+                receiptClocks.Add(key, clock = new ReceiptClock(initialSeconds));
+            return clock;
         }
         private void ProcessPending(float now)
         {
@@ -109,15 +139,20 @@ namespace UnderwaterGliderTwin.Prediction
             {
                 var targets = pending.Values[timeIndex];
                 for (var index = targets.Count - 1; index >= 0; index--)
-                    if (TryFinalize(targets[index], now)) targets.RemoveAt(index);
+                {
+                    var record = targets[index].Record;
+                    var clock = Clock(record.IsSimulation, record.BranchId, record.Origin.ElapsedSeconds);
+                    if (TryFinalize(targets[index], clock.Seconds)) targets.RemoveAt(index);
+                }
                 if (targets.Count == 0) pending.RemoveAt(timeIndex);
             }
         }
-        private bool TryFinalize(PendingTarget target, float now)
+        private bool TryFinalize(PendingTarget target, float now, float? bufferedRealThrough = null)
         {
             var record = target.Record; var predicted = record.Frames[target.Index];
-            if (predicted.ElapsedSeconds > now) return false;
-            if (TryFirstAlignment(record, predicted.ElapsedSeconds, now, out var actual, out var availability))
+            var alignmentThrough = bufferedRealThrough ?? now;
+            if (predicted.ElapsedSeconds > alignmentThrough) return false;
+            if (TryFirstAlignment(record, predicted.ElapsedSeconds, alignmentThrough, out var actual, out var availability))
             {
                 if (!actual.HasPosition)
                     Add(new ForecastScore(record, target.Index, "no_position_reference", actual.TruthGrade,
@@ -151,7 +186,7 @@ namespace UnderwaterGliderTwin.Prediction
                 index < observations.Count && observations.Keys[index] <= target + radius; index++)
                 foreach (var observed in observations.Values[index])
                     if (observed.ReceivedSeconds <= now && observed.ReceivedSeconds < target + WaitDeadlineSeconds
-                        && (!observed.IsSimulation || observed.BranchId == record.BranchId)) candidates.Add(observed);
+                        && (!observed.IsSimulation || (record.IsSimulation && observed.BranchId == record.BranchId))) candidates.Add(observed);
             candidates.Sort((a, b) => a.ReceivedSeconds != b.ReceivedSeconds
                 ? a.ReceivedSeconds.CompareTo(b.ReceivedSeconds) : a.Order.CompareTo(b.Order));
             var visible = new List<Observation>(); var cursor = 0;
@@ -211,6 +246,11 @@ namespace UnderwaterGliderTwin.Prediction
         }
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static bool ValidPosition(TelemetryFrame frame) => TelemetryPositionUtility.HasUsableCoordinates(frame) && Finite(frame.DepthM);
+        private sealed class ReceiptClock
+        {
+            public ReceiptClock(float seconds) { Seconds = seconds; }
+            public float Seconds;
+        }
         private readonly struct PendingTarget
         {
             public PendingTarget(FrozenForecast record, int index) { Record = record; Index = index; }

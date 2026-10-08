@@ -107,6 +107,44 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(one.Ledger.Scores.Count, Is.EqualTo(count));
         }
 
+        [UnityTest]
+        public IEnumerator TailProfileUpdateCreatesNewBranchAndCurrentVersion()
+        {
+            var controller = Create(1f, out var playback, out var timeline);
+            playback.Seek(1f);
+            var old = controller.Ledger.Forecasts.Last();
+            var oldPoints = old.Frames.ToArray();
+            var future = Frames(84).Skip(80).Select(frame => frame.WithProfileSequence(1)).ToArray();
+            var changed = SimulationProfile.Default.Clone();
+            changed.IrregularFieldIdwRadiusKm += 10f;
+            timeline.ReplaceFutureFrom(79, future, new SimulationTimelineSegment(1, 100,
+                future[0].RowIndex, future[0].ElapsedSeconds, changed, DateTime.UtcNow));
+            yield return null;
+            var updated = controller.Ledger.Forecasts.Last();
+            Assert.That(updated.Frames.Count, Is.EqualTo(3));
+            Assert.That(updated.BranchId, Is.Not.EqualTo(old.BranchId));
+            Assert.That(updated.CurrentVersion, Is.Not.EqualTo(old.CurrentVersion));
+            Assert.That(updated.ProfileSequence, Is.EqualTo(1));
+            Assert.That(old.Frames, Is.EqualTo(oldPoints));
+            playback.Seek(80f / 83f);
+            yield return null;
+            Assert.That(controller.Ledger.Scores.Any(score => score.ForecastId == old.ForecastId), Is.False,
+                "new parameter observations cannot score an old branch forecast");
+            Assert.That(controller.Ledger.Scores.Any(score => score.ForecastId == updated.ForecastId && score.Status == "scored"), Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator SameProfileAppendKeepsExistingBranch()
+        {
+            var controller = Create(1f, out var playback, out var timeline);
+            playback.Seek(1f);
+            var previous = controller.Ledger.Forecasts.Last();
+            timeline.AppendFuture(Frames(84).Skip(80).ToArray());
+            yield return null;
+            Assert.That(controller.Ledger.Forecasts.Last().BranchId, Is.EqualTo(previous.BranchId));
+            Assert.That(controller.Ledger.Forecasts.Last().CurrentVersion, Is.EqualTo(previous.CurrentVersion));
+        }
+
         private PredictionController Create(float scale, out PlaybackController playback,
             out SimulationTrajectoryTimeline timeline)
         {
@@ -127,10 +165,10 @@ namespace UnderwaterGliderTwin.Tests
             return controller;
         }
 
-        private static List<TelemetryFrame> Frames()
+        private static List<TelemetryFrame> Frames(int count = 80)
         {
             var frames = new List<TelemetryFrame>();
-            for (var index = 0; index < 80; index++)
+            for (var index = 0; index < count; index++)
                 frames.Add(new TelemetryFrame(index, "t" + index, index * 10f,
                     120.0 + index * .00001, 25.0 + index * .00002, 10f + index * .1f,
                     80f, 359f, 2f, -1f, 28f, .6f, 90f, "simulation", "descent",

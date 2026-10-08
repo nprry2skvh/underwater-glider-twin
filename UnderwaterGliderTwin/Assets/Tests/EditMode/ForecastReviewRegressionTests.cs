@@ -36,6 +36,62 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(ledger.GetMetricsThrough(record.ForecastId, 0, 50).RmseMeters, Is.EqualTo(5));
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void OldSimulationClockCannotExpireNewBranchForecast(bool oldObservationAfterPublish)
+        {
+            var ledger = new ForecastLedger("fork");
+            if (!oldObservationAfterPublish)
+                ledger.Observe(ForecastLedgerTests.Point(1000), 1000, "old", true, true, "simulation");
+            var record = ledger.Publish("new-request", ForecastLedgerTests.Point(390),
+                new[] { ForecastLedgerTests.Point(400) }, "new", true, 1, "m", "i", "c", "");
+            if (oldObservationAfterPublish)
+                ledger.Observe(ForecastLedgerTests.Point(1000), 1000, "old", true, true, "simulation");
+            Assert.That(ledger.Scores.Where(score => score.ForecastId == record.ForecastId), Is.Empty,
+                "old simulation branch must not finalize the new branch deadline");
+            ledger.Observe(ForecastLedgerTests.Point(400, depth: 15), 400, "new", true, true, "simulation");
+            Assert.That(ledger.Scores.Single().Status, Is.EqualTo("scored"));
+            Assert.That(ledger.GetMetrics(record.ForecastId, 0).RmseMeters, Is.EqualTo(5));
+        }
+
+        [Test]
+        public void BranchDeadlineDoesNotExpireAnotherBranch()
+        {
+            var ledger = new ForecastLedger("deadline");
+            var one = ledger.Publish("one", ForecastLedgerTests.Point(390),
+                new[] { ForecastLedgerTests.Point(400) }, "one", true, 0, "m", "i", "c", "");
+            var two = ledger.Publish("two", ForecastLedgerTests.Point(390),
+                new[] { ForecastLedgerTests.Point(400) }, "two", true, 1, "m", "i", "c", "");
+            var expire = typeof(ForecastLedger).GetMethod("ExpireBranch");
+            Assert.That(expire, Is.Not.Null, "branch-bound deadline entry is missing");
+            expire.Invoke(ledger, new object[] { 460f, "one", true });
+            Assert.That(ledger.Scores.Single().ForecastId, Is.EqualTo(one.ForecastId));
+            Assert.That(ledger.Scores.Single().Status, Is.EqualTo("missing"));
+            ledger.Observe(ForecastLedgerTests.Point(400, depth: 15), 400, "two", true, true, "simulation");
+            Assert.That(ledger.GetMetrics(two.ForecastId, 0).RmseMeters, Is.EqualTo(5));
+        }
+
+        [Test]
+        public void LegacyExpiryDoesNotSeedTheClockOfALaterBranch()
+        {
+            var ledger = new ForecastLedger("legacy-expire");
+            Publish(ledger, "old", ForecastLedgerTests.Point(30));
+            ledger.Expire(1000);
+            var newer = ledger.Publish("new", ForecastLedgerTests.Point(390),
+                new[] { ForecastLedgerTests.Point(400) }, "new", true, 1, "m", "i", "c", "");
+            Assert.That(ledger.Scores.Any(score => score.ForecastId == newer.ForecastId), Is.False);
+        }
+
+        [Test]
+        public void NewSimulationBranchReconcilesBufferedRealTruthWithoutOldSimulationClock()
+        {
+            var ledger = new ForecastLedger("real-truth");
+            ledger.Observe(ForecastLedgerTests.Point(400, depth: 15), 400, "navigation", false, true, "real");
+            var record = ledger.Publish("new", ForecastLedgerTests.Point(390),
+                new[] { ForecastLedgerTests.Point(400) }, "new", true, 1, "m", "i", "c", "");
+            Assert.That(ledger.GetMetrics(record.ForecastId, 0).RmseMeters, Is.EqualTo(5));
+        }
+
         [Test]
         public void FinalizedArchiveDoesNotAllocateAgainWhenDeadlineIsChecked()
         {
