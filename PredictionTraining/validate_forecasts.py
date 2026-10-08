@@ -284,6 +284,7 @@ def freeze_forecast(frame: pd.DataFrame, issued: float, horizon: int, method: st
 
 def score_frozen_forecast(record: dict, frame: pd.DataFrame, received_seconds: float,
                           truth_grade: str = 'navigation_record_unverified') -> list[dict]:
+    train_models.validate_simulation_branch_metadata(frame)
     config = record['scoring_config']
     sampled = frame.elapsed_seconds.to_numpy(dtype=float)
     received = frame.received_seconds.to_numpy(dtype=float) if 'received_seconds' in frame else sampled
@@ -295,9 +296,9 @@ def score_frozen_forecast(record: dict, frame: pd.DataFrame, received_seconds: f
         visible = (np.isfinite(received) & (received >= sampled) & (received <= received_seconds)
                    & (received < deadline) & (np.abs(sampled - target) <= radius))
         if 'branch_id' in frame:
-            simulation_rows = np.full(len(frame), 'simulation' in truth_grade, dtype=bool)
-            if 'truth_grade' in frame:
-                simulation_rows |= frame.truth_grade.astype(str).str.contains('simulation', case=False).to_numpy()
+            simulation_rows = (frame.truth_grade.astype(str).str.contains('simulation', case=False).to_numpy()
+                               if 'truth_grade' in frame else
+                               np.full(len(frame), 'simulation' in truth_grade.casefold(), dtype=bool))
             visible &= ~simulation_rows | (frame.branch_id.to_numpy() == record['branch_id'])
         events = frame.loc[visible].copy()
         events['_received_at'] = received[visible]
@@ -507,8 +508,13 @@ def run_validation(csv_path: Path, artifact_root: Path, output_root: Path,
             for horizon in forecast_data.SUPPORTED_HORIZONS:
                 for method in ('constant_velocity', 'current_deployed_xgboost_with_hold_fallback'):
                     try:
+                        # Segment index is a split boundary, not a simulation
+                        # branch. Only already-visible origin metadata may bind
+                        # this forecast; never use a future row's identity.
+                        branch_id = (str(input_frame.iloc[-1].branch_id) if 'branch_id' in input_frame
+                                     else f'segment-{segment_index}')
                         record = freeze_forecast(input_frame, issued, horizon, method, run_id,
-                                                 f'segment-{segment_index}', artifact_root)
+                                                 branch_id, artifact_root)
                         record.update(segment_index=segment_index, partition=partition, source_sha256=source_hash)
                         frozen.append(record)
                         scored = score_frozen_forecast(record, truth_frame,

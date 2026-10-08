@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -212,6 +213,64 @@ class ReviewRegressionTests(unittest.TestCase):
                     raw.to_csv(path, index=False)
                     with self.assertRaisesRegex(ValueError, column):
                         replay.train_models.load_frame_table(path)
+
+    def test_cli_freezes_visible_simulation_branch_and_rejects_foreign_truth(self):
+        training = Path(replay.__file__).resolve().parent
+        with tempfile.TemporaryDirectory() as directory:
+            for future_branch in ('branch-a', 'branch-b'):
+                with self.subTest(future_branch=future_branch):
+                    path = Path(directory) / 'truth.csv'
+                    output = Path(directory) / future_branch
+                    self._write_quality_csv(path, ['True'] * 130, grade='simulation_branch')
+                    raw = pd.read_csv(path)
+                    raw.loc[30:, 'branch_id'] = future_branch
+                    raw.to_csv(path, index=False)
+                    result = subprocess.run([
+                        sys.executable, str(training / 'validate_forecasts.py'),
+                        '--csv', str(path), '--artifact', str(training.parent / 'Models/XGBoost'),
+                        '--output', str(output), '--source-kind', 'synthetic',
+                        '--max-origins', '1', '--run-id', 'review-cli-branch',
+                    ], capture_output=True, text=True, timeout=60)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    forecasts = [json.loads(line) for line in (output / 'frozen_forecasts.jsonl').read_text().splitlines()]
+                    constant = [row for row in forecasts if row['method'] == 'constant_velocity']
+                    self.assertEqual(len(constant), 4)
+                    self.assertEqual({row['branch_id'] for row in constant}, {'branch-a'})
+                    self.assertEqual({row['segment_index'] for row in constant}, {0})
+                    self.assertEqual({row['origin_elapsed_seconds'] for row in constant}, {290.})
+                    scores = [json.loads(line) for line in (output / 'scores.jsonl').read_text().splitlines()]
+                    constant_scores = [row for row in scores if row['method'] == 'constant_velocity']
+                    self.assertEqual(len(constant_scores), 129)
+                    expected = 'scored' if future_branch == 'branch-a' else 'missing'
+                    self.assertEqual({row['status'] for row in constant_scores}, {expected})
+
+    def test_csv_explicit_simulation_grade_requires_branch_column(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'truth.csv'
+            self._write_quality_csv(path, ['True'] * 50, grade='simulation_branch')
+            raw = pd.read_csv(path).drop(columns='branch_id')
+            raw.to_csv(path, index=False)
+            with self.assertRaisesRegex(ValueError, 'branch_id'):
+                replay.train_models.load_frame_table(path)
+
+    def test_direct_simulation_truth_without_branch_identity_cannot_score(self):
+        source = fixtures.ForecastReplayTests.frame()
+        record = replay.freeze_forecast(source, 200., 30, 'constant_velocity', 'run', 'branch-a')
+        source['truth_grade'] = 'simulation_branch'
+        with self.assertRaisesRegex(ValueError, 'branch_id'):
+            replay.score_frozen_forecast(record, source, 290.)
+
+    def test_explicit_navigation_truth_can_score_foreign_branch_under_simulation_default(self):
+        source = fixtures.ForecastReplayTests.frame()
+        record = replay.freeze_forecast(source, 200., 30, 'constant_velocity', 'run', 'branch-a')
+        source['branch_id'] = 'navigation'
+        source['truth_grade'] = 'navigation_reference'
+        source['has_position_reference'] = True
+        for default_grade in ('navigation_record_unverified', 'synthetic_simulation'):
+            with self.subTest(default_grade=default_grade):
+                scores = replay.score_frozen_forecast(record, source, 290., default_grade)
+                self.assertEqual([row['status'] for row in scores], ['scored'] * 3)
+                self.assertEqual([row['truth_grade'] for row in scores], ['navigation_reference'] * 3)
 
 
 if __name__ == '__main__':

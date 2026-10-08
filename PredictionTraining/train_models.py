@@ -234,6 +234,19 @@ def parse_position_reference(value: object) -> bool:
     raise ValueError('has_position_reference must explicitly be true/false or 1/0')
 
 
+def validate_simulation_branch_metadata(frame: pd.DataFrame) -> None:
+    if 'truth_grade' not in frame:
+        return
+    simulation = frame.truth_grade.astype(str).str.contains('simulation', case=False)
+    if not simulation.any():
+        return
+    if 'branch_id' not in frame:
+        raise ValueError('explicit simulation truth requires branch_id metadata')
+    branches = frame.loc[simulation, 'branch_id']
+    if branches.isna().any() or branches.astype(str).str.strip().eq('').any():
+        raise ValueError('explicit simulation truth requires nonempty branch_id metadata')
+
+
 def load_frame_table(csv_path: Path) -> pd.DataFrame:
     try:
         raw = pd.read_csv(csv_path, encoding="gbk", header=0, dtype=str, low_memory=False)
@@ -254,6 +267,7 @@ def load_frame_table(csv_path: Path) -> pd.DataFrame:
             if values.isna().any() or values.eq('').any():
                 raise ValueError(f'{name} metadata must be nonempty')
             frame[name] = values
+    validate_simulation_branch_metadata(frame)
 
     for name in frame.columns:
         if name not in {"raw_time", "work_mode", "run_state"} | metadata_columns:
