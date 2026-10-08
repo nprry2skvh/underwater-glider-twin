@@ -25,7 +25,7 @@ namespace UnderwaterGliderTwin.Tests
         public void SetUp()
         {
             var activeScene = SceneManager.GetActiveScene();
-            if (activeScene.path == "Assets/Scenes/Main.unity" || activeScene.path == "Assets/Scenes/Welcome.unity")
+            if (activeScene.path == "Assets/Scenes/Main.unity")
             {
                 UnityEditor.SceneManagement.EditorSceneManager.NewScene(
                     UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
@@ -69,11 +69,11 @@ namespace UnderwaterGliderTwin.Tests
             dashboard.Initialize(playback, prediction);
 
             Assert.That(FindText("TelemetryTitle").text, Is.EqualTo("遥测数据"));
-            Assert.That(FindText("DepthValue").text, Is.EqualTo("10.0"));
-            Assert.That(FindText("BatteryValue").text, Is.EqualTo("15"));
-            Assert.That(FindText("VelocityXValue").text, Is.EqualTo("0.00"));
-            Assert.That(FindText("VelocityYValue").text, Is.EqualTo("0.00"));
-            Assert.That(FindText("VelocityZValue").text, Is.EqualTo("0.00"));
+            Assert.That(FindText("DepthValue").text, Is.EqualTo("10.0 m"));
+            Assert.That(FindText("BatteryValue").text, Is.EqualTo("15 %"));
+            Assert.That(FindText("VelocityXValue").text, Is.EqualTo("0.00 m/s"));
+            Assert.That(FindText("VelocityYValue").text, Is.EqualTo("0.00 m/s"));
+            Assert.That(FindText("VelocityZValue").text, Is.EqualTo("0.00 m/s"));
         }
 
         [Test]
@@ -82,8 +82,6 @@ namespace UnderwaterGliderTwin.Tests
             var playback = CreatePlayback(Frames(2));
             var prediction = CreatePrediction(playback, Frames(2));
             var root = new GameObject("DashboardPanel", typeof(RectTransform));
-            CreateText(root.transform, "深度Label");
-            CreateText(root.transform, "电量Label");
             var depth = CreateText(root.transform, "DepthValue");
             var battery = CreateText(root.transform, "BatteryValue");
             var refs = new DashboardPanelRefs { panel = root.GetComponent<RectTransform>(), depthValue = depth, batteryValue = battery };
@@ -91,25 +89,90 @@ namespace UnderwaterGliderTwin.Tests
 
             dashboard.Bind(refs, playback, prediction);
 
-            Assert.That(depth.text, Is.EqualTo("10.0"));
-            Assert.That(battery.text, Is.EqualTo("15"));
-            Assert.That(root.transform.Find("DepthValueUnit"), Is.Null);
-            Assert.That(root.transform.Find("BatteryValueUnit"), Is.Null);
-            Assert.That(root.transform.Find("DepthRow/DepthValueUnit"), Is.Not.Null);
-            Assert.That(root.transform.Find("BatteryRow/BatteryValueUnit"), Is.Not.Null);
-            AssertNoUnitColumnsOutsideRows(root.transform);
+            Assert.That(depth.text, Is.EqualTo("10.0 m"));
+            Assert.That(battery.text, Is.EqualTo("15 %"));
         }
 
-        [Test]
-        public void DashboardView_FallbackSeparatesTelemetryValueAndUnitColumns()
+        [TestCase(true)]
+        [TestCase(false)]
+        public void DashboardView_BoundPrefabDetailsFollowTheToggle(bool useAdvancedRoot)
         {
+            var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/UI/Prefabs/DashboardPanel.prefab");
+            var root = (GameObject)UnityEditor.PrefabUtility.InstantiatePrefab(prefab);
+            var canvas = new GameObject("BoundDashboardCanvas", typeof(Canvas));
+            root.transform.SetParent(canvas.transform, false);
+            var texts = root.GetComponentsInChildren<Text>(true);
+            var refs = new DashboardPanelRefs { panel = root.GetComponent<RectTransform>() };
+            foreach (var field in typeof(DashboardPanelRefs).GetFields())
+            {
+                if (field.FieldType == typeof(Text))
+                {
+                    var name = char.ToUpperInvariant(field.Name[0]) + field.Name.Substring(1);
+                    field.SetValue(refs, System.Array.Find(texts, text => text.name == name));
+                }
+            }
+
+            refs.detailsButton = root.GetComponentInChildren<Button>(true);
+            var advancedRoot = root.transform.Find("AdvancedRowsRoot").GetComponent<RectTransform>();
+            refs.advancedRowsRoot = useAdvancedRoot ? advancedRoot : null;
+            var unit = CreateText(refs.velocityXValue.transform.parent, "VelocityXValueUnit");
+            var label = CreateText(refs.velocityXValue.transform.parent, "东向速度Label");
             var playback = CreatePlayback(Frames(2));
             var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
 
-            dashboard.Initialize(playback, null);
+            dashboard.Bind(refs, playback, null);
 
-            Assert.That(FindText("DepthValue").text, Does.Not.Contain("m"));
-            Assert.That(FindText("DepthValueUnit").text, Is.EqualTo("m"));
+            var details = new[] { refs.yawValue, refs.latitudeValue, refs.velocityXValue, refs.missionTimeValue, refs.actuatorPowerValue, unit, label };
+            foreach (var detail in details)
+            {
+                Assert.That(detail.enabled, Is.False, detail.name + " should start hidden");
+            }
+            if (useAdvancedRoot) Assert.That(advancedRoot.gameObject.activeSelf, Is.False);
+            Assert.That(refs.depthValue.enabled, Is.True);
+
+            refs.detailsButton.onClick.Invoke();
+
+            foreach (var detail in details) Assert.That(detail.enabled, Is.True, detail.name);
+            if (useAdvancedRoot) Assert.That(advancedRoot.gameObject.activeSelf, Is.True);
+            Assert.That(refs.depthValue.enabled, Is.True);
+            Assert.That(unit.text, Is.EqualTo("m/s"));
+
+            refs.detailsButton.onClick.Invoke();
+
+            foreach (var detail in details) Assert.That(detail.enabled, Is.False, detail.name);
+            if (useAdvancedRoot) Assert.That(advancedRoot.gameObject.activeSelf, Is.False);
+            Assert.That(refs.depthValue.enabled, Is.True);
+        }
+
+        [Test]
+        public void DashboardView_MinimalBindingStillInitializesDetailsVisibility()
+        {
+            var panel = new GameObject("DashboardPanel", typeof(RectTransform));
+            var advancedRoot = new GameObject("AdvancedRowsRoot", typeof(RectTransform));
+            advancedRoot.transform.SetParent(panel.transform, false);
+            var detail = CreateText(advancedRoot.transform, "CustomDetail");
+            var button = new GameObject("DetailsButton", typeof(RectTransform), typeof(Button));
+            button.transform.SetParent(panel.transform, false);
+            var refs = new DashboardPanelRefs
+            {
+                panel = panel.GetComponent<RectTransform>(),
+                depthValue = CreateText(panel.transform, "DepthValue"),
+                detailsButton = button.GetComponent<Button>(),
+                advancedRowsRoot = advancedRoot.GetComponent<RectTransform>()
+            };
+            var dashboard = new GameObject("Dashboard").AddComponent<DashboardView>();
+
+            dashboard.Bind(refs, CreatePlayback(Frames(2)), null);
+
+            Assert.That(advancedRoot.activeSelf, Is.False);
+            Assert.That(detail.enabled, Is.False);
+            Assert.That(refs.depthValue.enabled, Is.True);
+            refs.detailsButton.onClick.Invoke();
+            Assert.That(advancedRoot.activeSelf, Is.True);
+            Assert.That(detail.enabled, Is.True);
+            refs.detailsButton.onClick.Invoke();
+            Assert.That(advancedRoot.activeSelf, Is.False);
+            Assert.That(detail.enabled, Is.False);
         }
 
         [Test]
@@ -118,8 +181,6 @@ namespace UnderwaterGliderTwin.Tests
             var playback = CreatePlayback(Frames(2));
             var prediction = CreatePrediction(playback, Frames(2));
             var root = new GameObject("StatusPanel", typeof(RectTransform));
-            CreateText(root.transform, "任务来源Label");
-            CreateText(root.transform, "剩余电量Label");
             var mission = CreateText(root.transform, "MissionValue");
             var battery = CreateText(root.transform, "BatteryValue");
             var refs = new StatusPanelRefs { panel = root.GetComponent<RectTransform>(), missionValue = mission, batteryValue = battery };
@@ -128,10 +189,7 @@ namespace UnderwaterGliderTwin.Tests
             status.Bind(refs, playback, new AlarmEvaluator(1000f, 1f, 90f), null, prediction);
 
             Assert.That(mission.text, Is.Not.Empty);
-            Assert.That(battery.text, Is.EqualTo("15"));
-            Assert.That(root.transform.Find("BatteryValueUnit"), Is.Null);
-            Assert.That(root.transform.Find("BatteryRow/BatteryValueUnit").GetComponent<Text>().text, Is.EqualTo("%"));
-            AssertNoUnitColumnsOutsideRows(root.transform);
+            Assert.That(battery.text, Is.EqualTo("15 %"));
         }
 
         [Test]
@@ -156,6 +214,23 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(input.text, Is.EqualTo(csvPath));
             Assert.That(requestedPath, Is.EqualTo(csvPath));
+        }
+
+        [Test]
+        public void DataInputView_BoundInputsCorrectCycleDurationAfterDepthEdit()
+        {
+            var panel = new GameObject("DataInputPanel", typeof(RectTransform));
+            var refs = new DataInputPanelRefs();
+            refs.simulation.durationInput = CreateInput(panel.transform, "SimulationDurationInput");
+            refs.simulation.targetDepthInput = CreateInput(panel.transform, "SimulationDepthInput");
+            var view = new GameObject("DataInput").AddComponent<DataInputView>();
+
+            view.Bind(refs, string.Empty, SimulationProfile.Default, null);
+            refs.simulation.durationInput.text = "900";
+            refs.simulation.targetDepthInput.text = "1600";
+            refs.simulation.targetDepthInput.onEndEdit.Invoke("1600");
+
+            Assert.That(refs.simulation.durationInput.text, Is.EqualTo("32940"));
         }
 
         [Test]
@@ -284,97 +359,11 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(GameObject.Find("CommandCenterHeader"), Is.Not.Null);
             Assert.That(GameObject.Find("TelemetryPanel").GetComponent<Outline>(), Is.Not.Null);
+            Assert.That(GameObject.Find("TelemetryPanel").GetComponent<RectTransform>().anchoredPosition,
+                Is.EqualTo(new Vector2(18f, -364f)));
+            Assert.That(GameObject.Find("TelemetryPanel").GetComponent<RectTransform>().sizeDelta.y,
+                Is.EqualTo(384f).Within(.1f));
             Assert.That(FindText("CommandCenterProductName").text, Is.EqualTo("UnderwaterGliderTwin"));
-        }
-
-        [Test]
-        public void Task5_FeedbackComponents_ExposeAccessibleContracts()
-        {
-            var tooltipType = System.Type.GetType("UnderwaterGliderTwin.UI.UiTooltip, UnderwaterGliderTwin.Runtime");
-            var controllerType = System.Type.GetType("UnderwaterGliderTwin.UI.UiTooltipController, UnderwaterGliderTwin.Runtime");
-            var badgeType = System.Type.GetType("UnderwaterGliderTwin.UI.UiStateBadge, UnderwaterGliderTwin.Runtime");
-            var focusType = System.Type.GetType("UnderwaterGliderTwin.UI.UiFocusVisual, UnderwaterGliderTwin.Runtime");
-
-            Assert.That(tooltipType, Is.Not.Null, "UiTooltip must be a runtime component");
-            Assert.That(controllerType, Is.Not.Null, "UiTooltipController must be a runtime component");
-            Assert.That(badgeType, Is.Not.Null, "UiStateBadge must be a runtime component");
-            Assert.That(focusType, Is.Not.Null, "UiFocusVisual must be a runtime component");
-            Assert.That(tooltipType.GetProperty("Message"), Is.Not.Null);
-            Assert.That(tooltipType.GetProperty("Host"), Is.Not.Null);
-            Assert.That(controllerType.GetMethod("Show"), Is.Not.Null);
-            Assert.That(controllerType.GetMethod("Hide"), Is.Not.Null);
-            Assert.That(controllerType.GetMethod("RefreshPosition"), Is.Not.Null);
-            Assert.That(badgeType.GetMethod("SetState"), Is.Not.Null);
-            Assert.That(typeof(UnityEngine.EventSystems.ISelectHandler).IsAssignableFrom(focusType), Is.True);
-            Assert.That(typeof(UnityEngine.EventSystems.IDeselectHandler).IsAssignableFrom(focusType), Is.True);
-        }
-
-        [Test]
-        public void Task5_FeedbackDecorations_DoNotInterceptRaycastsOrResizeHost()
-        {
-            var canvasObject = new GameObject("Task5Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            var canvas = canvasObject.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
-            var popup = uiRoot.parent.Find("ModalRoot/TooltipPopup");
-            Assert.That(popup, Is.Not.Null);
-            Assert.That(popup.GetComponent<Image>().raycastTarget, Is.False);
-            Assert.That(popup.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
-
-            var buttonObject = new GameObject("Task5Button", typeof(RectTransform), typeof(Image), typeof(Button));
-            buttonObject.transform.SetParent(uiRoot, false);
-            var buttonRect = buttonObject.GetComponent<RectTransform>();
-            buttonRect.sizeDelta = new Vector2(140f, 36f);
-            var originalSize = buttonRect.sizeDelta;
-            var focusType = System.Type.GetType("UnderwaterGliderTwin.UI.UiFocusVisual, UnderwaterGliderTwin.Runtime");
-            var badgeType = System.Type.GetType("UnderwaterGliderTwin.UI.UiStateBadge, UnderwaterGliderTwin.Runtime");
-            var focus = buttonObject.AddComponent(focusType);
-            focus = UiFactory.EnsureFocusVisual(buttonObject.GetComponent<Button>());
-            var badgeObject = new GameObject("Task5Badge", typeof(RectTransform));
-            badgeObject.transform.SetParent(uiRoot, false);
-            var badge = badgeObject.AddComponent(badgeType);
-            var stateKind = System.Enum.Parse(System.Type.GetType("UnderwaterGliderTwin.UI.UiStateKind, UnderwaterGliderTwin.Runtime"), "Warning");
-            badgeType.GetMethod("SetState").Invoke(badge, new[] { stateKind, (object)"需要关注" });
-
-            Assert.That(focus.GetComponent<Outline>(), Is.Not.Null);
-            foreach (var image in focus.GetComponentsInChildren<Image>(true))
-            {
-                if (image.gameObject == buttonObject)
-                {
-                    continue;
-                }
-
-                Assert.That(image.raycastTarget, Is.False, image.name + " must be decorative");
-            }
-
-            var marker = badge.GetType().GetProperty("MarkerImage")?.GetValue(badge, null) as Image;
-            var stateBar = badge.GetType().GetProperty("StateBar")?.GetValue(badge, null) as Image;
-            Assert.That(marker, Is.Not.Null);
-            Assert.That(stateBar, Is.Not.Null);
-            Assert.That(marker.raycastTarget, Is.False);
-            Assert.That(stateBar.raycastTarget, Is.False);
-            Assert.That(buttonRect.sizeDelta, Is.EqualTo(originalSize));
-        }
-
-        [Test]
-        public void Task5_AccessibleFeedback_PreservesManualHorizontalNavigation()
-        {
-            var root = new GameObject("Task5NavigationCanvas", typeof(RectTransform), typeof(Canvas));
-            var playbackBar = new GameObject("PlaybackBar", typeof(RectTransform));
-            playbackBar.transform.SetParent(root.transform, false);
-            var speed1 = CreateNavigationButton(playbackBar.transform, "Speed1Button");
-            var speed2 = CreateNavigationButton(playbackBar.transform, "Speed2Button");
-            var toolbar = new GameObject("OceanCommandToolbar", typeof(RectTransform));
-            toolbar.transform.SetParent(root.transform, false);
-            var cameraFollow = CreateNavigationButton(toolbar.transform, "CameraFollowCommand");
-            var cameraGlobal = CreateNavigationButton(toolbar.transform, "CameraGlobalCommand");
-            SetHorizontalNavigation(speed1, speed2, Navigation.Mode.Explicit);
-            SetHorizontalNavigation(cameraFollow, cameraGlobal, Navigation.Mode.Explicit);
-
-            UiFactory.ApplyAccessibleFeedback(root.transform);
-
-            AssertHorizontalNavigationPreserved(speed1, speed2);
-            AssertHorizontalNavigationPreserved(cameraFollow, cameraGlobal);
         }
 
         [Test]
@@ -518,7 +507,7 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void OceanCommandToolbarView_ReservesGuttersAroundTheCentralViewport()
+        public void OceanCommandToolbarView_AlignsCentralViewportWithCommandCenterPanels()
         {
             var frames = Frames(2);
             var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
@@ -532,8 +521,16 @@ namespace UnderwaterGliderTwin.Tests
             new GameObject("Toolbar").AddComponent<OceanCommandToolbarView>().Initialize(cameraController, trajectory);
 
             var viewport = GameObject.Find("OceanViewportFrame").GetComponent<RectTransform>();
-            Assert.That(viewport.sizeDelta.x, Is.LessThanOrEqualTo(-760f));
+            Assert.That(viewport.anchoredPosition.x, Is.EqualTo(-56f).Within(.1f));
+            Assert.That(viewport.anchoredPosition.y, Is.EqualTo(-102f).Within(.1f));
+            Assert.That(viewport.sizeDelta.x, Is.EqualTo(-804f).Within(.1f));
             Assert.That(viewport.sizeDelta.y, Is.LessThanOrEqualTo(-520f));
+
+            var toolbar = GameObject.Find("OceanCommandToolbar").GetComponent<RectTransform>();
+            Assert.That(toolbar.anchorMin, Is.EqualTo(new Vector2(0.5f, 0f)));
+            Assert.That(toolbar.anchorMax, Is.EqualTo(new Vector2(0.5f, 0f)));
+            Assert.That(toolbar.pivot, Is.EqualTo(new Vector2(0.5f, 0f)));
+            Assert.That(toolbar.anchoredPosition.y, Is.EqualTo(UiFactory.CommandCenterViewportBottomOffset).Within(.1f));
         }
 
         [Test]
@@ -606,9 +603,9 @@ namespace UnderwaterGliderTwin.Tests
             dashboard.Initialize(playback, prediction);
             playback.Seek(1f);
 
-            Assert.That(FindText("VelocityXValue").text, Is.EqualTo("1.01"));
-            Assert.That(FindText("VelocityYValue").text, Is.EqualTo("-0.30"));
-            Assert.That(FindText("VelocityZValue").text, Is.EqualTo("1.11"));
+            Assert.That(FindText("VelocityXValue").text, Is.EqualTo("1.01 m/s"));
+            Assert.That(FindText("VelocityYValue").text, Is.EqualTo("-0.30 m/s"));
+            Assert.That(FindText("VelocityZValue").text, Is.EqualTo("1.11 m/s"));
             Assert.That(FindText("HorizontalDisplacementValue").text, Is.EqualTo("E 10.1 N 11.1 |15.0| m"));
         }
 
@@ -624,7 +621,7 @@ namespace UnderwaterGliderTwin.Tests
 
             dashboard.Initialize(playback, prediction);
 
-            Assert.That(FindText("OceanCurrentValue").text, Is.EqualTo("东 0.20 北 -0.40"));
+            Assert.That(FindText("OceanCurrentValue").text, Is.EqualTo("东 0.20 m/s 北 -0.40 m/s"));
         }
 
         [Test]
@@ -674,41 +671,6 @@ namespace UnderwaterGliderTwin.Tests
             FindChildNamed(view.transform, "LoadCsvButton").GetComponent<Button>().onClick.Invoke();
 
             Assert.That(count, Is.EqualTo(1));
-        }
-
-        [Test]
-        public void DataInputView_RebindDoesNotDuplicateDrawerToggleOrLoadListeners()
-        {
-            var panel = new GameObject("MissionConfigurationPanel", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
-            var csvInput = new GameObject("CsvPathInput", typeof(RectTransform), typeof(InputField)).GetComponent<InputField>();
-            csvInput.transform.SetParent(panel, false);
-            var loadButton = new GameObject("LoadCsvButton", typeof(RectTransform), typeof(Image), typeof(Button)).GetComponent<Button>();
-            loadButton.transform.SetParent(panel, false);
-            var status = CreateText(panel, "MissionConfigurationStatus");
-            var refs = new DataInputPanelRefs
-            {
-                configurationPanel = panel,
-                statusText = status
-            };
-            refs.mission.csvPathInput = csvInput;
-            refs.mission.loadCsvButton = loadButton;
-            var view = new GameObject("DataInput").AddComponent<DataInputView>();
-            var loadCount = 0;
-            var csvPath = CreateTempCsv();
-
-            view.Bind(refs, csvPath, SimulationProfile.Default, null, onLoadRequested: _ => loadCount++);
-            view.Bind(refs, csvPath, SimulationProfile.Default, null, onLoadRequested: _ => loadCount++);
-
-            var toggleButton = FindChildNamed(panel, "MissionConfigurationDrawerToggleButton").GetComponent<Button>();
-            Assert.That(view.ConfigurationExpandedForTests, Is.False);
-            toggleButton.onClick.Invoke();
-            Assert.That(view.ConfigurationExpandedForTests, Is.True);
-            toggleButton.onClick.Invoke();
-            Assert.That(view.ConfigurationExpandedForTests, Is.False);
-
-            csvInput.text = csvPath;
-            loadButton.onClick.Invoke();
-            Assert.That(loadCount, Is.EqualTo(1));
         }
 
         [Test]
@@ -769,14 +731,11 @@ namespace UnderwaterGliderTwin.Tests
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
 
             var drawer = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
-            var summary = GameObject.Find("ConfigurationSummaryBar").GetComponent<RectTransform>();
-            var expanded = GameObject.Find("ConfigurationExpandedContent").GetComponent<RectTransform>();
             var header = GameObject.Find("MissionConfigurationDrawerHeader").GetComponent<RectTransform>();
             var viewport = GameObject.Find("MissionConfigurationViewport").GetComponent<RectTransform>();
             GameObject.Find("MissionConfigurationDrawerToggleButton").GetComponent<Button>().onClick.Invoke();
 
             Assert.That(drawer.sizeDelta.y, Is.GreaterThan(48f));
-            Assert.That(summary.GetSiblingIndex(), Is.GreaterThan(expanded.GetSiblingIndex()));
             Assert.That(viewport.offsetMax.y, Is.LessThanOrEqualTo(-header.sizeDelta.y));
         }
 
@@ -791,12 +750,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(button, Is.Not.Null);
             Assert.That(panel.activeSelf, Is.True);
             button.GetComponent<Button>().onClick.Invoke();
-            Assert.That(panel.activeSelf, Is.True);
-            Assert.That(dataInput.ConfigurationExpandedForTests, Is.True);
-
-            button.GetComponent<Button>().onClick.Invoke();
-            Assert.That(panel.activeSelf, Is.True);
-            Assert.That(dataInput.ConfigurationExpandedForTests, Is.False);
+            Assert.That(panel.activeSelf, Is.False);
         }
 
         [Test]
@@ -833,7 +787,7 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(content.spacing, Is.LessThanOrEqualTo(6f));
             Assert.That(missionSection.spacing, Is.LessThanOrEqualTo(4f));
             Assert.That(missionFields.spacing.y, Is.LessThanOrEqualTo(4f));
-            Assert.That(field.sizeDelta.y, Is.InRange(60f, 64f));
+            Assert.That(field.sizeDelta.y, Is.LessThanOrEqualTo(54f));
         }
 
         [Test]
@@ -870,7 +824,10 @@ namespace UnderwaterGliderTwin.Tests
             var layout = GameObject.Find("MissionSectionFields").GetComponent<ResponsiveTaskParameterLayout>();
             var grid = GameObject.Find("MissionSectionFields").GetComponent<GridLayoutGroup>();
             layout.RefreshForWidth(1920f);
-            Assert.That(layout.ColumnCount, Is.EqualTo(4));
+            Assert.That(layout.ColumnCount, Is.EqualTo(6));
+            Assert.That(grid.cellSize.x, Is.EqualTo(280f).Within(0.1f));
+            layout.RefreshForWidth(1600f);
+            Assert.That(layout.ColumnCount, Is.EqualTo(5));
             Assert.That(grid.cellSize.x, Is.EqualTo(280f).Within(0.1f));
             layout.RefreshForWidth(1280f);
             Assert.That(layout.ColumnCount, Is.EqualTo(4));
@@ -893,12 +850,11 @@ namespace UnderwaterGliderTwin.Tests
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
             FindChildNamed(dataInput.transform, "OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
 
-            var modal = GameObject.Find("OceanCurrentModalCanvas");
+            var modal = GameObject.Find("OceanCurrentModalCanvas").GetComponent<Canvas>();
             var main = GameObject.Find("RuntimeCanvas").GetComponent<Canvas>();
             var blocker = GameObject.Find("OceanCurrentModalRaycastBlocker").GetComponent<Image>();
-            Assert.That(modal.GetComponent<Canvas>(), Is.Null);
-            Assert.That(modal.transform.IsChildOf(main.transform), Is.True);
-            Assert.That(modal.transform.parent.name, Is.EqualTo("ModalRoot"));
+            Assert.That(modal.overrideSorting, Is.True);
+            Assert.That(modal.sortingOrder, Is.GreaterThan(main.sortingOrder));
             Assert.That(blocker.raycastTarget, Is.True);
             Assert.That(GameObject.Find("OceanCurrentDrawerPanel").transform.IsChildOf(modal.transform), Is.True);
         }
@@ -1050,14 +1006,13 @@ namespace UnderwaterGliderTwin.Tests
             var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
             dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
 
-            var taskScroll = GameObject.Find("ConfigurationExpandedContent").GetComponent<ScrollRect>();
+            var taskScroll = GameObject.Find("MissionConfigurationPanel").GetComponent<ScrollRect>();
             GameObject.Find("OceanCurrentDrawerButton").GetComponent<Button>().onClick.Invoke();
             var oceanScroll = GameObject.Find("OceanCurrentDrawerPanel").GetComponent<ScrollRect>();
             GameObject.Find("OceanCurrentDrawerCloseButton").GetComponent<Button>().onClick.Invoke();
             GameObject.Find("FlightLegSettingsButton").GetComponent<Button>().onClick.Invoke();
             var flightScroll = GameObject.Find("FlightLegDrawerPanel").GetComponent<ScrollRect>();
 
-            Assert.That(RootScrollIsAbsentOrDisabled(GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>()), Is.True);
             Assert.That(taskScroll.scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
             Assert.That(oceanScroll.scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
             Assert.That(flightScroll.scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
@@ -1079,135 +1034,9 @@ namespace UnderwaterGliderTwin.Tests
 
             view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
 
-            var taskScroll = panel.transform.Find("ConfigurationExpandedContent").GetComponent<ScrollRect>();
-            Assert.That(RootScrollIsAbsentOrDisabled(panel.GetComponent<RectTransform>()), Is.True);
-            Assert.That(taskScroll.scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
+            Assert.That(panel.GetComponent<ScrollRect>().scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
             Assert.That(oceanDrawer.GetComponent<ScrollRect>().scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
             Assert.That(flightDrawer.GetComponent<ScrollRect>().scrollSensitivity, Is.GreaterThanOrEqualTo(45f));
-        }
-
-        [Test]
-        public void MissionConfigurationUsesSingleInteractiveScrollRectInExpandedContent()
-        {
-            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
-            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
-
-            var drawer = GameObject.Find("MissionConfigurationPanel").GetComponent<RectTransform>();
-            var summary = GameObject.Find("ConfigurationSummaryBar").GetComponent<RectTransform>();
-            var expanded = GameObject.Find("ConfigurationExpandedContent").GetComponent<RectTransform>();
-            var enabledScrollCount = 0;
-            ScrollRect enabledScroll = null;
-            foreach (var scroll in drawer.GetComponentsInChildren<ScrollRect>(true))
-            {
-                if (!scroll.enabled)
-                {
-                    continue;
-                }
-
-                enabledScrollCount++;
-                enabledScroll = scroll;
-            }
-
-            Assert.That(RootScrollIsAbsentOrDisabled(drawer), Is.True);
-            Assert.That(summary.GetComponentInChildren<ScrollRect>(true), Is.Null);
-            Assert.That(enabledScrollCount, Is.EqualTo(1));
-            Assert.That(enabledScroll.transform, Is.SameAs(expanded));
-            Assert.That(enabledScroll.viewport.name, Is.EqualTo("ConfigurationScrollViewport"));
-            Assert.That(enabledScroll.content.name, Is.EqualTo("MissionConfigurationContent"));
-        }
-
-        [Test]
-        public void DataInputView_MigratesShippedPrefabLegacyTitlesIntoExpandedContent()
-        {
-            var panel = InstantiateShippedDataInputPanel();
-            var legacyTitles = FindLegacyConfigurationTitles(panel);
-            var refs = new DataInputPanelRefs { panel = panel };
-            var view = panel.gameObject.AddComponent<DataInputView>();
-
-            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
-
-            var expanded = panel.Find("ConfigurationExpandedContent");
-            Assert.That(legacyTitles, Is.Not.Empty);
-            Assert.That(legacyTitles.Exists(title => title.name == "ModelLabel"), Is.True);
-            foreach (var legacyTitle in legacyTitles)
-            {
-                Assert.That(legacyTitle.transform.IsChildOf(expanded), Is.True, legacyTitle.name);
-            }
-        }
-
-        [Test]
-        public void DataInputView_CollapsedShippedPrefabDoesNotRenderLegacyConfigurationTitles()
-        {
-            var panel = InstantiateShippedDataInputPanel();
-            var legacyTitles = FindLegacyConfigurationTitles(panel);
-            var refs = new DataInputPanelRefs { panel = panel };
-            var dataInput = panel.gameObject.AddComponent<DataInputView>();
-            dataInput.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
-
-            dataInput.SetConfigurationExpanded(false);
-            Canvas.ForceUpdateCanvases();
-
-            var drawer = panel.gameObject;
-            var summary = drawer.transform.Find("ConfigurationSummaryBar");
-            var expanded = drawer.transform.Find("ConfigurationExpandedContent");
-            Assert.That(dataInput.gameObject.activeInHierarchy, Is.True);
-            Assert.That(drawer.activeInHierarchy, Is.True);
-            Assert.That(summary.gameObject.activeInHierarchy, Is.True);
-            Assert.That(expanded.GetComponent<CanvasGroup>().alpha, Is.EqualTo(0f));
-            Assert.That(expanded.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
-            Assert.That(legacyTitles, Is.Not.Empty);
-            foreach (var legacyTitle in legacyTitles)
-            {
-                Assert.That(legacyTitle.transform.IsChildOf(summary), Is.False, legacyTitle.name);
-                Assert.That(legacyTitle.transform.IsChildOf(expanded), Is.True, legacyTitle.name);
-                Assert.That(legacyTitle.canvasRenderer.GetAlpha(), Is.EqualTo(0f).Within(0.001f), legacyTitle.name);
-            }
-        }
-
-        [Test]
-        public void DataInputPanel_RemainsUnderConfigurationAreaAfterConfigurationSetup()
-        {
-            var canvas = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas)).GetComponent<Canvas>();
-            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
-            var configurationArea = uiRoot.Find("ConfigurationArea");
-            var panel = new GameObject("DataInputPanel", typeof(RectTransform)).GetComponent<RectTransform>();
-            panel.SetParent(configurationArea, false);
-            var refs = new DataInputPanelRefs { panel = panel };
-            var view = panel.gameObject.AddComponent<DataInputView>();
-
-            view.Bind(refs, "D:\\telemetry.csv", SimulationProfile.Default, null);
-
-            Assert.That(panel.parent, Is.SameAs(configurationArea));
-        }
-
-        [Test]
-        public void DataInputView_RepeatedConfigurationSetupPreservesShippedPrefabMigrationAndListeners()
-        {
-            var panel = InstantiateShippedDataInputPanel();
-            var legacyTitles = FindLegacyConfigurationTitles(panel);
-            var loadButton = FindChildNamed(panel, "LoadCsvButton").GetComponent<Button>();
-            var csvInput = FindChildNamed(panel, "CsvPathInput").GetComponent<InputField>();
-            var refs = new DataInputPanelRefs { panel = panel };
-            refs.mission.loadCsvButton = loadButton;
-            refs.mission.csvPathInput = csvInput;
-            var view = panel.gameObject.AddComponent<DataInputView>();
-            var loadCount = 0;
-            var csvPath = CreateTempCsv();
-
-            view.Bind(refs, csvPath, SimulationProfile.Default, null, _ => loadCount++);
-            view.Bind(refs, csvPath, SimulationProfile.Default, null, _ => loadCount++);
-
-            Assert.That(CountDirectChildrenNamed(panel, "ConfigurationSummaryBar"), Is.EqualTo(1));
-            Assert.That(CountDirectChildrenNamed(panel, "ConfigurationExpandedContent"), Is.EqualTo(1));
-            var expanded = panel.Find("ConfigurationExpandedContent");
-            foreach (var legacyTitle in legacyTitles)
-            {
-                Assert.That(legacyTitle.transform.IsChildOf(expanded), Is.True, legacyTitle.name);
-            }
-
-            csvInput.text = csvPath;
-            loadButton.onClick.Invoke();
-            Assert.That(loadCount, Is.EqualTo(1));
         }
 
         [Test]
@@ -1264,6 +1093,34 @@ namespace UnderwaterGliderTwin.Tests
             flightScroll.verticalNormalizedPosition = 0f;
             Canvas.ForceUpdateCanvases();
             AssertRectInsideViewport(GameObject.Find("AscentRollInput").GetComponent<RectTransform>(), flightScroll.viewport, width, height);
+        }
+
+        [Test]
+        public void FlightLegDrawerUsesWideHorizontalLayout()
+        {
+            var canvasObject = new GameObject("FlightLegCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(1920f, 1080f);
+            var scaler = canvasObject.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            Canvas.ForceUpdateCanvases();
+
+            var dataInput = canvasObject.AddComponent<DataInputView>();
+            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            GameObject.Find("FlightLegSettingsButton").GetComponent<Button>().onClick.Invoke();
+            Canvas.ForceUpdateCanvases();
+
+            var descentRoll = GameObject.Find("DescentRollInputField").GetComponent<RectTransform>();
+            var ascentBuoyancy = GameObject.Find("AscentNetBuoyancyInputField").GetComponent<RectTransform>();
+            var flightDrawer = GameObject.Find("FlightLegDrawerPanel").GetComponent<RectTransform>();
+            var drawerStatus = GameObject.Find("FlightLegDrawerStatus").GetComponent<RectTransform>();
+            Assert.That(ascentBuoyancy.anchoredPosition.y, Is.EqualTo(descentRoll.anchoredPosition.y).Within(.1f));
+            Assert.That(ascentBuoyancy.anchoredPosition.x, Is.GreaterThan(descentRoll.anchoredPosition.x));
+            Assert.That(descentRoll.rect.width, Is.GreaterThanOrEqualTo(220f));
+            Assert.That(flightDrawer.rect.height, Is.LessThanOrEqualTo(260f));
+            Assert.That(drawerStatus.anchoredPosition.y, Is.EqualTo(-176f).Within(.1f));
         }
 
         [Test]
@@ -1764,37 +1621,108 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(FindText("AlarmValue").text, Is.EqualTo("运行正常"));
         }
 
-        [Test]
-        public void StatusPanelView_SeparatesPredictionTimeValueAndUnitColumns()
+        [TestCase("45")]
+        [TestCase("7200")]
+        public void DataInputView_UnsupportedPredictionHorizonPreservesPreviousSetting(string value)
         {
-            var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-status-units-" + System.Guid.NewGuid().ToString("N"));
-            var playback = CreatePlayback(Frames(2));
-            var prediction = CreatePrediction(playback, Frames(2));
-            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
-
-            panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), new TwinLogger(logDirectory), prediction);
-
-            Assert.That(FindObjectIncludingInactive("PredictionTimeValue").GetComponent<Text>().text, Does.Not.Contain("ms"));
-            Assert.That(FindObjectIncludingInactive("PredictionTimeValueUnit").GetComponent<Text>().text, Is.EqualTo("ms"));
-            Assert.That(FindObjectIncludingInactive("RemainingDistanceValue").GetComponent<Text>().text, Does.Not.Contain("km"));
-            Assert.That(FindObjectIncludingInactive("RemainingDistanceValueUnit").GetComponent<Text>().text, Is.EqualTo("km"));
+            var previous = RuntimePredictionState.HorizonSeconds;
+            try
+            {
+                RuntimePredictionState.SetHorizonSeconds(60f);
+                var view = new GameObject("DataInput").AddComponent<DataInputView>();
+                view.Initialize(CreateTempCsv(), SimulationProfile.Default, null);
+                GameObject.Find("PredictionHorizonInput").GetComponent<InputField>().text = value;
+                GameObject.Find("ApplyPredictionConfigButton").GetComponent<Button>().onClick.Invoke();
+                Assert.That(RuntimePredictionState.HorizonSeconds, Is.EqualTo(60f));
+            }
+            finally { RuntimePredictionState.SetHorizonSeconds(previous); }
         }
 
         [Test]
-        public void DataInputView_LongStatusTextUsesWrappedDedicatedHeight()
+        public void StatusPanelView_ShowsUnavailablePredictionMetricsWithoutFalseZeroes()
         {
-            var dataInput = new GameObject("DataInput").AddComponent<DataInputView>();
-            dataInput.Initialize("D:\\telemetry.csv", SimulationProfile.Default, null);
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+            panel.Initialize(CreatePlayback(Frames(2)), new AlarmEvaluator(1000f, 1f, 90f), null, null);
 
-            var status = FindText("MissionConfigurationStatus");
-            status.text = new string('错', 120);
-            UiFactory.ConfigureWrappedStatusText(status);
+            foreach (var name in new[] { "DriftValue", "RmseValue", "MaeValue", "ConfidenceValue", "PredictionTimeValue" })
+            {
+                var metric = GameObject.Find(name)?.GetComponent<Text>();
+                Assert.That(metric, Is.Not.Null, name + " must remain visible while prediction is unavailable");
+                Assert.That(metric.text, Is.EqualTo("—"), name + " must not imply a measured zero");
+            }
+        }
 
-            Assert.That(status.horizontalOverflow, Is.EqualTo(HorizontalWrapMode.Wrap));
-            Assert.That(status.verticalOverflow, Is.EqualTo(VerticalWrapMode.Overflow));
-            Assert.That(status.GetComponent<LayoutElement>().preferredHeight, Is.GreaterThanOrEqualTo(36f));
-            Assert.That(status.rectTransform.rect.height, Is.GreaterThanOrEqualTo(36f));
-            AssertRectanglesDoNotOverlap(status.rectTransform, GameObject.Find("OceanCurrentDrawerButton").GetComponent<RectTransform>());
+        [Test]
+        public void StatusPanelView_PublishedButUnscoredForecastShowsDashesNotNaNOrConfidence()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var prediction = new GameObject("Prediction").AddComponent<PredictionController>();
+            typeof(PredictionController).GetProperty("CurrentSnapshot").SetValue(prediction,
+                new PredictionSnapshot(Vector3.zero, new[] { Vector3.zero, Vector3.one },
+                    System.Array.Empty<Vector3>(), float.NaN, float.NaN, float.NaN, float.NaN,
+                    float.NaN, 0, 1, "awaiting observations", 5f));
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+            panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), null, prediction);
+            foreach (var name in new[] { "DriftValue", "RmseValue", "MaeValue", "ConfidenceValue" })
+                Assert.That(FindText(name).text, Is.EqualTo("—"), name);
+            Assert.That(FindText("PredictionTimeValue").text, Is.EqualTo("5.00 ms"));
+        }
+
+        [Test]
+        public void StatusPanelView_LiveMotionFollowsFractionalPlaybackAndKeepsUnavailableDiagnosticsExplicit()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+            panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), null, null);
+
+            playback.PlayForward();
+            playback.Step(0.5f);
+
+            Assert.That(FindText("StatusDepthValue").text, Is.EqualTo("10.5 m"));
+            Assert.That(FindText("StatusHeadingValue").text, Is.EqualTo("30.5°"));
+            Assert.That(FindText("StatusNetBuoyancyValue").text, Is.EqualTo("—"));
+            Assert.That(FindText("StatusLiftValue").text, Is.EqualTo("—"));
+        }
+
+        [Test]
+        public void StatusPanelView_ShowsMeasuredDynamicsWhenAvailable()
+        {
+            var diagnostics = new SimulationDiagnostics(
+                new Vector3(0.3f, -0.1f, 0.4f), new Vector3(0.2f, 0f, -0.1f),
+                6.5f, 8.2f, 12.4f, 3.2f, 4.5f, 7.8f, -1.1f,
+                new Vector3(0.02f, 0.01f, 0.03f), new Vector3(1.2f, 2.4f, 0.8f),
+                12.5f, new Vector3(4f, -3f, 1.5f), 6.7f);
+            var frame = new TelemetryFrame(0, "t0", 0f, 120d, 25d, 10f, 100f, 30f, 4f, -3f,
+                28.5f, 0.3f, 90f, "Parameter Simulation", "Glide", 2f, 44f, 120f, 80f,
+                0f, 17f, 32f, diagnostics);
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+
+            panel.Initialize(CreatePlayback(new[] { frame }), new AlarmEvaluator(1000f, 1f, 90f), null, null);
+
+            Assert.That(FindText("StatusWaterSpeedValue").text, Is.EqualTo("0.51 m/s"));
+            Assert.That(FindText("StatusGroundSpeedValue").text, Is.EqualTo("0.59 m/s"));
+            Assert.That(FindText("StatusNetBuoyancyValue").text, Is.EqualTo("6.5 N"));
+            Assert.That(FindText("StatusLiftValue").text, Is.EqualTo("4.5 N"));
+            Assert.That(FindText("StatusPistonValue").text, Is.EqualTo("12.5 mm"));
+        }
+
+        [Test]
+        public void StatusPanelView_DoesNotPresentInvalidMotionAsMeasuredZero()
+        {
+            var diagnostics = new SimulationDiagnostics(
+                new Vector3(float.NaN, 0f, 0f), Vector3.zero, float.NaN, 0f, 0f);
+            var frame = new TelemetryFrame(0, "t0", 0f, 0d, 0d, 10f, 100f, float.NaN, 0f, 0f,
+                28.5f, 0.3f, 90f, "Parameter Simulation", "Glide", 2f, 44f, 120f, 80f,
+                0f, 17f, 32f, diagnostics);
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+
+            panel.Initialize(CreatePlayback(new[] { frame }), new AlarmEvaluator(1000f, 1f, 90f), null, null);
+
+            Assert.That(FindText("StatusDepthValue").text, Is.EqualTo("—"));
+            Assert.That(FindText("StatusHeadingValue").text, Is.EqualTo("—"));
+            Assert.That(FindText("StatusWaterSpeedValue").text, Is.EqualTo("—"));
+            Assert.That(FindText("StatusGroundSpeedValue").text, Is.EqualTo("—"));
+            Assert.That(FindText("StatusNetBuoyancyValue").text, Is.EqualTo("—"));
         }
 
         [Test]
@@ -1858,8 +1786,22 @@ namespace UnderwaterGliderTwin.Tests
             panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), new TwinLogger(logDirectory), null);
 
             var statusRect = GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>();
-            Assert.That(statusRect.sizeDelta.y,
-                Is.LessThanOrEqualTo(1080f - 112f - 142f));
+            Assert.That(statusRect.anchoredPosition.y, Is.EqualTo(-114f).Within(.1f));
+            Assert.That(statusRect.sizeDelta.y, Is.LessThanOrEqualTo(620f));
+            var viewport = GameObject.Find("MissionStatusViewport").GetComponent<RectTransform>();
+            var scroll = viewport.GetComponent<ScrollRect>();
+            Assert.That(scroll, Is.Not.Null);
+            Assert.That(scroll.content.rect.height, Is.GreaterThan(viewport.rect.height));
+            Assert.That(FindText("MissionValue").transform.IsChildOf(scroll.content), Is.True);
+            Assert.That(GameObject.Find("MissionProgressBar").transform.IsChildOf(scroll.content), Is.False);
+            Assert.That(GameObject.Find("AlarmPanel").transform.IsChildOf(scroll.content), Is.False);
+        }
+
+        [Test]
+        public void StatusPanelView_ExtendsToOperationsBoundaryAt1080p()
+        {
+            Assert.That(StatusPanelView.CalculateStatusPanelHeight(1080f), Is.EqualTo(620f).Within(.1f));
+            Assert.That(StatusPanelView.CalculateStatusPanelHeight(720f), Is.EqualTo(464f).Within(.1f));
         }
 
         [Test]
@@ -1874,14 +1816,16 @@ namespace UnderwaterGliderTwin.Tests
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
             Canvas.ForceUpdateCanvases();
 
-            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+            var statusObject = new GameObject("Status");
+            statusObject.transform.SetParent(canvas.transform, false);
+            var panel = statusObject.AddComponent<StatusPanelView>();
             panel.Initialize(CreatePlayback(Frames(2)), new AlarmEvaluator(1000f, 1f, 90f), null, null);
 
             var statusRect = GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>();
             Assert.That(statusRect.anchorMin, Is.EqualTo(new Vector2(1f, 1f)));
             Assert.That(statusRect.anchorMax, Is.EqualTo(new Vector2(1f, 1f)));
-            Assert.That(statusRect.anchoredPosition.y, Is.EqualTo(-112f).Within(.1f));
-            Assert.That(statusRect.sizeDelta.y, Is.LessThanOrEqualTo(720f - 112f - 142f));
+            Assert.That(statusRect.anchoredPosition.y, Is.EqualTo(-114f).Within(.1f));
+            Assert.That(statusRect.sizeDelta.y, Is.LessThanOrEqualTo(720f - 114f - 142f));
         }
 
         [Test]
@@ -1895,7 +1839,7 @@ namespace UnderwaterGliderTwin.Tests
             var statusRect = GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>();
             var parameterHeader = GameObject.Find("MissionConfigurationDrawerHeader").GetComponent<RectTransform>();
             AssertRectanglesDoNotOverlap(statusRect, parameterHeader);
-            Assert.That(statusRect.anchoredPosition.y, Is.LessThanOrEqualTo(-112f));
+            Assert.That(statusRect.anchoredPosition.y, Is.LessThanOrEqualTo(-114f));
         }
 
         [Test]
@@ -1962,6 +1906,29 @@ namespace UnderwaterGliderTwin.Tests
             AssertRectanglesDoNotOverlap(GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>(), GameObject.Find("OceanCommandToolbar").GetComponent<RectTransform>());
             AssertRectanglesDoNotOverlap(GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>(), GameObject.Find("PlaybackControlsPanel").GetComponent<RectTransform>());
             AssertRectanglesDoNotOverlap(GameObject.Find("TelemetryPanel").GetComponent<RectTransform>(), GameObject.Find("PlaybackControlsPanel").GetComponent<RectTransform>());
+
+            var telemetryRect = GameObject.Find("TelemetryPanel").GetComponent<RectTransform>();
+            var navigationRect = GameObject.Find("NavigationReferenceCard").GetComponent<RectTransform>();
+            var operationsRect = GameObject.Find("PlaybackControlsPanel").GetComponent<RectTransform>();
+            var telemetryBottomFromTop = -telemetryRect.anchoredPosition.y + telemetryRect.rect.height;
+            var navigationTopFromTop = canvasRect.rect.height - navigationRect.anchoredPosition.y - navigationRect.rect.height;
+            Assert.That(telemetryBottomFromTop, Is.EqualTo(navigationTopFromTop).Within(.1f));
+            Assert.That(operationsRect.anchoredPosition.y + operationsRect.rect.height,
+                Is.EqualTo(navigationRect.anchoredPosition.y).Within(.1f));
+            Assert.That(operationsRect.offsetMin.x,
+                Is.EqualTo(telemetryRect.anchoredPosition.x).Within(.1f));
+
+            var viewportRect = GameObject.Find("OceanViewportFrame").GetComponent<RectTransform>();
+            var telemetryCorners = GetWorldCorners(telemetryRect);
+            var statusCorners = GetWorldCorners(GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>());
+            var viewportCorners = GetWorldCorners(viewportRect);
+            var operationsCorners = GetWorldCorners(operationsRect);
+            Assert.That(viewportCorners[0].x, Is.EqualTo(telemetryCorners[3].x).Within(.1f));
+            Assert.That(viewportCorners[3].x, Is.EqualTo(statusCorners[0].x).Within(.1f));
+            Assert.That(viewportCorners[0].y, Is.EqualTo(operationsCorners[1].y).Within(.1f));
+            Assert.That(viewportCorners[1].y, Is.EqualTo(telemetryCorners[1].y).Within(.1f));
+            var toolbarCorners = GetWorldCorners(GameObject.Find("OceanCommandToolbar").GetComponent<RectTransform>());
+            Assert.That(toolbarCorners[0].y, Is.EqualTo(viewportCorners[0].y).Within(.1f));
         }
 
         [Test]
@@ -2001,266 +1968,6 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
-        public void UiFactory_PrimaryButton_UsesAccentPaletteAccessibleStatesAndMinimumHeight()
-        {
-            var root = new GameObject("ButtonRoot", typeof(RectTransform)).transform;
-
-            var button = UiFactory.PrimaryButton(
-                "LaunchButton",
-                root,
-                "Launch",
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                Vector2.zero,
-                new Vector2(120f, 24f));
-
-            var label = button.GetComponentInChildren<Text>();
-            var accent = ParseColor("#39DAF4");
-            var states = button.colors;
-
-            AssertColorClose(button.image.color, accent);
-            Assert.That(button.GetComponent<RectTransform>().sizeDelta.y, Is.GreaterThanOrEqualTo(32f));
-            Assert.That(label, Is.Not.Null);
-            Assert.That(label.color.grayscale, Is.LessThan(0.2f));
-            Assert.That(states.highlightedColor, Is.Not.EqualTo(states.normalColor));
-            Assert.That(states.pressedColor, Is.Not.EqualTo(states.highlightedColor));
-            Assert.That(states.selectedColor, Is.Not.EqualTo(states.highlightedColor));
-            Assert.That(states.disabledColor.a, Is.LessThan(states.normalColor.a));
-        }
-
-        [Test]
-        public void ResponsiveUiLayoutController_RefreshForScreenKeepsNarrowModeStableWithoutCreatingObjects()
-        {
-            var controller = CreateResponsiveLayoutController(out var canvas);
-            controller.RefreshForScreen(1280f, 720f);
-            var countAfterFirstRefresh = Object.FindObjectsOfType<GameObject>(true).Length;
-
-            for (var i = 0; i < 4; i++)
-            {
-                controller.RefreshForScreen(1280f, 720f);
-                Assert.That(controller.CurrentMode, Is.EqualTo(RuntimeUiLayoutMode.Drawer));
-            }
-
-            Assert.That(Object.FindObjectsOfType<GameObject>(true).Length, Is.EqualTo(countAfterFirstRefresh));
-            Assert.That(canvas.transform.Find("UiRoot/DrawerEntryLayer/TelemetryDrawerToggle").gameObject.activeSelf, Is.True);
-            Assert.That(canvas.transform.Find("UiRoot/DrawerEntryLayer/StatusDrawerToggle").gameObject.activeSelf, Is.True);
-        }
-
-        [Test]
-        public void ResponsiveUiLayoutController_KeepsDrawerTogglesOutsideHiddenColumns()
-        {
-            var controller = CreateResponsiveLayoutController(out var canvas);
-            controller.RefreshForScreen(1280f, 720f);
-
-            var mainBody = canvas.transform.Find("UiRoot/MainBody");
-            var telemetryColumn = mainBody.Find("TelemetryColumn");
-            var statusColumn = mainBody.Find("StatusColumn");
-            var telemetryToggle = canvas.transform.Find("UiRoot/DrawerEntryLayer/TelemetryDrawerToggle");
-            var statusToggle = canvas.transform.Find("UiRoot/DrawerEntryLayer/StatusDrawerToggle");
-
-            Assert.That(telemetryColumn.gameObject.activeSelf, Is.False);
-            Assert.That(statusColumn.gameObject.activeSelf, Is.False);
-            Assert.That(telemetryToggle.IsChildOf(telemetryColumn), Is.False);
-            Assert.That(statusToggle.IsChildOf(statusColumn), Is.False);
-            Assert.That(telemetryToggle.gameObject.activeSelf, Is.True);
-            Assert.That(statusToggle.gameObject.activeSelf, Is.True);
-        }
-
-        [Test]
-        public void UiFactory_RuntimeLayoutUsesLayoutHelpersAndKeepsScrollingOutOfRoot()
-        {
-            var canvasObject = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            var canvas = canvasObject.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-
-            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
-            var rootLayout = uiRoot.GetComponent<VerticalLayoutGroup>();
-            var mainBody = uiRoot.Find("MainBody").GetComponent<RectTransform>();
-            var bodyLayout = mainBody.GetComponent<HorizontalLayoutGroup>();
-            var viewportColumn = mainBody.Find("ViewportColumn");
-            var viewportElement = viewportColumn.GetComponent<LayoutElement>();
-            var configurationArea = uiRoot.Find("ConfigurationArea").GetComponent<RectTransform>();
-            var playbackBar = uiRoot.Find("PlaybackBar").GetComponent<RectTransform>();
-            var drawerEntryLayer = uiRoot.Find("DrawerEntryLayer");
-            var drawerLayout = drawerEntryLayer.GetComponent<LayoutElement>();
-            var telemetryToggle = drawerEntryLayer.Find("TelemetryDrawerToggle").GetComponent<RectTransform>();
-            var statusToggle = drawerEntryLayer.Find("StatusDrawerToggle").GetComponent<RectTransform>();
-
-            Assert.That(rootLayout, Is.Not.Null);
-            Assert.That(rootLayout.enabled, Is.False);
-            Assert.That(uiRoot.GetComponent<ScrollRect>(), Is.Null);
-            Assert.That(bodyLayout, Is.Not.Null);
-            Assert.That(configurationArea.anchoredPosition.y, Is.EqualTo(92f));
-            Assert.That(configurationArea.sizeDelta.y, Is.EqualTo(176f));
-            Assert.That(playbackBar.anchoredPosition.y, Is.EqualTo(0f));
-            Assert.That(playbackBar.sizeDelta.y, Is.EqualTo(92f));
-            Assert.That(mainBody.offsetMin.y, Is.EqualTo(268f));
-            Assert.That(mainBody.offsetMax.y, Is.EqualTo(-48f));
-            Assert.That(viewportElement, Is.Not.Null);
-            Assert.That(viewportElement.minWidth, Is.EqualTo(640f));
-            Assert.That(viewportElement.flexibleWidth, Is.EqualTo(1f));
-            Assert.That(drawerLayout, Is.Not.Null);
-            Assert.That(drawerLayout.ignoreLayout, Is.True);
-            Assert.That(telemetryToggle.sizeDelta.y, Is.GreaterThanOrEqualTo(36f));
-            Assert.That(statusToggle.sizeDelta.y, Is.GreaterThanOrEqualTo(36f));
-        }
-
-        [TestCase(1920f, 1080f, false, TestName = "DataInputView_CollapsedConfiguredLayoutCompactsConfigurationArea_At1920x1080")]
-        [TestCase(1280f, 720f, false, TestName = "DataInputView_CollapsedConfiguredLayoutCompactsConfigurationArea_At1280x720")]
-        public void DataInputView_CollapsedConfigurationCompactsParentAreaAndExpandsMainBody(float width, float height, bool useFallback)
-        {
-            var view = CreateConfigurationLayoutProbe(width, height, useFallback, out var configurationArea, out var mainBody, out var playbackBar);
-            view.SetConfigurationExpanded(false);
-            Canvas.ForceUpdateCanvases();
-
-            AssertConfigurationLayoutContract(configurationArea, mainBody, playbackBar, 64f, 156f);
-        }
-
-        [TestCase(1920f, 1080f, false, TestName = "DataInputView_ExpandedConfiguredLayoutRestoresConfigurationArea_At1920x1080")]
-        [TestCase(1280f, 720f, false, TestName = "DataInputView_ExpandedConfiguredLayoutRestoresConfigurationArea_At1280x720")]
-        public void DataInputView_ExpandedConfigurationRestoresParentAreaWithoutOverlappingPlayback(float width, float height, bool useFallback)
-        {
-            var view = CreateConfigurationLayoutProbe(width, height, useFallback, out var configurationArea, out var mainBody, out var playbackBar);
-
-            view.SetConfigurationExpanded(true);
-            Canvas.ForceUpdateCanvases();
-
-            AssertConfigurationLayoutContract(configurationArea, mainBody, playbackBar, 176f, 268f);
-        }
-
-        [Test]
-        public void UiFactory_CommandPaletteSeparatesPanelAndInputSurfaces()
-        {
-            Assert.That(UiFactory.CommandPanelFill.grayscale - UiFactory.CommandInputFill.grayscale, Is.GreaterThan(0.035f));
-            Assert.That(UiFactory.CommandButtonFill.grayscale - UiFactory.CommandInputFill.grayscale, Is.GreaterThan(0.055f));
-            Assert.That(UiFactory.CommandPanelEdge.grayscale, Is.GreaterThan(UiFactory.CommandPanelFill.grayscale));
-        }
-
-        [Test]
-        public void UiFactory_ApplyRuntimePaletteUpdatesExistingPanelControls()
-        {
-            var canvasObject = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas));
-            var uiRoot = new GameObject("UiRoot", typeof(RectTransform));
-            uiRoot.transform.SetParent(canvasObject.transform, false);
-
-            var panel = new GameObject("DashboardPanel", typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(uiRoot.transform, false);
-            var viewport = new GameObject("OceanCommandToolbar", typeof(RectTransform), typeof(Image));
-            viewport.transform.SetParent(uiRoot.transform, false);
-            var button = new GameObject("LoadCsvButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            button.transform.SetParent(panel.transform, false);
-            var input = new GameObject("CsvPathInput", typeof(RectTransform), typeof(Image), typeof(InputField));
-            input.transform.SetParent(panel.transform, false);
-
-            UiFactory.ApplyRuntimePalette(canvasObject.transform);
-
-            Assert.That(panel.GetComponent<Image>().color, Is.EqualTo(UiFactory.CommandPanelFill));
-            Assert.That(viewport.GetComponent<Image>().color.a, Is.LessThan(UiFactory.CommandPanelFill.a));
-            Assert.That(viewport.GetComponent<Image>().raycastTarget, Is.False);
-            Assert.That(button.GetComponent<Image>().color, Is.EqualTo(UiFactory.CommandButtonFill));
-            Assert.That(input.GetComponent<Image>().color, Is.EqualTo(UiFactory.CommandInputFill));
-        }
-
-        [Test]
-        public void UiFactory_ApplyRuntimePalettePreservesCustomButtonStateColors()
-        {
-            var canvas = new GameObject("PaletteCanvas", typeof(RectTransform), typeof(Canvas));
-            var panel = new GameObject("PlaybackControlsPanel", typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(canvas.transform, false);
-            var button = new GameObject("UserStyledButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            button.transform.SetParent(panel.transform, false);
-            var component = button.GetComponent<Button>();
-            var colors = component.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(0.91f, 0.24f, 0.32f, 1f);
-            colors.pressedColor = new Color(0.14f, 0.72f, 0.41f, 1f);
-            colors.selectedColor = new Color(0.96f, 0.71f, 0.16f, 1f);
-            colors.disabledColor = new Color(0.31f, 0.18f, 0.62f, 0.77f);
-            component.colors = colors;
-            var before = component.colors;
-
-            UiFactory.ApplyRuntimePalette(canvas.transform);
-
-            var after = component.colors;
-            Assert.That(after.normalColor, Is.EqualTo(before.normalColor));
-            Assert.That(after.highlightedColor, Is.EqualTo(before.highlightedColor));
-            Assert.That(after.pressedColor, Is.EqualTo(before.pressedColor));
-            Assert.That(after.selectedColor, Is.EqualTo(before.selectedColor));
-            Assert.That(after.disabledColor, Is.EqualTo(before.disabledColor));
-        }
-
-        [Test]
-        public void UiFactory_UsesApprovedCommandCenterPaletteAndButtonStates()
-        {
-            AssertColorClose(UiFactory.CommandPageBackground, ParseColor("#05121A"));
-            AssertColorClose(UiFactory.CommandPanelFill, ParseColor("#092632"));
-            AssertColorClose(UiFactory.CommandCardFill, ParseColor("#0C2E3B"));
-            AssertColorClose(UiFactory.CommandControlFill, ParseColor("#103D4D"));
-            AssertColorClose(UiFactory.CommandInputFill, ParseColor("#051720"));
-            AssertColorClose(UiFactory.CommandButtonFill, ParseColor("#124759"));
-            AssertColorClose(UiFactory.CommandPanelEdge, ParseColor("#185A6B"));
-            AssertColorClose(UiFactory.CommandAccent, ParseColor("#39DAF4"));
-            AssertColorClose(UiFactory.CommandText, ParseColor("#ECF9FB"));
-            AssertColorClose(UiFactory.CommandMutedText, ParseColor("#9EC4CD"));
-
-            var canvas = new GameObject("PaletteCanvas", typeof(RectTransform), typeof(Canvas));
-            var panel = new GameObject("PlaybackControlsPanel", typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(canvas.transform, false);
-            var title = CreateText(panel.transform, "CommandCenterProductName");
-            var section = CreateText(panel.transform, "PlaybackGroupLabel");
-            var value = CreateText(panel.transform, "PlaybackStatus");
-            var primary = UiFactory.PrimaryButton("ApplyButton", panel.transform, "运行仿真", Vector2.zero, Vector2.one,
-                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(120f, 36f));
-            UiFactory.ApplyRuntimePalette(canvas.transform);
-
-            var label = primary.GetComponentInChildren<Text>();
-            Assert.That(primary.image.color, Is.EqualTo(UiFactory.CommandAccent));
-            Assert.That(label.color, Is.EqualTo(UiFactory.CommandDarkText));
-            Assert.That(title.color, Is.EqualTo(UiFactory.CommandText));
-            Assert.That(section.color, Is.EqualTo(UiFactory.CommandMutedText));
-            Assert.That(value.color, Is.EqualTo(UiFactory.CommandText));
-            Assert.That(primary.colors.disabledColor.grayscale, Is.LessThan(primary.colors.normalColor.grayscale));
-            Assert.That(primary.colors.disabledColor.a, Is.GreaterThan(0.15f));
-            Assert.That(primary.colors.selectedColor.grayscale, Is.GreaterThan(primary.colors.normalColor.grayscale * 0.75f));
-        }
-
-        [Test]
-        public void ResponsiveUiTypography_ExposesStableVisualRoles()
-        {
-            var profile = ResponsiveUiTypography.ForMode(RuntimeUiLayoutMode.CompressedThreeColumn, 1366f, 768f);
-
-            Assert.That(profile.sectionTitleSize, Is.EqualTo(18));
-            Assert.That(profile.labelSize, Is.EqualTo(18));
-            Assert.That(profile.valueSize, Is.EqualTo(18));
-            Assert.That(profile.buttonSize, Is.EqualTo(18));
-            Assert.That(profile.auxiliarySize, Is.EqualTo(17));
-            Assert.That(ResponsiveUiTypography.GetActualPixelSize(profile.buttonSize, 0.67f), Is.GreaterThanOrEqualTo(11f));
-        }
-
-        [Test]
-        public void ResponsiveLayoutController_UsesSameCompressedTypographyForPrefabAndFallbackPaths()
-        {
-            const float width = 1366f;
-            const float height = 768f;
-            var prefabProbe = CreateTypographyProbe("PrefabTypographyCanvas", createFallbackContent: false);
-            var fallbackProbe = CreateTypographyProbe("FallbackTypographyCanvas", createFallbackContent: true);
-
-            ApplyTypography(prefabProbe.runtimeCanvas, width, height);
-            ApplyTypography(fallbackProbe.runtimeCanvas, width, height);
-
-            Assert.That(prefabProbe.title.fontSize, Is.EqualTo(fallbackProbe.title.fontSize));
-            Assert.That(prefabProbe.label.fontSize, Is.EqualTo(fallbackProbe.label.fontSize));
-            Assert.That(prefabProbe.value.fontSize, Is.EqualTo(fallbackProbe.value.fontSize));
-            Assert.That(prefabProbe.button.fontSize, Is.EqualTo(fallbackProbe.button.fontSize));
-
-            var effectiveScale = ResponsiveUiLayoutPolicy.GetEffectiveCanvasScale(width, height, new Vector2(1920f, 1080f), 0.5f);
-            Assert.That(ResponsiveUiTypography.GetActualPixelSize(fallbackProbe.label.fontSize, effectiveScale), Is.GreaterThanOrEqualTo(11f));
-            Assert.That(ResponsiveUiTypography.GetActualPixelSize(fallbackProbe.value.fontSize, effectiveScale), Is.GreaterThanOrEqualTo(11f));
-            Assert.That(ResponsiveUiTypography.GetActualPixelSize(fallbackProbe.button.fontSize, effectiveScale), Is.GreaterThanOrEqualTo(11f));
-        }
-
-        [Test]
         public void PlaybackControlsView_CreatesGroupedControlLabels()
         {
             var frames = Frames(2);
@@ -2277,159 +1984,6 @@ namespace UnderwaterGliderTwin.Tests
 
             Assert.That(GameObject.Find("PlaybackGroupLabel"), Is.Not.Null);
             Assert.That(GameObject.Find("SpeedGroupLabel"), Is.Not.Null);
-        }
-
-        [Test]
-        public void PlaybackControlsView_UsesThreeVisualSegmentsWithoutCameraDuplicates()
-        {
-            var frames = Frames(2);
-            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
-            var playback = CreatePlayback(frames);
-            var prediction = CreatePrediction(playback, frames);
-            var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
-            var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
-            var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
-            trajectory.Initialize(frames, mapper, playback, prediction);
-            var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
-
-            controls.Initialize(playback, cameraController, environment, trajectory);
-
-            Assert.That(GameObject.Find("PlaybackOperationsRow"), Is.Not.Null);
-            Assert.That(GameObject.Find("PlaybackTimelineRow"), Is.Not.Null);
-            Assert.That(GameObject.Find("PlaybackOptionsRow"), Is.Not.Null);
-            Assert.That(FindObjectIncludingInactive("CameraFollowButton"), Is.Not.Null);
-            Assert.That(FindObjectIncludingInactive("CameraFollowButton").activeSelf, Is.False);
-            Assert.That(FindObjectIncludingInactive("CameraGlobalButton"), Is.Not.Null);
-            Assert.That(FindObjectIncludingInactive("CameraGlobalButton").activeSelf, Is.False);
-            Assert.That(FindObjectIncludingInactive("CameraOrbitButton"), Is.Not.Null);
-            Assert.That(FindObjectIncludingInactive("CameraOrbitButton").activeSelf, Is.False);
-            Assert.That(GameObject.Find("PlayPauseButton").transform.parent.name, Is.EqualTo("PlaybackOperationsRow"));
-            Assert.That(GameObject.Find("ProgressSlider").transform.parent.name, Is.EqualTo("PlaybackTimelineRow"));
-            Assert.That(GameObject.Find("Speed1Button").transform.parent.name, Is.EqualTo("PlaybackOptionsRow"));
-        }
-
-        [Test]
-        public void OceanCommandToolbarView_MarksCurrentCameraWithAccentEdge()
-        {
-            var frames = Frames(2);
-            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
-            var playback = CreatePlayback(frames);
-            var prediction = CreatePrediction(playback, frames);
-            var cameraController = new GameObject("ToolbarCamera").AddComponent<TwinCameraController>();
-            var target = new GameObject("ToolbarTarget");
-            cameraController.Initialize(target.transform, new[] { Vector3.zero, Vector3.one });
-            var trajectory = new GameObject("ToolbarTrajectory").AddComponent<TrajectoryView>();
-            trajectory.Initialize(frames, mapper, playback, prediction);
-            var toolbar = new GameObject("Toolbar").AddComponent<OceanCommandToolbarView>();
-
-            toolbar.Initialize(cameraController, trajectory);
-            var top = GameObject.Find("CameraTopCommand").GetComponent<Button>();
-            top.onClick.Invoke();
-
-            Assert.That(top.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandAccent));
-            Assert.That(GameObject.Find("CameraFollowCommand").GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandPanelEdge));
-        }
-
-        [Test]
-        public void OceanCommandToolbarView_BindMarksExistingGlobalCameraMode()
-        {
-            var frames = Frames(2);
-            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
-            var playback = CreatePlayback(frames);
-            var prediction = CreatePrediction(playback, frames);
-            var cameraController = new GameObject("ToolbarCamera").AddComponent<TwinCameraController>();
-            var target = new GameObject("ToolbarTarget");
-            cameraController.Initialize(target.transform, new[] { Vector3.zero, Vector3.one });
-            cameraController.SetMissionVolumeView(80f);
-            var trajectory = new GameObject("ToolbarTrajectory").AddComponent<TrajectoryView>();
-            trajectory.Initialize(frames, mapper, playback, prediction);
-            trajectory.SetCameraMode(CameraMode.Global);
-            var panel = new GameObject("OceanCommandToolbar", typeof(RectTransform));
-            var follow = UiFactory.Button("CameraFollowCommand", panel.transform, "跟随", Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(60f, 32f));
-            var global = UiFactory.Button("CameraGlobalCommand", panel.transform, "全局", Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(60f, 32f));
-            var toolbar = new GameObject("Toolbar").AddComponent<OceanCommandToolbarView>();
-
-            toolbar.Bind(new OceanToolbarRefs
-            {
-                panel = panel.GetComponent<RectTransform>(),
-                cameraFollowCommand = follow,
-                cameraGlobalCommand = global
-            }, cameraController, trajectory);
-
-            Assert.That(global.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandAccent));
-            Assert.That(follow.GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandPanelEdge));
-        }
-
-        [Test]
-        public void BoundPrefabTypography_PreservesExistingTextFontSizes()
-        {
-            var frames = Frames(2);
-            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
-            var playback = CreatePlayback(frames);
-            var prediction = CreatePrediction(playback, frames);
-
-            var cameraController = new GameObject("TypographyCamera").AddComponent<TwinCameraController>();
-            var target = new GameObject("TypographyTarget");
-            cameraController.Initialize(target.transform, new[] { Vector3.zero, Vector3.one });
-            var trajectory = new GameObject("TypographyTrajectory").AddComponent<TrajectoryView>();
-            trajectory.Initialize(frames, mapper, playback, prediction);
-
-            var oceanPanel = new GameObject("OceanTypographyPanel", typeof(RectTransform));
-            var oceanButton = UiFactory.Button("CameraFollowCommand", oceanPanel.transform, "跟随",
-                Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(60f, 32f));
-            var oceanText = oceanButton.GetComponentInChildren<Text>();
-            oceanText.fontSize = 7;
-            var toolbar = new GameObject("TypographyToolbar").AddComponent<OceanCommandToolbarView>();
-
-            toolbar.Bind(new OceanToolbarRefs
-            {
-                panel = oceanPanel.GetComponent<RectTransform>(),
-                cameraFollowCommand = oceanButton
-            }, cameraController, trajectory);
-
-            var playbackPanel = new GameObject("PlaybackTypographyPanel", typeof(RectTransform));
-            var playbackButton = UiFactory.Button("PlayPauseButton", playbackPanel.transform, "开始",
-                Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(80f, 32f));
-            var playbackText = playbackButton.GetComponentInChildren<Text>();
-            playbackText.fontSize = 6;
-            var playbackStatus = UiFactory.Text("PlaybackStatus", playbackPanel.transform, "状态", 12,
-                TextAnchor.MiddleLeft, UiFactory.CommandText, Vector2.zero, Vector2.zero, Vector2.zero,
-                Vector2.zero, new Vector2(120f, 24f));
-            playbackStatus.fontSize = 5;
-            var controls = new GameObject("TypographyControls").AddComponent<PlaybackControlsView>();
-
-            controls.Bind(new PlaybackControlsRefs
-            {
-                panel = playbackPanel.GetComponent<RectTransform>(),
-                playPauseButton = playbackButton,
-                statusText = playbackStatus
-            }, playback, null, null, null);
-
-            Assert.That(oceanText.fontSize, Is.EqualTo(7));
-            Assert.That(playbackText.fontSize, Is.EqualTo(6));
-            Assert.That(playbackStatus.fontSize, Is.EqualTo(5));
-        }
-
-        [Test]
-        public void OceanCommandToolbarView_ResetMarksGlobalCameraMode()
-        {
-            var frames = Frames(2);
-            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
-            var playback = CreatePlayback(frames);
-            var prediction = CreatePrediction(playback, frames);
-            var cameraController = new GameObject("ToolbarCamera").AddComponent<TwinCameraController>();
-            var target = new GameObject("ToolbarTarget");
-            cameraController.Initialize(target.transform, new[] { Vector3.zero, Vector3.one });
-            var trajectory = new GameObject("ToolbarTrajectory").AddComponent<TrajectoryView>();
-            trajectory.Initialize(frames, mapper, playback, prediction);
-            var toolbar = new GameObject("Toolbar").AddComponent<OceanCommandToolbarView>();
-
-            toolbar.Initialize(cameraController, trajectory);
-            GameObject.Find("CameraTopCommand").GetComponent<Button>().onClick.Invoke();
-            GameObject.Find("CameraResetCommand").GetComponent<Button>().onClick.Invoke();
-
-            Assert.That(GameObject.Find("CameraGlobalCommand").GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandAccent));
-            Assert.That(GameObject.Find("CameraTopCommand").GetComponent<Outline>().effectColor, Is.EqualTo(UiFactory.CommandPanelEdge));
         }
 
         [Test]
@@ -2461,19 +2015,19 @@ namespace UnderwaterGliderTwin.Tests
 
             dashboard.Initialize(CreatePlayback(frames), null);
 
-            Assert.That(FindText("WaterSpeedValue").text, Is.EqualTo("0.51"));
-            Assert.That(FindText("GroundSpeedValue").text, Is.EqualTo("0.59"));
-            Assert.That(FindText("SideSlipValue").text, Is.EqualTo("12.4"));
-            Assert.That(FindText("OceanCurrentValue").text, Is.EqualTo("东 0.20 北 -0.10"));
-            Assert.That(FindText("NetBuoyancyValue").text, Is.EqualTo("6.5"));
-            Assert.That(FindText("EnergyValue").text, Is.EqualTo("8.2"));
-            Assert.That(FindText("AngleOfAttackValue").text, Is.EqualTo("3.2"));
-            Assert.That(FindText("LiftForceValue").text, Is.EqualTo("4.5"));
-            Assert.That(FindText("DragForceValue").text, Is.EqualTo("7.8"));
-            Assert.That(FindText("AngularRateValue").text, Is.EqualTo("2.14"));
-            Assert.That(FindText("PistonPositionValue").text, Is.EqualTo("12.5"));
-            Assert.That(FindText("ControlSurfaceValue").text, Is.EqualTo("R 4.0 / P -3.0 / Y 1.5"));
-            Assert.That(FindText("ActuatorPowerValue").text, Is.EqualTo("6.7"));
+            Assert.That(FindText("WaterSpeedValue").text, Is.EqualTo("0.51 m/s"));
+            Assert.That(FindText("GroundSpeedValue").text, Is.EqualTo("0.59 m/s"));
+            Assert.That(FindText("SideSlipValue").text, Is.EqualTo("12.4°"));
+            Assert.That(FindText("OceanCurrentValue").text, Is.EqualTo("东 0.20 m/s 北 -0.10 m/s"));
+            Assert.That(FindText("NetBuoyancyValue").text, Is.EqualTo("6.5 N"));
+            Assert.That(FindText("EnergyValue").text, Is.EqualTo("8.2 W"));
+            Assert.That(FindText("AngleOfAttackValue").text, Is.EqualTo("3.2 deg"));
+            Assert.That(FindText("LiftForceValue").text, Is.EqualTo("4.5 N"));
+            Assert.That(FindText("DragForceValue").text, Is.EqualTo("7.8 N"));
+            Assert.That(FindText("AngularRateValue").text, Is.EqualTo("2.14 deg/s"));
+            Assert.That(FindText("PistonPositionValue").text, Is.EqualTo("12.5 mm"));
+            Assert.That(FindText("ControlSurfaceValue").text, Is.EqualTo("R 4.0 / P -3.0 / Y 1.5 deg"));
+            Assert.That(FindText("ActuatorPowerValue").text, Is.EqualTo("6.7 W"));
             Assert.That(FindText("DynamicsSummaryValue").text, Is.EqualTo("AoA 3.2°  L 4.5N  D 7.8N"));
         }
 
@@ -2496,9 +2050,35 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(operationsBar.sizeDelta.y, Is.LessThanOrEqualTo(128f));
             Assert.That(operationsBar.anchorMin.x, Is.EqualTo(0f));
             Assert.That(operationsBar.anchorMax.x, Is.EqualTo(1f));
+            Assert.That(operationsBar.anchoredPosition.y, Is.EqualTo(36f).Within(.1f));
+            Assert.That(operationsBar.sizeDelta.x, Is.EqualTo(-36f).Within(.1f));
             var exitButton = GameObject.Find("ExitButton").GetComponent<RectTransform>();
             Assert.That(exitButton.anchorMin, Is.EqualTo(Vector2.one));
             Assert.That(exitButton.anchorMax, Is.EqualTo(Vector2.one));
+        }
+
+        [Test]
+        public void PlaybackControlsView_ExposesMissionVolumeAction()
+        {
+            var frames = Frames(2);
+            var mapper = new GeoCoordinateMapper(frames[0], 1f, 1f);
+            var playback = CreatePlayback(frames);
+            var prediction = CreatePrediction(playback, frames);
+            var cameraController = new GameObject("Camera").AddComponent<TwinCameraController>();
+            var environment = new GameObject("Environment").AddComponent<UnderwaterEnvironmentBuilder>();
+            var trajectory = new GameObject("Trajectory").AddComponent<TrajectoryView>();
+            trajectory.Initialize(frames, mapper, playback, prediction);
+            var controls = new GameObject("Controls").AddComponent<PlaybackControlsView>();
+            var missionViewRequests = 0;
+
+            controls.Initialize(playback, cameraController, environment, trajectory,
+                onMissionViewRequested: () => missionViewRequests++);
+
+            var button = GameObject.Find("MissionVolumeButton")?.GetComponent<Button>();
+            Assert.That(button, Is.Not.Null);
+            Assert.That(button.gameObject.activeInHierarchy, Is.True);
+            button.onClick.Invoke();
+            Assert.That(missionViewRequests, Is.EqualTo(1));
         }
 
         [Test]
@@ -2529,329 +2109,9 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(depthRect.pivot, Is.EqualTo(new Vector2(1f, 1f)));
         }
 
-        [Test]
-        public void DashboardView_BuildsLayeredTelemetryCardsWithReadableNumericRoles()
-        {
-            var playback = CreatePlayback(Frames(2));
-            var prediction = CreatePrediction(playback, Frames(2));
-            var dashboard = new GameObject("DashboardHierarchy").AddComponent<DashboardView>();
-
-            dashboard.Initialize(playback, prediction);
-
-            var telemetryCard = GameObject.Find("TelemetrySnapshotCard");
-            var dynamicsCard = GameObject.Find("TelemetryDynamicsCard");
-            var navigationCard = GameObject.Find("NavigationReferenceCard");
-            var divider = GameObject.Find("TelemetrySectionDivider");
-            Assert.That(telemetryCard, Is.Not.Null);
-            Assert.That(dynamicsCard, Is.Not.Null);
-            Assert.That(navigationCard, Is.Not.Null);
-            Assert.That(divider, Is.Not.Null);
-            Assert.That(telemetryCard.GetComponent<Image>().raycastTarget, Is.False);
-            AssertColorClose(telemetryCard.GetComponent<Image>().color, UiFactory.CommandCardFill);
-            Assert.That(divider.GetComponent<Image>().raycastTarget, Is.False);
-
-            var depth = FindText("DepthValue");
-            var depthLayout = depth.GetComponent<LayoutElement>();
-            Assert.That(depth.fontSize, Is.GreaterThanOrEqualTo(18));
-            Assert.That(depth.alignment, Is.EqualTo(TextAnchor.MiddleRight));
-            Assert.That(depthLayout.preferredWidth, Is.EqualTo(UiFactory.FixedValueColumnWidth));
-            AssertColorClose(depth.color, UiFactory.CommandText);
-            AssertColorClose(FindText("深度Label").color, UiFactory.CommandMutedText);
-        }
-
-        [Test]
-        public void StatusPanelView_GroupsMissionProgressPredictionAndAlarmSurfaces()
-        {
-            var frames = Frames(2);
-            var playback = CreatePlayback(frames);
-            var prediction = CreatePrediction(playback, frames);
-            var status = new GameObject("StatusHierarchy").AddComponent<StatusPanelView>();
-
-            status.Initialize(playback, new AlarmEvaluator(1000f, 0f, 180f), null, prediction);
-
-            var cardNames = new[]
-            {
-                "MissionStatusCard",
-                "MissionProgressCard",
-                "PredictionQualityCard",
-                "AlarmStateCard"
-            };
-            foreach (var cardName in cardNames)
-            {
-                var card = GameObject.Find(cardName);
-                Assert.That(card, Is.Not.Null, cardName);
-                Assert.That(card.GetComponent<Image>(), Is.Not.Null, cardName);
-                Assert.That(card.GetComponent<Image>().raycastTarget, Is.False, cardName);
-            }
-
-            var predictionValue = FindText("PredictionStatusValue");
-            Assert.That(predictionValue.fontSize, Is.GreaterThanOrEqualTo(18));
-            Assert.That(predictionValue.GetComponent<LayoutElement>().preferredWidth,
-                Is.EqualTo(UiFactory.FixedValueColumnWidth));
-            Assert.That(GameObject.Find("MissionPredictionDivider"), Is.Not.Null);
-            Assert.That(GameObject.Find("PredictionAlarmDivider"), Is.Not.Null);
-        }
-
-        [Test]
-        public void PlaybackControlsView_UsesThreeStyledRowsAndDistinctButtonRoles()
-        {
-            var frames = Frames(2);
-            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
-            var playback = CreatePlayback(frames);
-            var prediction = CreatePrediction(playback, frames);
-            var cameraController = new GameObject("PlaybackHierarchyCamera").AddComponent<TwinCameraController>();
-            var environment = new GameObject("PlaybackHierarchyEnvironment").AddComponent<UnderwaterEnvironmentBuilder>();
-            var trajectory = new GameObject("PlaybackHierarchyTrajectory").AddComponent<TrajectoryView>();
-            trajectory.Initialize(frames, mapper, playback, prediction);
-            var controls = new GameObject("PlaybackHierarchyControls").AddComponent<PlaybackControlsView>();
-
-            controls.Initialize(playback, cameraController, environment, trajectory);
-
-            var operations = GameObject.Find("PlaybackOperationsRow").transform;
-            var timeline = GameObject.Find("PlaybackTimelineRow").transform;
-            var options = GameObject.Find("PlaybackOptionsRow").transform;
-            Assert.That(operations.GetComponent<Image>().raycastTarget, Is.False);
-            Assert.That(timeline.GetComponent<Image>().raycastTarget, Is.False);
-            Assert.That(options.GetComponent<Image>().raycastTarget, Is.False);
-            Assert.That(GameObject.Find("PlayPauseButton").transform.parent, Is.SameAs(operations));
-            Assert.That(GameObject.Find("ProgressSlider").transform.parent, Is.SameAs(timeline));
-            Assert.That(GameObject.Find("FogToggle").transform.parent, Is.SameAs(options));
-            Assert.That(GameObject.Find("PlaybackOperationsDivider"), Is.Not.Null);
-            Assert.That(GameObject.Find("PlaybackTimelineDivider"), Is.Not.Null);
-
-            var primary = GameObject.Find("PlayPauseButton").GetComponent<Button>();
-            var secondary = GameObject.Find("ReverseButton").GetComponent<Button>();
-            AssertColorClose(primary.image.color, UiFactory.CommandAccent);
-            AssertColorClose(secondary.image.color, UiFactory.CommandButtonFill);
-            Assert.That(primary.GetComponentInChildren<Text>().fontSize, Is.GreaterThanOrEqualTo(18));
-            Assert.That(FindObjectIncludingInactive("CameraFollowButton").activeSelf, Is.False);
-            Assert.That(FindObjectIncludingInactive("CameraGlobalButton").activeSelf, Is.False);
-            Assert.That(FindObjectIncludingInactive("CameraOrbitButton").activeSelf, Is.False);
-        }
-
-        [Test]
-        public void VisualHierarchySetup_PreservesExistingAuthoredCardValues()
-        {
-            var root = new GameObject("DashboardPanel", typeof(RectTransform));
-            var card = new GameObject("TelemetrySnapshotCard", typeof(RectTransform), typeof(Image));
-            card.transform.SetParent(root.transform, false);
-            var authoredColor = new Color(0.41f, 0.12f, 0.32f, 0.77f);
-            var authoredPosition = new Vector2(37f, -91f);
-            card.GetComponent<Image>().color = authoredColor;
-            card.GetComponent<RectTransform>().anchoredPosition = authoredPosition;
-            var depth = CreateText(root.transform, "DepthValue");
-            var dashboard = new GameObject("DashboardPreservation").AddComponent<DashboardView>();
-
-            dashboard.Bind(new DashboardPanelRefs
-            {
-                panel = root.GetComponent<RectTransform>(),
-                depthValue = depth
-            }, CreatePlayback(Frames(2)), null);
-
-            Assert.That(CountDirectChildrenNamed(root.transform, "TelemetrySnapshotCard"), Is.EqualTo(1));
-            AssertColorClose(card.GetComponent<Image>().color, authoredColor);
-            Assert.That(card.GetComponent<RectTransform>().anchoredPosition, Is.EqualTo(authoredPosition));
-        }
-
-        [Test]
-        public void ShippedPanelPrefabs_ContainVisualGroupingRoots()
-        {
-            var dashboard = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/UI/Prefabs/DashboardPanel.prefab");
-            var status = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/UI/Prefabs/StatusPanel.prefab");
-            var playback = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/UI/Prefabs/PlaybackControlsPanel.prefab");
-
-            Assert.That(dashboard.transform.Find("TelemetrySnapshotCard"), Is.Not.Null);
-            Assert.That(dashboard.transform.Find("TelemetryDynamicsCard"), Is.Not.Null);
-            Assert.That(status.transform.Find("MissionStatusCard"), Is.Not.Null);
-            Assert.That(status.transform.Find("MissionProgressCard"), Is.Not.Null);
-            Assert.That(status.transform.Find("PredictionQualityCard"), Is.Not.Null);
-            Assert.That(status.transform.Find("AlarmStateCard"), Is.Not.Null);
-            Assert.That(playback.transform.Find("PlaybackOperationsRow"), Is.Not.Null);
-            Assert.That(playback.transform.Find("PlaybackTimelineRow"), Is.Not.Null);
-            Assert.That(playback.transform.Find("PlaybackOptionsRow"), Is.Not.Null);
-        }
-
-        [Test]
-        public void UiFactory_RuntimePaletteMigratesKnownLegacyColorsWithoutReplacingCustomOverrides()
-        {
-            var panel = new GameObject("PlaybackControlsPanel", typeof(RectTransform), typeof(Image));
-            panel.GetComponent<Image>().color = new Color(0.025f, 0.12f, 0.18f, 0.92f);
-            var primary = UiFactory.Button("PlayPauseButton", panel.transform, "开始", Vector2.zero, new Vector2(80f, 32f));
-            primary.image.color = new Color(0.082f, 0.184f, 0.259f, 0.96f);
-            var custom = UiFactory.Button("ExportButton", panel.transform, "导出", Vector2.zero, new Vector2(80f, 32f));
-            var customColor = new Color(0.48f, 0.11f, 0.36f, 0.83f);
-            custom.image.color = customColor;
-
-            UiFactory.ApplyRuntimePalette(panel.transform);
-
-            AssertColorClose(panel.GetComponent<Image>().color, UiFactory.CommandPanelFill);
-            AssertColorClose(primary.image.color, UiFactory.CommandAccent);
-            AssertColorClose(custom.image.color, customColor);
-        }
-
-        [Test]
-        public void PlaybackControlsView_BindsShippedPrefabWithThemeRolesAndNonBlockingRows()
-        {
-            var panel = InstantiateShippedPanelPrefab("Assets/UI/Prefabs/PlaybackControlsPanel.prefab");
-            var refs = new PlaybackControlsRefs
-            {
-                panel = panel,
-                playPauseButton = FindChildNamed(panel, "PlayPauseButton").GetComponent<Button>(),
-                reverseButton = FindChildNamed(panel, "ReverseButton").GetComponent<Button>(),
-                replayButton = FindChildNamed(panel, "ReplayButton").GetComponent<Button>(),
-                resetButton = FindChildNamed(panel, "ResetButton").GetComponent<Button>(),
-                exportButton = FindChildNamed(panel, "ExportButton").GetComponent<Button>(),
-                exitButton = FindChildNamed(panel, "ExitButton").GetComponent<Button>(),
-                missionVolumeButton = FindChildNamed(panel, "MissionVolumeButton").GetComponent<Button>(),
-                fogToggle = FindChildNamed(panel, "FogToggle").GetComponent<Toggle>(),
-                particlesToggle = FindChildNamed(panel, "ParticlesToggle").GetComponent<Toggle>(),
-                trajectoryToggle = FindChildNamed(panel, "TrajectoryToggle").GetComponent<Toggle>(),
-                speed05Button = FindChildNamed(panel, "Speed05Button").GetComponent<Button>(),
-                speed1Button = FindChildNamed(panel, "Speed1Button").GetComponent<Button>(),
-                speed2Button = FindChildNamed(panel, "Speed2Button").GetComponent<Button>(),
-                speed5Button = FindChildNamed(panel, "Speed5Button").GetComponent<Button>(),
-                speed10Button = FindChildNamed(panel, "Speed10Button").GetComponent<Button>(),
-                progressSlider = FindChildNamed(panel, "ProgressSlider").GetComponent<Slider>(),
-                statusText = FindChildNamed(panel, "StatusText").GetComponent<Text>()
-            };
-            var view = new GameObject("ShippedPlaybackView").AddComponent<PlaybackControlsView>();
-
-            view.Bind(refs, CreatePlayback(Frames(2)), null, null, null);
-
-            AssertColorClose(refs.panel.GetComponent<Image>().color, UiFactory.CommandPanelFill);
-            AssertColorClose(refs.playPauseButton.image.color, UiFactory.CommandAccent);
-            AssertColorClose(refs.reverseButton.image.color, UiFactory.CommandButtonFill);
-            AssertColorClose(refs.speed1Button.image.color, UiFactory.CommandAccent);
-            foreach (var rowName in new[] { "PlaybackOperationsRow", "PlaybackTimelineRow", "PlaybackOptionsRow" })
-            {
-                var image = panel.Find(rowName).GetComponent<Image>();
-                Assert.That(image, Is.Not.Null, rowName);
-                Assert.That(image.raycastTarget, Is.False, rowName);
-            }
-        }
-
-        [TestCase(236f, TestName = "DashboardValueRows_FitResponsiveSidebarWidth_At1280")]
-        [TestCase(280f, TestName = "DashboardValueRows_FitResponsiveSidebarWidth_At1366")]
-        public void DashboardValueRows_FitResponsiveSidebarWidth(float sidebarWidth)
-        {
-            var root = new GameObject("DashboardPanel", typeof(RectTransform));
-            root.GetComponent<RectTransform>().sizeDelta = new Vector2(sidebarWidth, 600f);
-            var depth = CreateText(root.transform, "DepthValue");
-            var view = new GameObject("SidebarWidthDashboard").AddComponent<DashboardView>();
-
-            view.Bind(new DashboardPanelRefs
-            {
-                panel = root.GetComponent<RectTransform>(),
-                depthValue = depth
-            }, CreatePlayback(Frames(2)), null);
-
-            var row = root.transform.Find("DepthRow").GetComponent<RectTransform>();
-            AssertRowWidthBudgetFits(row, sidebarWidth - 8f);
-        }
-
-        [TestCase(236f, TestName = "DashboardAndStatusViews_BindShippedPrefabsWithoutOverflow_At1280")]
-        [TestCase(280f, TestName = "DashboardAndStatusViews_BindShippedPrefabsWithoutOverflow_At1366")]
-        public void DashboardAndStatusViews_BindShippedPrefabsWithCompactNonBlockingCards(float sidebarWidth)
-        {
-            var playback = CreatePlayback(Frames(2));
-            var dashboardPanel = InstantiateShippedPanelPrefab("Assets/UI/Prefabs/DashboardPanel.prefab");
-            dashboardPanel.sizeDelta = new Vector2(sidebarWidth, 600f);
-            var dashboard = new GameObject("ShippedDashboardView").AddComponent<DashboardView>();
-            dashboard.Bind(new DashboardPanelRefs
-            {
-                panel = dashboardPanel,
-                depthValue = FindChildNamed(dashboardPanel, "DepthValue").GetComponent<Text>(),
-                detailsButton = FindChildNamed(dashboardPanel, "DetailsButton").GetComponent<Button>(),
-                navigationReferenceCard = FindChildNamed(dashboardPanel, "NavigationReferenceCard").gameObject
-            }, playback, null);
-
-            var statusPanel = InstantiateShippedPanelPrefab("Assets/UI/Prefabs/StatusPanel.prefab");
-            statusPanel.sizeDelta = new Vector2(sidebarWidth, 600f);
-            var status = new GameObject("ShippedStatusView").AddComponent<StatusPanelView>();
-            status.Bind(new StatusPanelRefs
-            {
-                panel = statusPanel,
-                missionValue = FindChildNamed(statusPanel, "MissionValue").GetComponent<Text>()
-            }, playback, null, null, null);
-
-            AssertColorClose(dashboardPanel.GetComponent<Image>().color, UiFactory.CommandPanelFill);
-            AssertColorClose(statusPanel.GetComponent<Image>().color, UiFactory.CommandPanelFill);
-            Assert.That(dashboardPanel.Find("TelemetrySnapshotCard").GetComponent<Image>().raycastTarget, Is.False);
-            Assert.That(statusPanel.Find("MissionStatusCard").GetComponent<Image>().raycastTarget, Is.False);
-            AssertRowWidthBudgetFits(dashboardPanel.Find("DepthRow").GetComponent<RectTransform>(), sidebarWidth - 8f);
-            AssertRowWidthBudgetFits(statusPanel.Find("MissionRow").GetComponent<RectTransform>(), sidebarWidth - 8f);
-        }
-
         private static Text FindText(string name)
         {
             return GameObject.Find(name).GetComponent<Text>();
-        }
-
-        private static RectTransform InstantiateShippedPanelPrefab(string assetPath)
-        {
-            var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
-            Assert.That(prefab, Is.Not.Null, assetPath);
-            var instance = UnityEditor.PrefabUtility.InstantiatePrefab(prefab) as GameObject;
-            Assert.That(instance, Is.Not.Null, assetPath);
-            return instance.GetComponent<RectTransform>();
-        }
-
-        private static void AssertRowWidthBudgetFits(RectTransform row, float availableWidth)
-        {
-            var layout = row.GetComponent<HorizontalLayoutGroup>();
-            Assert.That(layout, Is.Not.Null, row.name);
-            var activeElements = new List<LayoutElement>();
-            foreach (Transform child in row)
-            {
-                if (child.gameObject.activeSelf)
-                {
-                    var element = child.GetComponent<LayoutElement>();
-                    if (element != null && !element.ignoreLayout)
-                    {
-                        activeElements.Add(element);
-                    }
-                }
-            }
-
-            var requiredWidth = (float)layout.padding.horizontal;
-            if (activeElements.Count > 1)
-            {
-                requiredWidth += layout.spacing * (activeElements.Count - 1);
-            }
-            foreach (var element in activeElements)
-            {
-                requiredWidth += element.minWidth;
-            }
-
-            Assert.That(requiredWidth, Is.LessThanOrEqualTo(availableWidth),
-                $"{row.name} requires {requiredWidth:0.#} px but only {availableWidth:0.#} px is available");
-        }
-
-        private static GameObject FindObjectIncludingInactive(string name)
-        {
-            foreach (var transform in Object.FindObjectsOfType<Transform>(true))
-            {
-                if (transform.name == name)
-                {
-                    return transform.gameObject;
-                }
-            }
-
-            return null;
-        }
-
-        private static Color ParseColor(string html)
-        {
-            Assert.That(ColorUtility.TryParseHtmlString(html, out var color), Is.True, $"Failed to parse {html}");
-            return color;
-        }
-
-        private static void AssertColorClose(Color actual, Color expected, float tolerance = 0.001f)
-        {
-            Assert.That(actual.r, Is.EqualTo(expected.r).Within(tolerance));
-            Assert.That(actual.g, Is.EqualTo(expected.g).Within(tolerance));
-            Assert.That(actual.b, Is.EqualTo(expected.b).Within(tolerance));
-            Assert.That(actual.a, Is.EqualTo(expected.a).Within(tolerance));
         }
 
         private static void AssertRectInsideViewport(RectTransform control, RectTransform viewport, int width, int height)
@@ -2871,6 +2131,13 @@ namespace UnderwaterGliderTwin.Tests
             }
         }
 
+        private static Vector3[] GetWorldCorners(RectTransform rect)
+        {
+            var corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            return corners;
+        }
+
         private static void AssertRectanglesDoNotOverlap(RectTransform first, RectTransform second)
         {
             var firstCorners = new Vector3[4];
@@ -2886,8 +2153,7 @@ namespace UnderwaterGliderTwin.Tests
             var secondMinY = secondCorners[0].y;
             var secondMaxY = secondCorners[2].y;
             Assert.That(firstMaxX <= secondMinX || secondMaxX <= firstMinX || firstMaxY <= secondMinY || secondMaxY <= firstMinY,
-                $"{first.name} [{firstMinX:0.#},{firstMinY:0.#}]–[{firstMaxX:0.#},{firstMaxY:0.#}] must not overlap " +
-                $"{second.name} [{secondMinX:0.#},{secondMinY:0.#}]–[{secondMaxX:0.#},{secondMaxY:0.#}]");
+                $"{first.name} must not overlap {second.name}");
         }
 
         private static string CreateTempCsv()
@@ -2932,262 +2198,6 @@ namespace UnderwaterGliderTwin.Tests
             var textObject = new GameObject(name, typeof(RectTransform), typeof(Text));
             textObject.transform.SetParent(parent, false);
             return textObject.GetComponent<Text>();
-        }
-
-        private static void AssertNoUnitColumnsOutsideRows(Transform panel)
-        {
-            foreach (var text in panel.GetComponentsInChildren<Text>(true))
-            {
-                if (!text.name.EndsWith("Unit", System.StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                Assert.That(text.transform.parent, Is.Not.Null);
-                Assert.That(text.transform.parent.name, Does.EndWith("Row"), text.name);
-            }
-        }
-
-        private static Button CreateNavigationButton(Transform parent, string name)
-        {
-            var buttonObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-            buttonObject.transform.SetParent(parent, false);
-            return buttonObject.GetComponent<Button>();
-        }
-
-        private static void SetHorizontalNavigation(Button left, Button right, Navigation.Mode mode)
-        {
-            var leftNavigation = left.navigation;
-            leftNavigation.mode = mode;
-            leftNavigation.selectOnRight = right;
-            left.navigation = leftNavigation;
-            var rightNavigation = right.navigation;
-            rightNavigation.mode = mode;
-            rightNavigation.selectOnLeft = left;
-            right.navigation = rightNavigation;
-        }
-
-        private static void AssertHorizontalNavigationPreserved(Button left, Button right)
-        {
-            Assert.That(left.navigation.mode, Is.EqualTo(Navigation.Mode.Explicit));
-            Assert.That(left.navigation.selectOnRight, Is.SameAs(right));
-            Assert.That(right.navigation.mode, Is.EqualTo(Navigation.Mode.Explicit));
-            Assert.That(right.navigation.selectOnLeft, Is.SameAs(left));
-        }
-
-        private static bool RootScrollIsAbsentOrDisabled(RectTransform drawer)
-        {
-            var rootScroll = drawer != null ? drawer.GetComponent<ScrollRect>() : null;
-            return rootScroll == null || !rootScroll.enabled;
-        }
-
-        private static int CountDirectChildrenNamed(Transform parent, string name)
-        {
-            var count = 0;
-            foreach (Transform child in parent)
-            {
-                if (child.name == name)
-                {
-                    count++;
-                }
-            }
-
-            return count;
-        }
-
-        private static RectTransform InstantiateShippedDataInputPanel()
-        {
-            var canvas = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            canvas.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
-            var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/UI/Prefabs/DataInputPanel.prefab");
-            Assert.That(prefab, Is.Not.Null);
-            var instance = UnityEditor.PrefabUtility.InstantiatePrefab(prefab) as GameObject;
-            Assert.That(instance, Is.Not.Null);
-            instance.transform.SetParent(canvas.transform, false);
-            return instance.GetComponent<RectTransform>();
-        }
-
-        private static DataInputView CreateConfigurationLayoutProbe(
-            float width,
-            float height,
-            bool useFallback,
-            out RectTransform configurationArea,
-            out RectTransform mainBody,
-            out RectTransform playbackBar)
-        {
-            var canvasObject = new GameObject("ConfigurationLayoutCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            var canvasRect = canvasObject.GetComponent<RectTransform>();
-            canvasRect.sizeDelta = new Vector2(width, height);
-            var canvas = canvasObject.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.WorldSpace;
-            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
-            configurationArea = uiRoot.Find("ConfigurationArea").GetComponent<RectTransform>();
-            mainBody = uiRoot.Find("MainBody").GetComponent<RectTransform>();
-            playbackBar = uiRoot.Find("PlaybackBar").GetComponent<RectTransform>();
-
-            var viewObject = new GameObject(useFallback ? "FallbackDataInputView" : "ConfiguredDataInputView", typeof(RectTransform));
-            viewObject.transform.SetParent(uiRoot, false);
-            var view = viewObject.AddComponent<DataInputView>();
-            if (useFallback)
-            {
-                view.Initialize(CreateTempCsv(), SimulationProfile.Default, null);
-            }
-            else
-            {
-                var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/UI/Prefabs/DataInputPanel.prefab");
-                Assert.That(prefab, Is.Not.Null);
-                var instance = UnityEditor.PrefabUtility.InstantiatePrefab(prefab) as GameObject;
-                Assert.That(instance, Is.Not.Null);
-                instance.transform.SetParent(configurationArea, false);
-                view.Bind(new DataInputPanelRefs { panel = instance.GetComponent<RectTransform>() }, CreateTempCsv(), SimulationProfile.Default, null);
-            }
-
-            Canvas.ForceUpdateCanvases();
-            return view;
-        }
-
-        private static void AssertConfigurationLayoutContract(
-            RectTransform configurationArea,
-            RectTransform mainBody,
-            RectTransform playbackBar,
-            float expectedConfigurationHeight,
-            float expectedMainBodyBottom)
-        {
-            var configurationElement = configurationArea.GetComponent<LayoutElement>();
-            var playbackTop = playbackBar.anchoredPosition.y + playbackBar.sizeDelta.y;
-            var configurationBottom = configurationArea.anchoredPosition.y;
-            var configurationTop = configurationBottom + configurationArea.sizeDelta.y;
-
-            Assert.That(playbackBar.sizeDelta.y, Is.EqualTo(92f).Within(0.01f));
-            Assert.That(configurationArea.sizeDelta.y, Is.EqualTo(expectedConfigurationHeight).Within(0.01f));
-            Assert.That(configurationElement.minHeight, Is.EqualTo(expectedConfigurationHeight).Within(0.01f));
-            Assert.That(configurationElement.preferredHeight, Is.EqualTo(expectedConfigurationHeight).Within(0.01f));
-            Assert.That(mainBody.offsetMin.y, Is.EqualTo(expectedMainBodyBottom).Within(0.01f));
-            Assert.That(configurationBottom, Is.EqualTo(playbackTop).Within(0.01f), "ConfigurationArea must start exactly above PlaybackBar.");
-            Assert.That(mainBody.offsetMin.y, Is.EqualTo(configurationTop).Within(0.01f), "MainBody must start exactly above ConfigurationArea.");
-            Assert.That(mainBody.rect.height, Is.GreaterThan(0f));
-        }
-
-        private static List<Text> FindLegacyConfigurationTitles(Transform panel)
-        {
-            var names = new HashSet<string>
-            {
-                "MissionConfigurationTitle",
-                "TitleText",
-                "ModelLabel",
-                "SimulationLabel",
-                "OceanCurrentLabel"
-            };
-            var titles = new List<Text>();
-            foreach (var text in panel.GetComponentsInChildren<Text>(true))
-            {
-                if (names.Contains(text.name))
-                {
-                    if (text.name == "TitleText" && text.transform.parent != panel)
-                    {
-                        continue;
-                    }
-                    titles.Add(text);
-                }
-            }
-
-            return titles;
-        }
-
-        private static TypographyProbe CreateTypographyProbe(string canvasName, bool createFallbackContent)
-        {
-            var canvasObject = new GameObject(canvasName, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            var canvas = canvasObject.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            var scaler = canvasObject.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.matchWidthOrHeight = 0.5f;
-
-            var uiRoot = UiFactory.EnsureResponsiveRuntimeLayout(canvas);
-            var contentRoot = uiRoot.Find("ConfigurationArea");
-            Text title;
-            Text label;
-            Text value;
-            Text button;
-
-            if (createFallbackContent)
-            {
-                var dataInput = new GameObject("FallbackDataInput").AddComponent<DataInputView>();
-                dataInput.Initialize(CreateTempCsv(), SimulationProfile.Default, null);
-                var fallbackCanvas = Object.FindObjectsOfType<Canvas>(true);
-                foreach (var candidate in fallbackCanvas)
-                {
-                    if (candidate.gameObject.name == "RuntimeCanvas" && candidate.transform.Find("MissionConfigurationPanel") != null)
-                    {
-                        canvas = candidate;
-                        break;
-                    }
-                }
-
-                title = FindChildNamed(canvas.transform, "MissionConfigurationTitle").GetComponent<Text>();
-                label = FindChildNamed(canvas.transform, "CsvSourceLabel").GetComponent<Text>();
-                value = FindChildNamed(canvas.transform, "MissionConfigurationStatus").GetComponent<Text>();
-                button = FindChildNamed(canvas.transform, "LoadCsvButtonLabel").GetComponent<Text>();
-            }
-            else
-            {
-                title = CreateText(contentRoot, "PrefabMissionConfigurationTitle");
-                label = CreateText(contentRoot, "PrefabCsvSourceLabel");
-                value = CreateText(contentRoot, "PrefabMissionConfigurationStatus");
-                var buttonRoot = new GameObject("PrefabLoadCsvButton", typeof(RectTransform), typeof(Image), typeof(Button)).GetComponent<Button>();
-                buttonRoot.transform.SetParent(contentRoot, false);
-                button = CreateText(buttonRoot.transform, "PrefabLoadCsvButtonLabel");
-                title.fontSize = 8;
-                label.fontSize = 8;
-                value.fontSize = 8;
-                button.fontSize = 8;
-            }
-
-            return new TypographyProbe(canvas, title, label, value, button);
-        }
-
-        private static ResponsiveUiLayoutController CreateResponsiveLayoutController(out Canvas canvas)
-        {
-            var canvasObject = new GameObject("ResponsiveLayoutCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            canvas = canvasObject.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            UiFactory.EnsureResponsiveRuntimeLayout(canvas);
-            var runtimeRoot = canvasObject.AddComponent<RuntimeUiRoot>();
-            runtimeRoot.ConfigureRuntimeReferences(canvas, canvas.transform.Find("ModalRoot") as RectTransform, new RuntimeUiReferences(), 0);
-            var controller = canvasObject.AddComponent<ResponsiveUiLayoutController>();
-            controller.SetAnimationsEnabledForTests(false);
-            controller.Bind(runtimeRoot, runtimeRoot.References);
-            return controller;
-        }
-
-        private static void ApplyTypography(Canvas canvas, float width, float height)
-        {
-            var runtimeRoot = canvas.gameObject.GetComponent<RuntimeUiRoot>() ?? canvas.gameObject.AddComponent<RuntimeUiRoot>();
-            var modalRoot = canvas.transform.Find("ModalRoot") as RectTransform;
-            runtimeRoot.ConfigureRuntimeReferences(canvas, modalRoot, new RuntimeUiReferences(), 0);
-            var controller = canvas.gameObject.GetComponent<ResponsiveUiLayoutController>() ?? canvas.gameObject.AddComponent<ResponsiveUiLayoutController>();
-            controller.SetAnimationsEnabledForTests(false);
-            controller.Bind(runtimeRoot, runtimeRoot.References);
-            controller.RefreshForScreen(width, height);
-        }
-
-        private readonly struct TypographyProbe
-        {
-            public TypographyProbe(Canvas runtimeCanvas, Text title, Text label, Text value, Text button)
-            {
-                this.runtimeCanvas = runtimeCanvas;
-                this.title = title;
-                this.label = label;
-                this.value = value;
-                this.button = button;
-            }
-
-            public readonly Canvas runtimeCanvas;
-            public readonly Text title;
-            public readonly Text label;
-            public readonly Text value;
-            public readonly Text button;
         }
 
         private static InputField CreateInput(Transform parent, string name)

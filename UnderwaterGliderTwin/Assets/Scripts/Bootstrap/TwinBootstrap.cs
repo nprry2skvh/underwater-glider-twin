@@ -15,6 +15,7 @@ namespace UnderwaterGliderTwin.Bootstrap
 {
     public sealed class TwinBootstrap : MonoBehaviour
     {
+        private static bool launchArgumentsApplied;
         [SerializeField] private float rowsPerSecond = 120f;
         [SerializeField] private float horizontalScale = 0.0025f;
         [SerializeField] private float depthScale = 0.05f;
@@ -33,6 +34,7 @@ namespace UnderwaterGliderTwin.Bootstrap
         private TrajectoryExportService exportService;
 
         private TrajectoryView trajectoryView;
+        private WaterSurfaceView waterSurfaceView;
         private MissionMapOverlay missionMapOverlay;
         private OceanVolumeView oceanVolume;
 
@@ -63,7 +65,17 @@ namespace UnderwaterGliderTwin.Bootstrap
 
             var loadTimer = System.Diagnostics.Stopwatch.StartNew();
             var commandLineArgs = Environment.GetCommandLineArgs();
-            RuntimeDataSourceState.ApplyCommandLineArguments(commandLineArgs);
+            if (!launchArgumentsApplied)
+            {
+                var launchRequest = LaunchRequestParser.Parse(commandLineArgs, string.Empty, SimulationProfile.Default);
+                if (launchRequest.HasErrors)
+                {
+                    throw new ArgumentException(string.Join(Environment.NewLine, launchRequest.Errors));
+                }
+
+                RuntimeDataSourceState.ApplyLaunchRequest(launchRequest);
+                launchArgumentsApplied = true;
+            }
             var screenshotOptions = RuntimeScreenshotOptions.Parse(commandLineArgs);
             var smokeOptions = RuntimeSmokeOptions.Parse(commandLineArgs);
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
@@ -167,6 +179,7 @@ namespace UnderwaterGliderTwin.Bootstrap
 
             var environment = new GameObject("UnderwaterEnvironment").AddComponent<UnderwaterEnvironmentBuilder>();
             environment.Build();
+            waterSurfaceView = environment.WaterSurface;
             var missionHorizontalExtents = new Vector2(64f, 64f);
             var missionHorizontalCenter = Vector3.zero;
             oceanVolume = null;
@@ -195,8 +208,29 @@ namespace UnderwaterGliderTwin.Bootstrap
             ConfigureCamera(camera);
             var cameraController = camera.gameObject.AddComponent<TwinCameraController>();
             cameraController.Initialize(glider.transform, trajectoryView.FullTrajectoryPoints);
+            environment.Initialize(PlaybackController, camera, glider.transform);
+            waterSurfaceView?.Bind(
+                PlaybackController,
+                camera,
+                glider.transform,
+                trajectoryView.FittedTrajectory,
+                LoadResult.Frames,
+                Mapper);
 
             var screenshotCapture = gameObject.AddComponent<RuntimeScreenshotCapture>();
+            if (screenshotOptions.AutoPlay)
+            {
+                PlaybackController.Seek(screenshotOptions.StartProgress01);
+                PlaybackController.SetSpeed(screenshotOptions.PlaybackSpeed);
+                if (screenshotOptions.ReversePlayback)
+                {
+                    PlaybackController.PlayReverse();
+                }
+                else
+                {
+                    PlaybackController.PlayForward();
+                }
+            }
             screenshotCapture.Initialize(screenshotOptions);
             var exportRenderView = gameObject.AddComponent<TrajectoryExportRenderView>();
             exportService = new TrajectoryExportService(renderView: exportRenderView);
@@ -270,10 +304,32 @@ namespace UnderwaterGliderTwin.Bootstrap
                 dataInput.BringConfigurationToFront();
             }
 
+            ReferenceHudLayoutController.Install(canvasRoot);
+
             if (RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation)
             {
                 cameraController.SetMissionVolumeView(RuntimeDataSourceState.SimulationProfile.TargetDepthM, missionHorizontalExtents, missionDepthScale);
                 trajectoryView.SetCameraMode(CameraMode.Global);
+            }
+
+            if (screenshotOptions.CloseTopView)
+            {
+                cameraController.enabled = false;
+                trajectoryView.SetVisible(false);
+                if (oceanVolume != null)
+                {
+                    oceanVolume.gameObject.SetActive(false);
+                }
+
+                camera.orthographic = true;
+                camera.orthographicSize = 12f;
+                camera.transform.position = glider.transform.position + Vector3.up * 20f;
+                camera.transform.rotation = Quaternion.LookRotation(Vector3.down, Vector3.forward);
+            }
+
+            if (screenshotOptions.DisableWake && environment.WaterSurface != null)
+            {
+                environment.WaterSurface.SetInteractionTarget(null);
             }
 
             if (smokeOptions.IsRequested)
@@ -310,6 +366,7 @@ namespace UnderwaterGliderTwin.Bootstrap
         private void OnTimelineChanged(SimulationTimelineSnapshot snapshot, int preservedIndex)
         {
             trajectoryView?.ReplaceFutureTrajectory(snapshot, preservedIndex);
+            waterSurfaceView?.SetWakeTrajectory(trajectoryView.FittedTrajectory, snapshot.Frames, Mapper);
             missionMapOverlay?.UpdateTimeline(snapshot.Frames);
         }
 

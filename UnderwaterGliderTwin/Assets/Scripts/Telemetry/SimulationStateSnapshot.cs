@@ -8,17 +8,23 @@ namespace UnderwaterGliderTwin.Telemetry
         public SimulationProfile Profile { get; }
         public GliderDynamicsState DynamicsState { get; }
         public SimulationMissionState MissionState { get; }
+        public bool HasExplicitProfile { get; }
+        public bool HasExplicitDynamics { get; }
+        public bool HasExplicitCurrent { get; }
 
         private SimulationStateSnapshot(
             TelemetryFrame frame,
             SimulationProfile profile,
             GliderDynamicsState dynamicsState,
-            SimulationMissionState missionState)
+            SimulationMissionState missionState, bool explicitProfile, bool explicitDynamics, bool explicitCurrent)
         {
             Frame = frame;
             Profile = profile;
             DynamicsState = dynamicsState;
             MissionState = missionState;
+            HasExplicitProfile = explicitProfile;
+            HasExplicitDynamics = explicitDynamics;
+            HasExplicitCurrent = explicitCurrent;
         }
 
         public static SimulationStateSnapshot FromFrame(TelemetryFrame frame, SimulationProfile profile)
@@ -75,7 +81,9 @@ namespace UnderwaterGliderTwin.Telemetry
             }
 
             var missionState = frame.MissionState ?? InferMissionState(frame);
-            return new SimulationStateSnapshot(frame, sourceProfile, state, missionState);
+            return new SimulationStateSnapshot(frame, sourceProfile, state, missionState,
+                profile != null, profile?.Dynamics != null,
+                profile?.OceanCurrentProfile != null || profile?.OceanCurrentField != null);
         }
 
         private static SimulationMissionState InferMissionState(TelemetryFrame frame)

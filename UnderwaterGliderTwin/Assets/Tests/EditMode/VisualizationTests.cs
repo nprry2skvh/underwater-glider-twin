@@ -116,6 +116,208 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void GliderTransformDriver_MissingCoordinateSeekDoesNotReuseFuturePosition()
+        {
+            var frames = new[]
+            {
+                new TelemetryFrame(0, "t0", 0f, 120.0, 25.0, 5f, 100f, 0f, 0f, 0f, 28f, 0f, 90f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(1, "t1", 10f, 0.0, 0.0, 20f, 100f, 0f, 0f, 0f, 28f, 0f, 90f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(2, "t2", 20f, 120.001, 25.0, 30f, 100f, 0f, 0f, 0f, 28f, 0f, 90f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f)
+            };
+            var mapper = new GeoCoordinateMapper(frames[0], horizontalScale: 1f, depthScale: 1f);
+            var playback = CreatePlayback(frames);
+            var glider = new GameObject("Glider");
+            glider.AddComponent<GliderTransformDriver>().Initialize(playback, mapper);
+
+            playback.Seek(1f);
+            playback.Seek(0.5f);
+
+            Assert.That(glider.transform.position.x, Is.EqualTo(mapper.Map(frames[0]).x).Within(0.001f));
+            Assert.That(glider.transform.position.z, Is.EqualTo(mapper.Map(frames[0]).z).Within(0.001f));
+            Assert.That(glider.transform.position.y, Is.EqualTo(-20f).Within(0.001f));
+        }
+
+        [Test]
+        public void GliderTransformDriver_UsesCommittedRawPositionEvenWhenItIsAnOutlier()
+        {
+            var frames = new List<TelemetryFrame>();
+            var metersPerDegreeLongitude = 111320d * System.Math.Cos(25d * System.Math.PI / 180d);
+            var eastMeters = new[] { 0d, 1d, 2d, 60d, 4d, 5d, 6d };
+            for (var i = 0; i < eastMeters.Length; i++)
+            {
+                frames.Add(new TelemetryFrame(
+                    i,
+                    $"t{i}",
+                    i,
+                    120d + eastMeters[i] / metersPerDegreeLongitude,
+                    25d,
+                    i,
+                    100f,
+                    0f,
+                    0f,
+                    0f,
+                    28f,
+                    0f,
+                    95f,
+                    "mode",
+                    "state",
+                    1f,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    0f));
+            }
+
+            var mapper = new GeoCoordinateMapper(frames[0], 1f, 1f);
+            var playback = CreatePlayback(frames);
+            playback.Seek(0.5f);
+            var glider = new GameObject("Glider");
+            var driver = glider.AddComponent<GliderTransformDriver>();
+
+            driver.Initialize(playback, mapper);
+
+            Assert.That(glider.transform.position.x, Is.EqualTo(mapper.Map(frames[3]).x).Within(0.001f));
+        }
+
+        [Test]
+        public void GliderTransformDriver_DoesNotTeleportWhenSimulationFutureFramesAreRebuilt()
+        {
+            var original = new List<TelemetryFrame>();
+            for (var i = 0; i < 25; i++)
+            {
+                original.Add(new TelemetryFrame(
+                    i,
+                    $"t{i}",
+                    i,
+                    120d + i * 0.00001d,
+                    25d + i * 0.00001d,
+                    i,
+                    100f,
+                    0f,
+                    0f,
+                    0f,
+                    28f,
+                    0f,
+                    95f,
+                    "Parameter Simulation",
+                    "Glide",
+                    1f,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    0f));
+            }
+
+            var replacement = new List<TelemetryFrame>(original.GetRange(0, 13));
+            for (var i = 13; i < 50; i++)
+            {
+                var eastMeters = i + (i - 12f) * 5f;
+                var northMeters = i + (i - 12f) * 5f;
+                replacement.Add(new TelemetryFrame(
+                    i,
+                    $"t{i}",
+                    i,
+                    120d + eastMeters / (111320d * System.Math.Cos(25d * System.Math.PI / 180d)),
+                    25d + northMeters / 111320d,
+                    i,
+                    100f,
+                    0f,
+                    0f,
+                    0f,
+                    28f,
+                    0f,
+                    95f,
+                    "Parameter Simulation",
+                    "Glide",
+                    1f,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    0f));
+            }
+
+            var mapper = new GeoCoordinateMapper(original[0], 1f, 1f);
+            var playback = CreatePlayback(original);
+            playback.Seek(0.5f);
+            var glider = new GameObject("Glider");
+            var driver = glider.AddComponent<GliderTransformDriver>();
+            driver.Initialize(playback, mapper);
+            var before = glider.transform.position;
+            var beforeFit = TrajectorySampler.Fit(original, mapper, 1200).PositionAt(playback.Model.ContinuousElapsedSeconds);
+            var afterFit = TrajectorySampler.Fit(replacement, mapper, 1200).PositionAt(playback.Model.ContinuousElapsedSeconds);
+            Assert.That(Vector3.Distance(beforeFit, afterFit), Is.GreaterThan(0.5f));
+
+            playback.Model.ReplaceFrames(replacement, playback.Model.CurrentIndex);
+
+            Assert.That(Vector3.Distance(glider.transform.position, before), Is.LessThan(0.5f));
+        }
+
+        [Test]
+        public void TrajectorySampler_FitKeepsSmoothTurnCurvatureContinuous()
+        {
+            var frames = new List<TelemetryFrame>();
+            var metersPerDegreeLongitude = 111320d * System.Math.Cos(25d * System.Math.PI / 180d);
+            for (var i = 0; i < 48; i++)
+            {
+                var t = i / 47f;
+                var angle = Mathf.Lerp(-Mathf.PI * 0.45f, Mathf.PI * 0.45f, t);
+                var eastMeters = 80f * Mathf.Sin(angle);
+                var northMeters = 80f * (1f - Mathf.Cos(angle));
+                frames.Add(new TelemetryFrame(
+                    i,
+                    $"t{i}",
+                    i,
+                    120d + eastMeters / metersPerDegreeLongitude,
+                    25d + northMeters / 111320d,
+                    20f + 4f * Mathf.Sin(angle * 0.5f),
+                    100f,
+                    0f,
+                    0f,
+                    0f,
+                    28f,
+                    0f,
+                    95f,
+                    "Parameter Simulation",
+                    "Glide",
+                    1f,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    0f));
+            }
+
+            var fitted = TrajectorySampler.Fit(frames, new GeoCoordinateMapper(frames[0], 1f, 1f), 192);
+            var previousDirection = Vector3.zero;
+            var maximumTurnAngle = 0f;
+            for (var i = 1; i < fitted.Points.Count; i++)
+            {
+                var direction = fitted.Points[i] - fitted.Points[i - 1];
+                if (direction.sqrMagnitude < 0.000001f)
+                {
+                    continue;
+                }
+
+                direction.Normalize();
+                if (previousDirection.sqrMagnitude > 0.000001f)
+                {
+                    maximumTurnAngle = Mathf.Max(maximumTurnAngle, Vector3.Angle(previousDirection, direction));
+                }
+
+                previousDirection = direction;
+            }
+
+            Assert.That(maximumTurnAngle, Is.LessThan(4f));
+        }
+
+        [Test]
         public void GliderVisualController_DeflectsSurfacesAndShowsVectorsForSimulation()
         {
             var controller = GliderVisualBuilder.Build().AddComponent<GliderVisualController>();
@@ -241,6 +443,55 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void GliderVisualController_HidesVectorsWhenCoordinatesDropOutWithDiagnostics()
+        {
+            var diagnostics = new SimulationDiagnostics(Vector3.forward, Vector3.right, 0f, 0f, 0f);
+            var valid = FrameWithDiagnostics(diagnostics);
+            var missingCoordinates = new TelemetryFrame(1, "dropout", 10f, 0d, 0d, 10f,
+                0f, 30f, 0f, 0f, 0f, 0f, 90f, "Parameter Simulation", "Glide", 1f,
+                30f, 10f, 10f, 0f, 0f, 0f, diagnostics);
+            var playback = CreatePlayback(new[] { valid, missingCoordinates });
+            var controller = GliderVisualBuilder.Build().AddComponent<GliderVisualController>();
+            controller.Initialize(playback, new GeoCoordinateMapper(valid, 1f, 1f));
+            Assert.That(controller.CurrentVector.gameObject.activeSelf, Is.True);
+
+            playback.Seek(1f);
+
+            Assert.That(controller.CurrentVector.gameObject.activeSelf, Is.False);
+            Assert.That(controller.WaterVelocityVector.gameObject.activeSelf, Is.False);
+            Assert.That(controller.GroundVelocityVector.gameObject.activeSelf, Is.False);
+        }
+
+        [Test]
+        public void GliderVisualController_KeepsDiagnosticDeflectionsDuringCoordinateDropout()
+        {
+            var diagnostics = new SimulationDiagnostics(Vector3.forward, Vector3.right, 0f, 0f, 0f,
+                controlSurfaceDeflectionDeg: new Vector3(4f, 6f, 8f));
+            var valid = FrameWithDiagnostics(diagnostics);
+            var missingCoordinates = new TelemetryFrame(1, "dropout", 10f, 0d, 0d, 10f,
+                0f, 30f, 0f, 0f, 0f, 0f, 90f, "Parameter Simulation", "Glide", 1f,
+                30f, 10f, 10f, 0f, 0f, 0f, diagnostics);
+            var playback = CreatePlayback(new[] { valid, missingCoordinates });
+            var controller = GliderVisualBuilder.Build().AddComponent<GliderVisualController>();
+            controller.Initialize(playback, new GeoCoordinateMapper(valid, 1f, 1f));
+
+            playback.Seek(1f);
+
+            Assert.That(controller.CurrentVector.gameObject.activeSelf, Is.False);
+            Assert.That(controller.WaterVelocityVector.gameObject.activeSelf, Is.False);
+            Assert.That(controller.GroundVelocityVector.gameObject.activeSelf, Is.False);
+            Assert.That(Mathf.DeltaAngle(0f, controller.PortControlSurface.localEulerAngles.x), Is.EqualTo(10f).Within(0.001f));
+            Assert.That(Mathf.DeltaAngle(0f, controller.StarboardControlSurface.localEulerAngles.x), Is.EqualTo(2f).Within(0.001f));
+            Assert.That(Mathf.DeltaAngle(0f, controller.VerticalTail.localEulerAngles.y), Is.EqualTo(8f).Within(0.001f));
+
+            controller.ApplySample(ContinuousMotionSampler.Sample(Frames(1), 0f));
+
+            Assert.That(Quaternion.Angle(controller.PortControlSurface.localRotation, Quaternion.identity), Is.LessThan(0.001f));
+            Assert.That(Quaternion.Angle(controller.StarboardControlSurface.localRotation, Quaternion.identity), Is.LessThan(0.001f));
+            Assert.That(Quaternion.Angle(controller.VerticalTail.localRotation, Quaternion.identity), Is.LessThan(0.001f));
+        }
+
+        [Test]
         public void TrajectoryView_StoresFullTrajectoryPointsAndCreatesThreeTrajectoryLayers()
         {
             var frames = Frames(12);
@@ -355,6 +606,69 @@ namespace UnderwaterGliderTwin.Tests
                 Assert.That(float.IsNaN(points[i].x) || float.IsInfinity(points[i].x), Is.False);
                 Assert.That(float.IsNaN(points[i].y) || float.IsInfinity(points[i].y), Is.False);
                 Assert.That(float.IsNaN(points[i].z) || float.IsInfinity(points[i].z), Is.False);
+            }
+        }
+
+        [Test]
+        public void TrajectorySampler_RobustFitSuppressesSinglePositionSpike()
+        {
+            var frames = new List<TelemetryFrame>();
+            var metersPerDegreeLongitude = 111320d * System.Math.Cos(25d * System.Math.PI / 180d);
+            var eastMeters = new[] { 0d, 1d, 2d, 60d, 4d, 5d, 6d };
+            for (var i = 0; i < eastMeters.Length; i++)
+            {
+                frames.Add(new TelemetryFrame(
+                    i,
+                    $"t{i}",
+                    i,
+                    120d + eastMeters[i] / metersPerDegreeLongitude,
+                    25d,
+                    i,
+                    100f,
+                    0f,
+                    0f,
+                    0f,
+                    28f,
+                    0f,
+                    95f,
+                    "mode",
+                    "state",
+                    1f,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    0f));
+            }
+
+            var mapper = new GeoCoordinateMapper(frames[0], 1f, 1f);
+            var fitted = TrajectorySampler.Fit(frames, mapper, 64);
+
+            Assert.That(fitted.PositionAt(0f), Is.EqualTo(mapper.Map(frames[0])));
+            Assert.That(fitted.PositionAt(6f), Is.EqualTo(mapper.Map(frames[6])));
+            Assert.That(fitted.PositionAt(3f).x, Is.LessThan(12f));
+            Assert.That(fitted.PositionAt(3f).x, Is.GreaterThan(1f));
+        }
+
+        [Test]
+        public void TrajectorySampler_FitFallsBackToFiniteLinearPathForDegenerateTimes()
+        {
+            var frames = new[]
+            {
+                new TelemetryFrame(0, "t0", 1f, 120d, 25d, 0f, 100f, 0f, 0f, 0f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(1, "t1", 1f, 120.0001d, 25d, 1f, 100f, 0f, 0f, 0f, 28f, 0f, 95f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                new TelemetryFrame(2, "t2", 1f, 120.0002d, 25d, 2f, 100f, 0f, 0f, 0f, 28f, 0f, 0f, "mode", "state", 1f, 0f, 0f, 0f, 0f, 0f, 0f)
+            };
+
+            var fitted = TrajectorySampler.Fit(frames, new GeoCoordinateMapper(frames[0], 1f, 1f), 32);
+
+            Assert.That(fitted.Points.Count, Is.GreaterThanOrEqualTo(2));
+            foreach (var point in fitted.Points)
+            {
+                Assert.That(float.IsNaN(point.x) || float.IsInfinity(point.x), Is.False);
+                Assert.That(float.IsNaN(point.y) || float.IsInfinity(point.y), Is.False);
+                Assert.That(float.IsNaN(point.z) || float.IsInfinity(point.z), Is.False);
             }
         }
 

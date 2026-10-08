@@ -11,6 +11,7 @@ namespace UnderwaterGliderTwin.Mapping
         private readonly float depthScale;
 
         public float HorizontalScale => horizontalScale;
+        public float DepthScale => depthScale;
 
         public GeoCoordinateMapper(TelemetryFrame originFrame, float horizontalScale, float depthScale)
         {

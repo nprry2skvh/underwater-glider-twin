@@ -1,0 +1,4 @@
+{
+  "status": "not_trained",
+  "reason": "paired frozen physics/observation rows absent"
+}

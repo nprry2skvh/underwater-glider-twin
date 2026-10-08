@@ -1,0 +1,4 @@
+{
+  "feature_names": ["depth_m", "heading_deg", "heading_sin", "heading_cos", "pitch_deg", "roll_deg", "velocity_x", "velocity_y", "velocity_z", "current_speed", "target_heading_residual_deg", "target_depth_residual_m", "turn_angle_deg", "piston_mm", "depth_mean", "depth_std", "pitch_mean", "pitch_std", "velocity_mean", "velocity_std", "depth_trend_mps", "heading_trend_degps", "descending_flag", "forecast_horizon_seconds"],
+  "expected_features": [500, 359, -0.017452406, 0.999847695, 8, 3, 0, -1, 0, 1, 36, -300, 0, 0, 355, 86.5544145, 8, 0, 0.966666667, 0.179505494, 1, 0, 1, 30]
+}

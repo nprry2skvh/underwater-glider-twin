@@ -15,7 +15,6 @@ namespace UnderwaterGliderTwin.UI
     {
         private readonly System.Collections.Generic.Dictionary<PredictionModelKind, Button> modelButtons = new System.Collections.Generic.Dictionary<PredictionModelKind, Button>();
         private InputField csvPathInput;
-        private Text csvPathDisplay;
         private InputField predictionHorizonInput;
         private InputField simulationCyclesInput;
         private InputField simulationDurationInput;
@@ -209,7 +208,6 @@ namespace UnderwaterGliderTwin.UI
             UiFactory.Button("OceanCurrentDrawerButton", panel, "海流配置", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1484f, -211f), new Vector2(116f, 28f)).onClick.AddListener(ToggleOceanCurrentDrawer);
 
             statusText = UiFactory.Text("MissionConfigurationStatus", panel, string.IsNullOrEmpty(initialPredictionStatus) ? "CSV 回放和参数仿真均可用" : initialPredictionStatus, 12, TextAnchor.MiddleLeft, string.IsNullOrEmpty(initialPredictionStatus) ? new Color(0.8f, 0.96f, 1f) : new Color(1f, 0.76f, 0.3f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -24f), new Vector2(560f, 18f));
-            UiFactory.ConfigureWrappedStatusText(statusText);
             ConfigureCycleDurationAutoCorrection();
             RefreshReferenceCycleDuration();
             BuildOceanCurrentDrawer(canvas.transform);
@@ -217,11 +215,9 @@ namespace UnderwaterGliderTwin.UI
             RefreshPredictionSelection();
             RefreshOceanCurrentLayerEditor();
             ConfigureResponsiveBottomDrawer(panel);
-            EnsureCsvPathDisplay();
             ConfigureOceanCurrentModalDrawer(oceanCurrentDrawer);
             ConfigureInlineDrawer(flightLegDrawer);
             AttachRuntimeSession(SimulationRuntimeRegistry.Active);
-            ApplyConfigurationAreaHeight(bottomDrawerExpanded);
         }
 
         public void Bind(
@@ -247,26 +243,12 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            configurationPanel = refs.panel != null ? refs.panel : refs.configurationPanel;
-            if (configurationPanel != null)
-            {
-                configurationPanel.gameObject.SetActive(true);
-            }
-            var legacyPanelBackground = refs.panel != null ? refs.panel.GetComponent<Image>() : null;
-            if (legacyPanelBackground != null)
-            {
-                legacyPanelBackground.enabled = false;
-            }
+            configurationPanel = refs.configurationPanel;
             dynamicRowsRoot = refs.ocean.dynamicRowsRoot;
             oceanLayerRowTemplate = refs.ocean.oceanLayerRowTemplate;
             oceanCurrentDrawerLookupButton = refs.ocean.drawerLookupButton;
             csvPathInput = refs.mission.csvPathInput;
             statusText = refs.statusText;
-            if (statusText != null)
-            {
-                statusText.gameObject.name = "MissionConfigurationStatus";
-                UiFactory.ConfigureWrappedStatusText(statusText);
-            }
             missionLongitudeInput = refs.mission.missionLongitudeInput;
             missionLatitudeInput = refs.mission.missionLatitudeInput;
             predictionHorizonInput = refs.prediction.predictionHorizonInput;
@@ -280,18 +262,6 @@ namespace UnderwaterGliderTwin.UI
             simulationHeadingDeltaInput = refs.simulation.headingDeltaInput;
             simulationPitchInput = refs.simulation.pitchInput;
             simulationRollInput = refs.simulation.rollInput;
-            RenameObject(simulationCyclesInput, "SimulationCyclesInput");
-            RenameObject(simulationDurationInput, "SimulationDurationInput");
-            RenameObject(simulationDepthInput, "SimulationDepthInput");
-            RenameObject(simulationWaterColumnInput, "SimulationWaterColumnInput");
-            RenameObject(simulationHeadingInput, "SimulationHeadingInput");
-            RenameObject(simulationHeadingDeltaInput, "SimulationHeadingDeltaInput");
-            RenameObject(simulationPitchInput, "SimulationPitchInput");
-            RenameObject(simulationRollInput, "SimulationRollInput");
-            if (refs.simulation.applyButton != null)
-            {
-                refs.simulation.applyButton.gameObject.name = "SimulationApplyButton";
-            }
             oceanCurrentMinDepthInput = refs.ocean.minDepthInput;
             oceanCurrentMaxDepthInput = refs.ocean.maxDepthInput;
             oceanCurrentEastwardInput = refs.ocean.eastwardInput;
@@ -337,7 +307,7 @@ namespace UnderwaterGliderTwin.UI
             dynamicsRollDeadbandInput = refs.dynamics.rollDeadbandInput;
             dynamicsRollRestoringGainInput = refs.dynamics.rollRestoringGainInput;
             dynamicsMaxRollMomentInput = refs.dynamics.maxRollMomentInput;
-            ClearDynamicRuntimeUi();
+            ConfigureBoundParameterDrawerScrolling();
 
             if (csvPathInput != null)
             {
@@ -355,6 +325,8 @@ namespace UnderwaterGliderTwin.UI
             SetInputText(simulationRollInput, simulationProfileTemplate.RollAmplitudeDeg.ToString("0", CultureInfo.InvariantCulture));
             SetInputText(missionLongitudeInput, simulationProfileTemplate.OriginLongitudeDeg.ToString("0.######", CultureInfo.InvariantCulture));
             SetInputText(missionLatitudeInput, simulationProfileTemplate.OriginLatitudeDeg.ToString("0.######", CultureInfo.InvariantCulture));
+            ConfigureCycleDurationAutoCorrection();
+            RefreshReferenceCycleDuration();
 
             modelButtons.Clear();
             if (refs.prediction.xgBoostModelButton != null)
@@ -390,17 +362,21 @@ namespace UnderwaterGliderTwin.UI
             BindButton(refs.dynamics.seaTrialPresetButton, ApplySeaTrialDynamicsPreset);
             BindButton(refs.dynamics.calmWaterPresetButton, ApplyCalmWaterDynamicsPreset);
             BindButton(refs.dynamics.calibrateFromCsvButton, CalibrateDynamicsFromCsv);
-            ConfigureResponsiveBottomDrawer(configurationPanel);
-            ConfigureCycleDurationAutoCorrection();
-            RefreshReferenceCycleDuration();
-            EnsureCsvPathDisplay();
-            ConfigureBoundParameterDrawerScrolling();
+            ClearDynamicRuntimeUi();
             if (oceanCurrentMinDepthInput != null)
             {
                 RefreshOceanCurrentLayerEditor();
             }
             RefreshDynamicsEditor();
-            ApplyConfigurationAreaHeight(bottomDrawerExpanded);
+            RefreshFlightLegDrawer();
+        }
+
+        private static void SetInputText(InputField input, string value)
+        {
+            if (input != null)
+            {
+                input.text = value;
+            }
         }
 
         private static void BindButton(Button button, UnityEngine.Events.UnityAction action)
@@ -412,22 +388,6 @@ namespace UnderwaterGliderTwin.UI
 
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(action);
-        }
-
-        private static void SetInputText(InputField input, string value)
-        {
-            if (input != null)
-            {
-                input.text = value;
-            }
-        }
-
-        private static void RenameObject(Component component, string name)
-        {
-            if (component != null)
-            {
-                component.gameObject.name = name;
-            }
         }
 
         public void BringConfigurationToFront()
@@ -442,13 +402,13 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            if (!configurationPanel.gameObject.activeSelf)
+            var visible = !configurationPanel.gameObject.activeSelf;
+            configurationPanel.gameObject.SetActive(visible);
+            if (visible)
             {
-                configurationPanel.gameObject.SetActive(true);
+                SetBottomDrawerExpanded(false);
+                BringConfigurationToFront();
             }
-
-            SetBottomDrawerExpanded(!bottomDrawerExpanded);
-            BringConfigurationToFront();
         }
 
         private void OnEnable()
@@ -516,6 +476,11 @@ namespace UnderwaterGliderTwin.UI
             {
                 return;
             }
+            if (!PredictionWindow.IsSupportedHorizon(horizonSeconds))
+            {
+                SetStatus("预测时域仅支持 30、60、300、900 秒", new Color(1f, 0.58f, 0.58f));
+                return;
+            }
 
             RuntimePredictionState.SetHorizonSeconds(horizonSeconds);
             predictionController?.SetHorizonSeconds(horizonSeconds);
@@ -552,88 +517,13 @@ namespace UnderwaterGliderTwin.UI
                 var available = predictionController == null || predictionController.IsModelRuntimeAvailable(entry.Key);
                 entry.Value.interactable = available;
                 entry.Value.image.color = !available
-                    ? new Color(0.08f, 0.14f, 0.17f, 0.72f)
+                    ? new Color(0.08f, 0.085f, 0.09f, 0.72f)
                     : entry.Key == RuntimePredictionState.ModelKind
-                    ? new Color(0.08f, 0.56f, 0.72f, 0.96f)
-                    : new Color(0.12f, 0.28f, 0.34f, 0.9f);
+                    ? new Color(0.88f, 0.11f, 0.16f, 1f)
+                    : new Color(0.09f, 0.105f, 0.115f, 0.98f);
             }
 
             UiFactory.SetButtonText(predictionToggleButton, RuntimePredictionState.PredictionEnabled ? "停止预测" : "开始预测");
-        }
-
-        public static string FormatDisplayPath(string path, int maxCharacters)
-        {
-            if (string.IsNullOrEmpty(path) || maxCharacters <= 0)
-            {
-                return string.Empty;
-            }
-
-            if (path.Length <= maxCharacters)
-            {
-                return path;
-            }
-
-            if (maxCharacters <= 3)
-            {
-                return path.Substring(0, maxCharacters);
-            }
-
-            var tailLength = Mathf.Clamp(maxCharacters / 3, 8, maxCharacters - 2);
-            var headLength = maxCharacters - tailLength - 1;
-            return path.Substring(0, headLength) + "…" + path.Substring(path.Length - tailLength, tailLength);
-        }
-
-        private void EnsureCsvPathDisplay()
-        {
-            if (configurationSummaryBar == null)
-            {
-                return;
-            }
-
-            csvPathDisplay = configurationSummaryBar.Find("CsvPathDisplay")?.GetComponent<Text>();
-            if (csvPathDisplay == null)
-            {
-                csvPathDisplay = UiFactory.Text("CsvPathDisplay", configurationSummaryBar, string.Empty, 12,
-                    TextAnchor.MiddleLeft, UiFactory.CommandMutedText,
-                    new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f),
-                    new Vector2(196f, 0f), new Vector2(-330f, -8f));
-            }
-
-            UiFactory.ApplyTextRole(csvPathDisplay, UiTextRole.Auxiliary, RuntimeUiLayoutMode.CompressedThreeColumn);
-            csvPathDisplay.horizontalOverflow = HorizontalWrapMode.Wrap;
-            csvPathDisplay.verticalOverflow = VerticalWrapMode.Truncate;
-            csvPathDisplay.raycastTarget = false;
-
-            if (csvPathInput != null)
-            {
-                csvPathInput.onValueChanged.RemoveListener(OnCsvPathChanged);
-                csvPathInput.onValueChanged.AddListener(OnCsvPathChanged);
-                OnCsvPathChanged(csvPathInput.text);
-            }
-        }
-
-        private void OnCsvPathChanged(string path)
-        {
-            var fullPath = path ?? string.Empty;
-            if (csvPathDisplay != null)
-            {
-                csvPathDisplay.text = string.IsNullOrWhiteSpace(fullPath)
-                    ? "CSV 路径未设置"
-                    : FormatDisplayPath(fullPath, 72);
-            }
-
-            if (csvPathInput != null)
-            {
-                var controller = csvPathInput.GetComponentInParent<UiTooltipController>(true)
-                    ?? FindObjectOfType<UiTooltipController>(true);
-                UiFactory.EnsureTooltip(csvPathInput, controller, fullPath);
-                var text = csvPathInput.textComponent;
-                if (text != null)
-                {
-                    text.horizontalOverflow = HorizontalWrapMode.Wrap;
-                    text.verticalOverflow = VerticalWrapMode.Truncate;
-                }
-            }
         }
 
         private void SetStatus(string message, Color color)
@@ -645,7 +535,6 @@ namespace UnderwaterGliderTwin.UI
 
             statusText.text = message;
             statusText.color = color;
-            UiFactory.ConfigureWrappedStatusText(statusText);
         }
 
         private bool TryParseFloat(InputField inputField, string label, float minValue, float maxValue, out float value)
@@ -726,8 +615,6 @@ namespace UnderwaterGliderTwin.UI
             bottomDrawerScrollRect = null;
             bottomDrawerToggleButton = null;
             oceanCurrentModalCanvas = null;
-            oceanCurrentModalOverlay = null;
-            oceanCurrentDrawerParent = null;
             ClearChildren(dynamicRowsRoot, oceanLayerRowTemplate);
         }
 

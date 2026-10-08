@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "source_sha256": "fc08b11241f7c565ca0e5a2e287859d7b9929161da4c34c82238c3b3483d3037",
+  "split_unit": "continuous_segment_not_verified_mission",
+  "method": "chronological_whole_segments_60_20_20",
+  "segments": [
+    {
+      "segment_id": "7b6899a5c9d42b3f7194",
+      "segment_index": 0,
+      "start_seconds": 10368000.0,
+      "end_seconds": 10393190.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "3989d201a12d28536e85",
+      "segment_index": 1,
+      "start_seconds": 10400400.0,
+      "end_seconds": 10425590.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "7ce3830313a15f204a41",
+      "segment_index": 2,
+      "start_seconds": 10432800.0,
+      "end_seconds": 10457990.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "3008903d65583f0ca440",
+      "segment_index": 3,
+      "start_seconds": 10465200.0,
+      "end_seconds": 10490390.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "884c39426503f5f7c258",
+      "segment_index": 4,
+      "start_seconds": 10497600.0,
+      "end_seconds": 10522790.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "cf53005a44d5b558d606",
+      "segment_index": 5,
+      "start_seconds": 10530000.0,
+      "end_seconds": 10555190.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "a29daf9bfd94987a7d09",
+      "segment_index": 6,
+      "start_seconds": 10562400.0,
+      "end_seconds": 10587590.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "f0d13d91fde13dc6afc3",
+      "segment_index": 7,
+      "start_seconds": 10594800.0,
+      "end_seconds": 10619990.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "c0fc3639f5d5939935ab",
+      "segment_index": 8,
+      "start_seconds": 10627200.0,
+      "end_seconds": 10652390.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "503210e9fd6ce1a438b5",
+      "segment_index": 9,
+      "start_seconds": 10659600.0,
+      "end_seconds": 10684790.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "f77ccc4ae4c49e4d7a98",
+      "segment_index": 10,
+      "start_seconds": 10692000.0,
+      "end_seconds": 10717190.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "af3ce0b4d342df2ce1d1",
+      "segment_index": 11,
+      "start_seconds": 10724400.0,
+      "end_seconds": 10749590.0,
+      "row_count": 2520,
+      "partition": "train"
+    },
+    {
+      "segment_id": "7ea6e955709ffd124366",
+      "segment_index": 12,
+      "start_seconds": 10756800.0,
+      "end_seconds": 10781990.0,
+      "row_count": 2520,
+      "partition": "development"
+    },
+    {
+      "segment_id": "9a5d1f0e9a33986e56de",
+      "segment_index": 13,
+      "start_seconds": 10789200.0,
+      "end_seconds": 10814390.0,
+      "row_count": 2520,
+      "partition": "development"
+    },
+    {
+      "segment_id": "6269cc2f6ef504457ae9",
+      "segment_index": 14,
+      "start_seconds": 10821600.0,
+      "end_seconds": 10846790.0,
+      "row_count": 2520,
+      "partition": "development"
+    },
+    {
+      "segment_id": "cf8bf3b70fd81b20c6ec",
+      "segment_index": 15,
+      "start_seconds": 10854000.0,
+      "end_seconds": 10879190.0,
+      "row_count": 2520,
+      "partition": "development"
+    },
+    {
+      "segment_id": "4d9d1a77b24be1cf07d5",
+      "segment_index": 16,
+      "start_seconds": 10886400.0,
+      "end_seconds": 10911590.0,
+      "row_count": 2520,
+      "partition": "final_test"
+    },
+    {
+      "segment_id": "38abefb34c36370c3a1b",
+      "segment_index": 17,
+      "start_seconds": 10918800.0,
+      "end_seconds": 10943990.0,
+      "row_count": 2520,
+      "partition": "final_test"
+    },
+    {
+      "segment_id": "e4f1b6efc2a22939ac30",
+      "segment_index": 18,
+      "start_seconds": 10951200.0,
+      "end_seconds": 10976390.0,
+      "row_count": 2520,
+      "partition": "final_test"
+    },
+    {
+      "segment_id": "8134527b6184c6c2dd28",
+      "segment_index": 19,
+      "start_seconds": 10983600.0,
+      "end_seconds": 11008790.0,
+      "row_count": 2520,
+      "partition": "final_test"
+    }
+  ]
+}

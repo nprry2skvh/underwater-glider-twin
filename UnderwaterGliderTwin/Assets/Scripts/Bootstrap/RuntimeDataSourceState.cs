@@ -12,7 +12,7 @@ namespace UnderwaterGliderTwin.Bootstrap
 
     public static class RuntimeDataSourceState
     {
-        public static RuntimeDataSourceMode CurrentMode { get; private set; } = RuntimeDataSourceMode.Csv;
+        public static RuntimeDataSourceMode CurrentMode { get; private set; } = RuntimeDataSourceMode.Simulation;
         public static string LastCsvPath { get; private set; } = string.Empty;
         public static SimulationProfile SimulationProfile { get; private set; } = SimulationProfile.Default;
 
@@ -38,14 +38,34 @@ namespace UnderwaterGliderTwin.Bootstrap
                 return false;
             }
 
-            var request = LaunchRequestParser.Parse(args, string.Empty, SimulationProfile.Default);
-            if (request.HasErrors || request.Mode != LaunchMode.Simulation)
+            return ApplyLaunchRequest(LaunchRequestParser.Parse(args, string.Empty, SimulationProfile.Default));
+        }
+
+        public static bool ApplyLaunchRequest(LaunchRequest request)
+        {
+            if (request == null)
             {
                 return false;
             }
 
-            UseSimulation(request.SimulationProfile);
-            return true;
+            if (request.HasErrors)
+            {
+                return false;
+            }
+
+            if (request.Mode == LaunchMode.Simulation)
+            {
+                UseSimulation(request.SimulationProfile);
+                return true;
+            }
+
+            if (request.Mode == LaunchMode.Csv)
+            {
+                UseCsvPath(request.CsvPath);
+                return true;
+            }
+
+            return false;
         }
     }
 }

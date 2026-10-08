@@ -37,16 +37,18 @@ namespace UnderwaterGliderTwin.Visualization
         {
             EnsureVisuals();
 
-            if (!sample.HasDiagnostics)
+            SetControlSurfaces(sample.HasDiagnostics
+                ? sample.ControlSurfaceDeflectionDeg
+                : Vector3.zero);
+
+            if (!sample.HasDiagnostics || !sample.HasUsableCoordinates)
             {
-                SetControlSurfaces(Vector3.zero);
                 SetVectorVisible(CurrentVector, false);
                 SetVectorVisible(WaterVelocityVector, false);
                 SetVectorVisible(GroundVelocityVector, false);
                 return;
             }
 
-            SetControlSurfaces(sample.ControlSurfaceDeflectionDeg);
             SetVector(CurrentVector, sample.CurrentVelocityEndMps);
             SetVector(WaterVelocityVector, sample.WaterVelocityEndMps);
             SetVector(GroundVelocityVector, sample.GroundVelocityEndMps);

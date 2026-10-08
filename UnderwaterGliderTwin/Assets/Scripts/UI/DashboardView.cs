@@ -1,6 +1,5 @@
 using UnityEngine;
 using UnityEngine.UI;
-using System;
 using System.Collections.Generic;
 using UnderwaterGliderTwin.Playback;
 using UnderwaterGliderTwin.Prediction;
@@ -11,6 +10,7 @@ namespace UnderwaterGliderTwin.UI
 {
     public sealed class DashboardView : MonoBehaviour
     {
+        private const float CompactTelemetryPanelHeight = 384f;
         private const float MinUiUpdateIntervalSeconds = 1f / 15f;
         private PlaybackController playback;
         private PredictionController prediction;
@@ -51,6 +51,7 @@ namespace UnderwaterGliderTwin.UI
         private Text actuatorPowerValue;
         private Text dynamicsSummaryValue;
         private readonly List<GameObject> advancedRows = new List<GameObject>();
+        private RectTransform boundAdvancedRowsRoot;
         private RectTransform panel;
         private Button detailsButton;
         private GameObject navigationReferenceCard;
@@ -69,7 +70,7 @@ namespace UnderwaterGliderTwin.UI
 
             var canvas = UiFactory.EnsureCanvas(transform);
             UiFactory.EnsureCommandCenterHeader(canvas.transform);
-            panel = UiFactory.CommandPanel("TelemetryPanel", canvas.transform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -302f), new Vector2(328f, 366f));
+            panel = UiFactory.CommandPanel("TelemetryPanel", canvas.transform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(18f, -364f), new Vector2(328f, CompactTelemetryPanelHeight));
             UiFactory.Text("TelemetryTitle", panel, "遥测数据", 18, TextAnchor.MiddleLeft, new Color(0.92f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -20f), new Vector2(220f, 28f));
 
             depthValue = AddRow(panel, "深度", "DepthValue", 62f);
@@ -109,9 +110,8 @@ namespace UnderwaterGliderTwin.UI
             actuatorPowerValue = AddAdvancedRow(panel, "\u6267\u884c\u673a\u6784\u529f\u7387", "ActuatorPowerValue", 588f, 1);
 
             dynamicsSummaryValue = UiFactory.Text("DynamicsSummaryValue", panel, "6DOF", 10, TextAnchor.MiddleRight, new Color(0.96f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(150f, -252f), new Vector2(162f, 22f));
-            EnsureVisualHierarchy();
-            EnsureTelemetryEmptyState();
 
+            EnsureTelemetryEmptyState();
             playback.FrameChangedWithReason += OnFrameChanged;
             playback.ContinuousChanged += OnContinuousChanged;
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
@@ -129,7 +129,6 @@ namespace UnderwaterGliderTwin.UI
             }
 
             panel = refs.panel;
-            refsAdvancedRowsRoot = refs.advancedRowsRoot;
             detailsButton = refs.detailsButton;
             navigationReferenceCard = refs.navigationReferenceCard;
             depthValue = refs.depthValue;
@@ -166,6 +165,9 @@ namespace UnderwaterGliderTwin.UI
             actuatorPowerValue = refs.actuatorPowerValue;
             dynamicsSummaryValue = refs.dynamicsSummaryValue;
             minimalBoundReferences = headingValue == null || pitchValue == null || rollValue == null;
+            boundAdvancedRowsRoot = refs.advancedRowsRoot;
+            RegisterBoundAdvancedRows();
+            RefreshDetails();
             EnsureTelemetryEmptyState();
             RefreshDistanceCache(playback.Model);
             if (detailsButton != null)
@@ -173,9 +175,6 @@ namespace UnderwaterGliderTwin.UI
                 detailsButton.onClick.RemoveAllListeners();
                 detailsButton.onClick.AddListener(ToggleDetails);
             }
-
-            ConfigureBoundRows();
-            EnsureVisualHierarchy();
 
             playback.FrameChangedWithReason -= OnFrameChanged;
             playback.FrameChangedWithReason += OnFrameChanged;
@@ -191,19 +190,18 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            RefreshTelemetryState(playback.Model.Frames);
             if (playback.Model.Frames == null || playback.Model.Frames.Count == 0)
             {
-                RefreshTelemetryState(playback.Model.Frames);
                 return;
             }
-
-            RefreshTelemetryState(playback.Model.Frames);
 
             if (minimalBoundReferences)
             {
                 if (depthValue != null)
                 {
-                    SetValue(depthValue, $"{playback.Model.CurrentFrame.DepthM:0.0}", "m");
+                    var sample = ContinuousMotionSampler.Sample(playback.Model.Frames, playback.Model.ContinuousElapsedSeconds);
+                    SetValue(depthValue, $"{sample.DepthM:0.0}", "m");
                 }
 
                 if (batteryValue != null)
@@ -249,395 +247,22 @@ namespace UnderwaterGliderTwin.UI
 
         private static Text AddRow(Transform panel, string label, string valueName, float topOffset)
         {
-            var row = CreateRow(panel, valueName + "Row", topOffset, 0);
-            var labelText = UiFactory.Text(label + "Label", row, label, 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.97f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            var valueText = UiFactory.Text(valueName, row, "-", 13, TextAnchor.MiddleRight, new Color(0.96f, 0.99f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            ConfigureKeyValueChildren(labelText, valueText);
-            return valueText;
+            UiFactory.Text(label + "Label", panel, label, 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.97f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -topOffset), new Vector2(126f, 22f));
+            return UiFactory.Text(valueName, panel, "-", 13, TextAnchor.MiddleRight, new Color(0.96f, 0.99f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-16f, -topOffset), new Vector2(164f, 22f));
         }
 
         private Text AddAdvancedRow(Transform parent, string label, string valueName, float topOffset, int column)
         {
-            var row = CreateRow(parent, valueName + "Row", topOffset, column);
-            var labelText = UiFactory.Text(label + "Label", row, label, 12, TextAnchor.MiddleLeft,
-                new Color(0.82f, 0.97f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            var value = UiFactory.Text(valueName, row, "-", 13, TextAnchor.MiddleRight,
-                new Color(0.96f, 0.99f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            ConfigureKeyValueChildren(labelText, value);
+            var x = column == 0 ? 16f : 328f;
+            var labelText = UiFactory.Text(label + "Label", parent, label, 12, TextAnchor.MiddleLeft,
+                new Color(0.82f, 0.97f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(x, -topOffset), new Vector2(116f, 22f));
+            var value = UiFactory.Text(valueName, parent, "-", 13, TextAnchor.MiddleRight,
+                new Color(0.96f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(x + 118f, -topOffset), new Vector2(166f, 22f));
             advancedRows.Add(labelText.gameObject);
             advancedRows.Add(value.gameObject);
-            var unit = row.Find(valueName + "Unit")?.gameObject;
-            if (unit != null)
-            {
-                advancedRows.Add(unit);
-            }
             return value;
-        }
-
-        private void ConfigureBoundRows()
-        {
-            advancedRows.Clear();
-            ConfigureBoundRow("DepthRow", "深度Label", depthValue, false);
-            ConfigureBoundRow("HeadingRow", "航向Label", headingValue, false);
-            ConfigureBoundRow("PitchRow", "俯仰Label", pitchValue, false);
-            ConfigureBoundRow("RollRow", "横滚Label", rollValue, false);
-            ConfigureBoundRow("SpeedRow", "水平位移Label", speedValue, false);
-            ConfigureBoundRow("BatteryRow", "电量Label", batteryValue, false);
-
-            ConfigureBoundRow("YawRow", "偏航Label", yawValue, true);
-            ConfigureBoundRow("LatitudeRow", "纬度Label", latitudeValue, true);
-            ConfigureBoundRow("LongitudeRow", "经度Label", longitudeValue, true);
-            ConfigureBoundRow("VelocityXRow", "东向速度Label", velocityXValue, true);
-            ConfigureBoundRow("VelocityYRow", "垂向速度Label", velocityYValue, true);
-            ConfigureBoundRow("VelocityZRow", "北向速度Label", velocityZValue, true);
-            ConfigureBoundRow("VerticalSpeedRow", "升沉速度Label", verticalSpeedValue, true);
-            ConfigureBoundRow("HorizontalSpeedRow", "水平速度Label", horizontalSpeedValue, true);
-            ConfigureBoundRow("MissionTimeRow", "任务时间Label", missionTimeValue, true);
-            ConfigureBoundRow("DistanceRow", "航行距离Label", distanceValue, true);
-            ConfigureBoundRow("PredictionErrorRow", "预测误差Label", predictionErrorValue, true);
-            ConfigureBoundRow("OceanCurrentRow", "当前海流Label", oceanCurrentValue, true);
-            ConfigureBoundRow("WaterSpeedRow", "对水速度Label", waterSpeedValue, true);
-            ConfigureBoundRow("GroundSpeedRow", "对地速度Label", groundSpeedValue, true);
-            ConfigureBoundRow("SideSlipRow", "侧滑角Label", sideSlipValue, true);
-            ConfigureBoundRow("NetBuoyancyRow", "净浮力Label", netBuoyancyValue, true);
-            ConfigureBoundRow("EnergyRow", "瞬时功耗Label", energyValue, true);
-            ConfigureBoundRow("AngleOfAttackRow", "攻角Label", angleOfAttackValue, true);
-            ConfigureBoundRow("LiftForceRow", "升力Label", liftForceValue, true);
-            ConfigureBoundRow("DragForceRow", "阻力Label", dragForceValue, true);
-            ConfigureBoundRow("AngularRateRow", "角速度Label", angularRateValue, true);
-            ConfigureBoundRow("HydrodynamicMomentRow", "水动力矩Label", hydrodynamicMomentValue, true);
-            ConfigureBoundRow("InertiaRow", "转动惯量Label", inertiaValue, true);
-            ConfigureBoundRow("PistonPositionRow", "活塞位置Label", pistonPositionValue, true);
-            ConfigureBoundRow("ControlSurfaceRow", "控制面偏角Label", controlSurfaceValue, true);
-            ConfigureBoundRow("ActuatorPowerRow", "执行机构功率Label", actuatorPowerValue, true);
-        }
-
-        private void EnsureVisualHierarchy()
-        {
-            if (panel == null)
-            {
-                return;
-            }
-
-            var telemetryCard = UiFactory.EnsureCardSurface(
-                panel,
-                "TelemetrySnapshotCard",
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(12f, -286f),
-                new Vector2(-12f, -48f));
-            UiFactory.EnsureDivider(
-                telemetryCard,
-                "TelemetrySectionDivider",
-                new Vector2(0f, 0.36f),
-                new Vector2(1f, 0.36f),
-                new Vector2(12f, -0.5f),
-                new Vector2(-12f, 0.5f));
-
-            UiFactory.EnsureCardSurface(
-                panel,
-                "TelemetryDynamicsCard",
-                Vector2.zero,
-                new Vector2(1f, 0f),
-                new Vector2(12f, 12f),
-                new Vector2(-12f, 72f));
-
-            var title = FindTextByNameOrValue(panel, "TelemetryTitle")
-                ?? FindTextByNameOrValue(panel, "TitleText");
-            UiFactory.ApplyTextRole(title, UiTextRole.Title, RuntimeUiLayoutMode.CompressedThreeColumn);
-            UiFactory.ApplyTextRole(dynamicsSummaryValue, UiTextRole.Auxiliary, RuntimeUiLayoutMode.CompressedThreeColumn);
-            UiFactory.ApplyButtonRole(detailsButton, UiButtonRole.Secondary);
-            UiFactory.ApplyRuntimePalette(panel);
-        }
-
-        private void ConfigureBoundRow(string rowName, string labelName, Text value, bool advanced)
-        {
-            if (value == null || panel == null)
-            {
-                return;
-            }
-
-            UiFactory.ConfigureFixedValueColumn(value);
-
-            var label = FindTextByNameOrValue(panel, labelName);
-            if (label == null)
-            {
-                label = FindTextByNameOrValue(value.transform.parent, labelName);
-            }
-
-            var parent = advanced && refsAdvancedRowsRoot != null ? refsAdvancedRowsRoot : panel;
-            var row = EnsureRow(parent, rowName);
-            if (CanReparentConfiguredTransform(value.transform))
-            {
-                value.transform.SetParent(row, false);
-            }
-            if (label != null)
-            {
-                if (CanReparentConfiguredTransform(label.transform))
-                {
-                    label.transform.SetParent(row, false);
-                }
-                ConfigureKeyValueChildren(label, value);
-            }
-            else
-            {
-                label = CreateBoundLabel(row, labelName);
-                ConfigureKeyValueChildren(label, value);
-            }
-            if (advanced)
-            {
-                if (label != null)
-                {
-                    advancedRows.Add(label.gameObject);
-                }
-                advancedRows.Add(value.gameObject);
-                var unit = row.Find(value.name + "Unit")?.GetComponent<Text>();
-                if (unit != null)
-                {
-                    advancedRows.Add(unit.gameObject);
-                }
-                if (label != null)
-                {
-                    label.gameObject.SetActive(showingDetails);
-                }
-                value.gameObject.SetActive(showingDetails);
-            }
-        }
-
-        private static bool CanReparentConfiguredTransform(Transform target)
-        {
-#if UNITY_EDITOR
-            return target == null || Application.isPlaying || !UnityEditor.PrefabUtility.IsPartOfPrefabInstance(target);
-#else
-            return true;
-#endif
-        }
-
-        private static Text CreateBoundLabel(Transform row, string labelName)
-        {
-            var display = labelName != null && labelName.EndsWith("Label", StringComparison.Ordinal)
-                ? labelName.Substring(0, labelName.Length - "Label".Length)
-                : labelName;
-            return UiFactory.Text(
-                row.name + "Label",
-                row,
-                display,
-                13,
-                TextAnchor.MiddleLeft,
-                UiFactory.CommandText,
-                Vector2.zero,
-                Vector2.one,
-                new Vector2(0.5f, 0.5f),
-                Vector2.zero,
-                Vector2.zero);
-        }
-
-        private static Text FindTextByNameOrValue(Transform root, string expected)
-        {
-            if (root == null || string.IsNullOrWhiteSpace(expected))
-            {
-                return null;
-            }
-
-            foreach (var text in root.GetComponentsInChildren<Text>(true))
-            {
-                if (text.name == expected || text.text == expected)
-                {
-                    return text;
-                }
-            }
-
-            return null;
-        }
-
-        private RectTransform refsAdvancedRowsRoot;
-
-        private static RectTransform CreateRow(Transform parent, string name, float topOffset, int column)
-        {
-            var row = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
-            row.SetParent(parent, false);
-            row.anchorMin = column == 0 ? new Vector2(0f, 1f) : new Vector2(0.5f, 1f);
-            row.anchorMax = column == 0 ? new Vector2(0.5f, 1f) : new Vector2(1f, 1f);
-            row.pivot = new Vector2(0.5f, 1f);
-            row.anchoredPosition = new Vector2(0f, -topOffset);
-            row.sizeDelta = new Vector2(-8f, 26f);
-            return ConfigureRow(row);
-        }
-
-        private static RectTransform EnsureRow(Transform parent, string name)
-        {
-            var existing = parent.Find(name) as RectTransform;
-            if (existing != null)
-            {
-                return ConfigureRow(existing);
-            }
-
-            var row = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
-            ConfigureRow(row, parent);
-            PositionNewBoundRow(row, parent);
-            return row;
-        }
-
-        private static void PositionNewBoundRow(RectTransform row, Transform parent)
-        {
-            var rowIndex = 0;
-            foreach (Transform child in parent)
-            {
-                if (child == row.transform || !child.name.EndsWith("Row", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                rowIndex++;
-            }
-
-            row.anchoredPosition = new Vector2(0f, -62f - rowIndex * 28f);
-        }
-
-        private static RectTransform ConfigureRow(RectTransform row, Transform parent = null)
-        {
-            if (parent != null)
-            {
-                row.SetParent(parent, false);
-                row.anchorMin = new Vector2(0f, 1f);
-                row.anchorMax = new Vector2(1f, 1f);
-                row.pivot = new Vector2(0.5f, 1f);
-                row.anchoredPosition = Vector2.zero;
-                row.sizeDelta = new Vector2(0f, 26f);
-            }
-
-            var layout = row.GetComponent<HorizontalLayoutGroup>() ?? row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(6, 6, 2, 2);
-            layout.spacing = 4f;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = false;
-            var element = row.GetComponent<LayoutElement>() ?? row.gameObject.AddComponent<LayoutElement>();
-            element.minHeight = 26f;
-            element.preferredHeight = 26f;
-            element.flexibleWidth = 1f;
-            return row;
-        }
-
-        private static void ConfigureKeyValueChildren(Text label, Text value)
-        {
-            ConfigureKeyText(label, 116f);
-            ConfigureKeyText(value, UiFactory.FixedValueColumnWidth);
-            value.rectTransform.anchorMin = Vector2.one;
-            value.rectTransform.anchorMax = Vector2.one;
-            value.rectTransform.pivot = Vector2.one;
-            UiFactory.ConfigureFixedLabelColumn(label);
-            UiFactory.ConfigureFixedValueColumn(value);
-            EnsureUnitColumn(value);
-        }
-
-        private static void ConfigureKeyText(Text text, float preferredWidth)
-        {
-            if (text == null)
-            {
-                return;
-            }
-
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate;
-            text.supportRichText = false;
-            var element = text.GetComponent<LayoutElement>() ?? text.gameObject.AddComponent<LayoutElement>();
-            element.minWidth = preferredWidth > 0f ? preferredWidth : 0f;
-            element.preferredWidth = preferredWidth;
-            element.flexibleWidth = preferredWidth > 0f ? 0f : 1f;
-        }
-
-        private static Text EnsureUnitColumn(Text value)
-        {
-            if (value == null)
-            {
-                return null;
-            }
-
-            var unitName = value.name + "Unit";
-            var unit = value.transform.parent.Find(unitName)?.GetComponent<Text>();
-            if (unit == null)
-            {
-                unit = UiFactory.Text(unitName, value.transform.parent, GetUnitLabel(value.name), 10,
-                    TextAnchor.MiddleLeft, UiFactory.CommandMutedText, Vector2.zero, Vector2.zero);
-            }
-
-            unit.text = GetUnitLabel(value.name);
-            UiFactory.ConfigureFixedUnitColumn(unit);
-            unit.gameObject.SetActive(!string.IsNullOrEmpty(unit.text));
-            return unit;
-        }
-
-        private static string GetUnitLabel(string valueName)
-        {
-            if (string.IsNullOrEmpty(valueName))
-            {
-                return string.Empty;
-            }
-
-            if (valueName.IndexOf("Latitude", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("Longitude", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("Heading", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("Pitch", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("Roll", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("Yaw", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("SideSlip", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "°";
-            }
-
-            if (valueName.IndexOf("Battery", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "%";
-            }
-
-            if (valueName.IndexOf("Depth", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "m";
-            }
-
-            if (valueName.IndexOf("Distance", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "km";
-            }
-
-            if (valueName.IndexOf("Time", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "s";
-            }
-
-            if (valueName.IndexOf("Value", System.StringComparison.OrdinalIgnoreCase) >= 0
-                && (valueName.IndexOf("Speed", System.StringComparison.OrdinalIgnoreCase) >= 0
-                    || valueName.IndexOf("Velocity", System.StringComparison.OrdinalIgnoreCase) >= 0
-                    || valueName.IndexOf("Current", System.StringComparison.OrdinalIgnoreCase) >= 0))
-            {
-                return "m/s";
-            }
-
-            if (valueName.IndexOf("Force", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("Buoyancy", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "N";
-            }
-
-            if (valueName.IndexOf("Energy", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("Power", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "W";
-            }
-
-            if (valueName.IndexOf("Position", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "mm";
-            }
-
-            if (valueName.IndexOf("Inertia", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "kg*m2";
-            }
-
-            return string.Empty;
         }
 
         private void ToggleDetails()
@@ -646,8 +271,68 @@ namespace UnderwaterGliderTwin.UI
             RefreshDetails();
         }
 
+        private void RegisterBoundAdvancedRows()
+        {
+            advancedRows.Clear();
+            if (boundAdvancedRowsRoot != null)
+            {
+                foreach (var text in boundAdvancedRowsRoot.GetComponentsInChildren<Text>(true))
+                {
+                    advancedRows.Add(text.gameObject);
+                }
+            }
+
+            RegisterBoundAdvancedRow(yawValue, "偏航Label");
+            RegisterBoundAdvancedRow(latitudeValue, "纬度Label");
+            RegisterBoundAdvancedRow(longitudeValue, "经度Label");
+            RegisterBoundAdvancedRow(velocityXValue, "东向速度Label");
+            RegisterBoundAdvancedRow(velocityYValue, "垂向速度Label");
+            RegisterBoundAdvancedRow(velocityZValue, "北向速度Label");
+            RegisterBoundAdvancedRow(verticalSpeedValue, "升沉速度Label");
+            RegisterBoundAdvancedRow(horizontalSpeedValue, "水平速度Label");
+            RegisterBoundAdvancedRow(missionTimeValue, "任务时间Label");
+            RegisterBoundAdvancedRow(distanceValue, "航行距离Label");
+            RegisterBoundAdvancedRow(predictionErrorValue, "预测误差Label");
+            RegisterBoundAdvancedRow(oceanCurrentValue, "当前海流Label");
+            RegisterBoundAdvancedRow(waterSpeedValue, "对水速度Label");
+            RegisterBoundAdvancedRow(groundSpeedValue, "对地速度Label");
+            RegisterBoundAdvancedRow(sideSlipValue, "侧滑角Label");
+            RegisterBoundAdvancedRow(netBuoyancyValue, "净浮力Label");
+            RegisterBoundAdvancedRow(energyValue, "瞬时功耗Label");
+            RegisterBoundAdvancedRow(angleOfAttackValue, "攻角Label");
+            RegisterBoundAdvancedRow(liftForceValue, "升力Label");
+            RegisterBoundAdvancedRow(dragForceValue, "阻力Label");
+            RegisterBoundAdvancedRow(angularRateValue, "角速度Label");
+            RegisterBoundAdvancedRow(hydrodynamicMomentValue, "水动力矩Label");
+            RegisterBoundAdvancedRow(inertiaValue, "转动惯量Label");
+            RegisterBoundAdvancedRow(pistonPositionValue, "活塞位置Label");
+            RegisterBoundAdvancedRow(controlSurfaceValue, "控制面偏角Label");
+            RegisterBoundAdvancedRow(actuatorPowerValue, "执行机构功率Label");
+        }
+
+        private void RegisterBoundAdvancedRow(Text value, string labelName)
+        {
+            if (value == null) return;
+            if (!advancedRows.Contains(value.gameObject)) advancedRows.Add(value.gameObject);
+            var unit = value.transform.parent?.Find(value.name + "Unit")?.GetComponent<Text>();
+            if (unit != null && !advancedRows.Contains(unit.gameObject)) advancedRows.Add(unit.gameObject);
+            if (panel == null) return;
+            foreach (var label in panel.GetComponentsInChildren<Text>(true))
+            {
+                if (label.name == labelName && !advancedRows.Contains(label.gameObject))
+                {
+                    advancedRows.Add(label.gameObject);
+                }
+            }
+        }
+
         private void RefreshDetails()
         {
+            if (boundAdvancedRowsRoot != null)
+            {
+                boundAdvancedRowsRoot.gameObject.SetActive(showingDetails);
+            }
+
             foreach (var row in advancedRows)
             {
                 var text = row != null ? row.GetComponent<Text>() : null;
@@ -659,7 +344,7 @@ namespace UnderwaterGliderTwin.UI
 
             if (panel != null)
             {
-                panel.sizeDelta = new Vector2(showingDetails ? 640f : 328f, showingDetails ? 640f : 366f);
+                panel.sizeDelta = new Vector2(showingDetails ? 640f : 328f, showingDetails ? 640f : CompactTelemetryPanelHeight);
             }
 
             if (navigationReferenceCard != null)
@@ -680,8 +365,6 @@ namespace UnderwaterGliderTwin.UI
                 new Vector2(0f, 0f),
                 new Vector2(18f, 160f),
                 new Vector2(328f, 172f));
-            UiFactory.ApplyCommandPalette(card.GetComponent<Image>(), UiVisualRole.CardFill);
-            card.GetComponent<Image>().raycastTarget = false;
             UiFactory.Text("NavigationCardTitle", card, "\u59ff\u6001\u4e0e\u5bfc\u822a", 15, TextAnchor.MiddleLeft, UiFactory.CommandText,
                 new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -20f), new Vector2(168f, 24f));
             UiFactory.Text("NavigationCardNorth", card, "N", 12, TextAnchor.MiddleCenter, UiFactory.CommandText, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 36f), new Vector2(24f, 20f));
@@ -725,7 +408,7 @@ namespace UnderwaterGliderTwin.UI
             {
                 var card = UiFactory.Panel("TelemetryEmptyState", panel,
                     new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(0f, -132f), new Vector2(286f, 82f), UiFactory.CommandCardFill);
+                    new Vector2(0f, -132f), new Vector2(286f, 82f), UiFactory.CommandPanelFill);
                 card.GetComponent<Image>().raycastTarget = false;
                 telemetryEmptyState = card.gameObject;
             }
@@ -743,13 +426,11 @@ namespace UnderwaterGliderTwin.UI
             if (telemetryEmptyStateHint == null)
             {
                 telemetryEmptyStateHint = UiFactory.Text("TelemetryEmptyStateHint", telemetryEmptyState.transform,
-                    "请加载 CSV 或运行参数仿真", 12, TextAnchor.MiddleCenter, UiFactory.CommandMutedText,
+                    "请加载 CSV 或运行参数仿真", 12, TextAnchor.MiddleCenter, new Color(0.54f, 0.78f, 0.90f),
                     new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0.5f, 0.5f),
                     new Vector2(0f, -16f), new Vector2(-20f, 22f));
             }
 
-            UiFactory.ApplyTextRole(telemetryEmptyStateTitle, UiTextRole.Value, RuntimeUiLayoutMode.CompressedThreeColumn);
-            UiFactory.ApplyTextRole(telemetryEmptyStateHint, UiTextRole.Auxiliary, RuntimeUiLayoutMode.CompressedThreeColumn);
             telemetryEmptyStateTitle.horizontalOverflow = HorizontalWrapMode.Wrap;
             telemetryEmptyStateHint.horizontalOverflow = HorizontalWrapMode.Wrap;
             telemetryEmptyStateTitle.verticalOverflow = VerticalWrapMode.Truncate;
@@ -766,6 +447,14 @@ namespace UnderwaterGliderTwin.UI
 
             RefreshDistanceCache(playback.Model);
             RefreshTelemetryState(playback.Model.Frames);
+            if (minimalBoundReferences)
+            {
+                var minimalSample = ContinuousMotionSampler.Sample(playback.Model.Frames, playback.Model.ContinuousElapsedSeconds);
+                SetValue(depthValue, $"{minimalSample.DepthM:0.0}", "m");
+                SetValue(batteryValue, $"{frame.BatteryPercent:0}", "%");
+                return;
+            }
+
             if (!ShouldUpdateForFrame(Time.unscaledTime, reason))
             {
                 return;
@@ -798,7 +487,8 @@ namespace UnderwaterGliderTwin.UI
                 : "-", string.Empty);
             SetValue(verticalSpeedValue, $"{velocity.y:0.00}", "m/s");
             SetValue(horizontalSpeedValue, $"{new Vector2(velocity.x, velocity.z).magnitude:0.00}", "m/s");
-            SetValue(missionTimeValue, FormatDuration(playback.Model.CurrentElapsedSeconds - playback.Model.StartElapsedSeconds), "s");
+            var missionTimeText = FormatDuration(playback.Model.CurrentElapsedSeconds - playback.Model.StartElapsedSeconds);
+            SetValue(missionTimeValue, missionTimeText, "s", missionTimeText);
             SetValue(distanceValue, $"{cumulativeDistanceMeters[Mathf.Clamp(index, 0, cumulativeDistanceMeters.Length - 1)] / 1000f:0.00}", "km");
             SetValue(predictionErrorValue, prediction != null ? $"{prediction.CurrentSnapshot.CurrentErrorMeters:0.00}" : "-", "m");
             SetValue(batteryValue, $"{frame.BatteryPercent:0}", "%");
@@ -812,7 +502,10 @@ namespace UnderwaterGliderTwin.UI
             var oceanCurrentText = RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation
                 ? $"东 {oceanCurrent.x:0.00} 北 {oceanCurrent.y:0.00}"
                 : "-";
-            SetValue(oceanCurrentValue, oceanCurrentText, "m/s");
+            SetValue(oceanCurrentValue, oceanCurrentText, "m/s",
+                RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation
+                    ? $"东 {oceanCurrent.x:0.00} m/s 北 {oceanCurrent.y:0.00} m/s"
+                    : "-");
             if (frame.Diagnostics.HasValue)
             {
                 var diagnostics = frame.Diagnostics.Value;
@@ -856,12 +549,15 @@ namespace UnderwaterGliderTwin.UI
             SetValue(inertiaValue, dynamics == null
                 ? "-"
                 : $"{dynamics.RollInertiaKgM2:0.#}/{dynamics.PitchInertiaKgM2:0.#}/{dynamics.YawInertiaKgM2:0.#}", "kg*m2");
+
+            ApplyContinuousMotion();
         }
 
         private void OnContinuousChanged(float continuousIndex, float progress01, FrameUpdateReason reason)
         {
             if (playback == null || playback.Model == null || playback.Model.Frames == null || playback.Model.Frames.Count == 0)
             {
+                RefreshTelemetryState(playback?.Model?.Frames);
                 return;
             }
 
@@ -871,6 +567,22 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
+            if (minimalBoundReferences)
+            {
+                if (depthValue != null)
+                {
+                    var sample = ContinuousMotionSampler.Sample(playback.Model.Frames, playback.Model.ContinuousElapsedSeconds);
+                    SetValue(depthValue, $"{sample.DepthM:0.0}", "m");
+                }
+
+                return;
+            }
+
+            ApplyContinuousMotion();
+        }
+
+        private void ApplyContinuousMotion()
+        {
             var model = playback.Model;
             var sample = ContinuousMotionSampler.Sample(model.Frames, model.ContinuousElapsedSeconds);
             SetValue(depthValue, $"{sample.DepthM:0.0}", "m");
@@ -904,7 +616,8 @@ namespace UnderwaterGliderTwin.UI
                 SetValue(speedValue, "-", string.Empty);
             }
 
-            SetValue(missionTimeValue, FormatDuration(sample.ElapsedSeconds - model.StartElapsedSeconds), "s");
+            var missionTimeText = FormatDuration(sample.ElapsedSeconds - model.StartElapsedSeconds);
+            SetValue(missionTimeValue, missionTimeText, "s", missionTimeText);
             var lowerIndex = Mathf.Clamp(sample.LowerIndex, 0, cumulativeDistanceMeters.Length - 1);
             var upperIndex = Mathf.Clamp(sample.UpperIndex, 0, cumulativeDistanceMeters.Length - 1);
             var distance = Mathf.Lerp(cumulativeDistanceMeters[lowerIndex], cumulativeDistanceMeters[upperIndex], sample.Interpolation01);
@@ -913,7 +626,8 @@ namespace UnderwaterGliderTwin.UI
             if (sample.HasDiagnostics)
             {
                 var current = sample.CurrentVelocityEndMps;
-                SetValue(oceanCurrentValue, $"东 {current.x:0.00} 北 {current.z:0.00}", "m/s");
+                SetValue(oceanCurrentValue, $"东 {current.x:0.00} 北 {current.z:0.00}", "m/s",
+                    $"东 {current.x:0.00} m/s 北 {current.z:0.00} m/s");
                 SetValue(waterSpeedValue, $"{sample.WaterVelocityEndMps.magnitude:0.00}", "m/s");
                 SetValue(groundSpeedValue, $"{sample.GroundVelocityEndMps.magnitude:0.00}", "m/s");
             }
@@ -924,26 +638,34 @@ namespace UnderwaterGliderTwin.UI
                     : null;
                 SetValue(oceanCurrentValue, profileCurrent.HasValue
                     ? $"东 {profileCurrent.Value.x:0.00} 北 {profileCurrent.Value.y:0.00}"
-                    : "-", "m/s");
+                    : "-", "m/s", profileCurrent.HasValue
+                    ? $"东 {profileCurrent.Value.x:0.00} m/s 北 {profileCurrent.Value.y:0.00} m/s"
+                    : "-");
                 SetValue(waterSpeedValue, "-", "m/s");
                 SetValue(groundSpeedValue, "-", "m/s");
             }
         }
 
-        private void SetValue(Text value, string text, string unit)
+        private void SetValue(Text value, string text, string unit, string inlineText = null)
         {
             if (value == null)
             {
                 return;
             }
 
-            value.text = text;
-            var unitText = value.transform.parent.Find(value.name + "Unit")?.GetComponent<Text>();
+            var unitText = value.transform.parent?.Find(value.name + "Unit")?.GetComponent<Text>();
             if (unitText != null)
             {
+                value.text = text;
                 unitText.text = unit ?? string.Empty;
                 unitText.gameObject.SetActive(!string.IsNullOrEmpty(unitText.text));
+                return;
             }
+
+            // The reference HUD and minimal bindings keep units in the value text.
+            value.text = inlineText ?? (text == "-" || string.IsNullOrEmpty(unit)
+                ? text
+                : text + (unit == "°" ? string.Empty : " ") + unit);
         }
 
         private static float[] BuildDistanceCache(PlaybackModel model)

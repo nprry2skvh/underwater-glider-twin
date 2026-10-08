@@ -24,9 +24,9 @@ namespace UnderwaterGliderTwin.Tests
         {
             var frames = new List<TelemetryFrame>
             {
-                TimedFrame(0, 0f),
-                TimedFrame(1, 10f),
-                TimedFrame(2, 30f)
+                Frame(0, 0f),
+                Frame(1, 10f),
+                Frame(2, 30f)
             };
             var model = new PlaybackModel(frames, rowsPerSecond: 1f);
             model.SetPlaying(true);
@@ -42,9 +42,8 @@ namespace UnderwaterGliderTwin.Tests
         public void BoundTimelineTick_UsesRowsPerSecondAcrossIrregularIntervals()
         {
             var frames = IrregularFrames();
-            var timeline = Timeline(frames);
             var model = new PlaybackModel(frames, rowsPerSecond: 1f);
-            model.BindTimeline(timeline);
+            model.BindTimeline(Timeline(frames));
             model.SeekNormalized(1f / 3f);
             model.SetPlaying(true);
 
@@ -59,9 +58,8 @@ namespace UnderwaterGliderTwin.Tests
         public void BoundTimelineTick_ReverseUsesTheSameClockContract()
         {
             var frames = IrregularFrames();
-            var timeline = Timeline(frames);
             var model = new PlaybackModel(frames, rowsPerSecond: 1f);
-            model.BindTimeline(timeline);
+            model.BindTimeline(Timeline(frames));
             model.SeekNormalized(2f / 3f);
             model.SetDirection(-1);
             model.SetPlaying(true);
@@ -77,9 +75,8 @@ namespace UnderwaterGliderTwin.Tests
         public void HasFutureHorizon_UsesContinuousElapsedInsteadOfDiscreteFrameTime()
         {
             var frames = IrregularFrames();
-            var timeline = Timeline(frames);
             var model = new PlaybackModel(frames, rowsPerSecond: 1f);
-            model.BindTimeline(timeline);
+            model.BindTimeline(Timeline(frames));
             model.SeekNormalized(1f / 3f);
             model.SetPlaying(true);
 
@@ -140,6 +137,21 @@ namespace UnderwaterGliderTwin.Tests
             controller.Seek(0.5f);
 
             Assert.That(receivedReason, Is.EqualTo(FrameUpdateReason.Seek));
+            UnityEngine.Object.DestroyImmediate(controller.gameObject);
+        }
+
+        [Test]
+        public void PlaybackController_ReportsContinuousChangeBetweenIntegerFrames()
+        {
+            var controller = new UnityEngine.GameObject("Playback").AddComponent<PlaybackController>();
+            controller.Initialize(new PlaybackModel(Frames(10), rowsPerSecond: 1f));
+            var notifications = 0;
+            controller.ContinuousChanged += (continuousIndex, progress, reason) => notifications++;
+            controller.SetPlaying(true);
+
+            controller.Step(0.5f);
+
+            Assert.That(notifications, Is.EqualTo(1));
             UnityEngine.Object.DestroyImmediate(controller.gameObject);
         }
 
@@ -278,20 +290,7 @@ namespace UnderwaterGliderTwin.Tests
 
         private static IReadOnlyList<TelemetryFrame> IrregularFrames()
         {
-            return new[]
-            {
-                TimedFrame(0, 0f),
-                TimedFrame(1, 1f),
-                TimedFrame(2, 11f),
-                TimedFrame(3, 12f)
-            };
-        }
-
-        private static TelemetryFrame TimedFrame(int index, float elapsedSeconds)
-        {
-            return new TelemetryFrame(
-                index, $"t{index}", elapsedSeconds, 120, 25, index, 100, 0, 0, 0,
-                28, 0, 95, "mode", "state", 1, 0, 0, 0, 0, 0, 0);
+            return new[] { Frame(0, 0f), Frame(1, 1f), Frame(2, 11f), Frame(3, 12f) };
         }
 
         private static TelemetryFrame Frame(int index, int profileSequence = 0)
@@ -300,6 +299,13 @@ namespace UnderwaterGliderTwin.Tests
                 index, $"t{index}", index, 120, 25, index, 100, 0, 0, 0,
                 28, 0, 95, "mode", "state", 1, 0, 0, 0, 0, 0, 0,
                 profileSequence: profileSequence);
+        }
+
+        private static TelemetryFrame Frame(int index, float elapsedSeconds)
+        {
+            return new TelemetryFrame(
+                index, $"t{index}", elapsedSeconds, 120, 25, index, 100, 0, 0, 0,
+                28, 0, 95, "mode", "state", 1, 0, 0, 0, 0, 0, 0);
         }
     }
 }

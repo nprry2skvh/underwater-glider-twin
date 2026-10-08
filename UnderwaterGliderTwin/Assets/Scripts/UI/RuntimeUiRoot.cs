@@ -14,20 +14,8 @@ namespace UnderwaterGliderTwin.UI
 
         public Canvas RuntimeCanvas => runtimeCanvas;
         public RectTransform ModalRoot => modalRoot;
-        public RectTransform DrawerLayer => modalRoot;
         public RuntimeUiPanelFlags EnabledPanelValidationMask => enabledPanelValidationMask;
         public RuntimeUiReferences References => references;
-
-        // Runtime-generated UI uses the same owner component as the serialized
-        // scene. Keeping this small configuration seam here avoids creating a
-        // second root/Canvas just to host responsive behaviour.
-        public void ConfigureRuntimeReferences(Canvas canvas, RectTransform runtimeModalRoot, RuntimeUiReferences runtimeReferences, RuntimeUiPanelFlags validationMask)
-        {
-            runtimeCanvas = canvas;
-            modalRoot = runtimeModalRoot;
-            references = runtimeReferences ?? new RuntimeUiReferences();
-            enabledPanelValidationMask = validationMask;
-        }
 
         public List<UiReferenceIssue> ValidateReferences(RuntimeUiValidationProfile profile = RuntimeUiValidationProfile.EnabledPanels)
         {
@@ -57,15 +45,6 @@ namespace UnderwaterGliderTwin.UI
 
         private void OnValidate()
         {
-            // Runtime-generated roots are configured immediately after
-            // AddComponent. Unity invokes OnValidate before that configuration
-            // seam runs, so validating here would emit false missing-reference
-            // errors and fail PlayMode tests through LogAssert.
-            if (Application.isPlaying)
-            {
-                return;
-            }
-
             if (!gameObject.scene.IsValid() || string.IsNullOrEmpty(gameObject.scene.path))
             {
                 return;
@@ -103,7 +82,6 @@ namespace UnderwaterGliderTwin.UI
             CollectGroupIfSelected(RuntimeUiPanelFlags.DataInput, references.dataInput, "references.dataInput", issues);
             CollectGroupIfSelected(RuntimeUiPanelFlags.Playback, references.playback, "references.playback", issues);
             CollectGroupIfSelected(RuntimeUiPanelFlags.OceanToolbar, references.oceanToolbar, "references.oceanToolbar", issues);
-            references.layout?.CollectReferenceIssues(this, "Main.unity", "references.layout", issues);
             var rowTemplate = GetOceanLayerRowTemplate();
             if (rowTemplate != null)
             {

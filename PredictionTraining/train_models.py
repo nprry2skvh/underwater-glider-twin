@@ -225,6 +225,28 @@ def main() -> None:
     print(f"Summary written to {summary_path}")
 
 
+def parse_position_reference(value: object) -> bool:
+    token = str(value).strip().casefold()
+    if token in {'true', '1', '1.0'}:
+        return True
+    if token in {'false', '0', '0.0'}:
+        return False
+    raise ValueError('has_position_reference must explicitly be true/false or 1/0')
+
+
+def validate_simulation_branch_metadata(frame: pd.DataFrame) -> None:
+    if 'truth_grade' not in frame:
+        return
+    simulation = frame.truth_grade.astype(str).str.contains('simulation', case=False)
+    if not simulation.any():
+        return
+    if 'branch_id' not in frame:
+        raise ValueError('explicit simulation truth requires branch_id metadata')
+    branches = frame.loc[simulation, 'branch_id']
+    if branches.isna().any() or branches.astype(str).str.strip().eq('').any():
+        raise ValueError('explicit simulation truth requires nonempty branch_id metadata')
+
+
 def load_frame_table(csv_path: Path) -> pd.DataFrame:
     try:
         raw = pd.read_csv(csv_path, encoding="gbk", header=0, dtype=str, low_memory=False)
@@ -234,9 +256,21 @@ def load_frame_table(csv_path: Path) -> pd.DataFrame:
     frame = pd.DataFrame()
     for name, index in CSV_COLUMNS.items():
         frame[name] = raw.iloc[:, index]
+    if "received_seconds" in raw.columns:
+        frame["received_seconds"] = pd.to_numeric(raw["received_seconds"], errors="coerce")
+    metadata_columns = {'has_position_reference', 'branch_id', 'truth_grade'}
+    if 'has_position_reference' in raw.columns:
+        frame['has_position_reference'] = raw['has_position_reference'].map(parse_position_reference)
+    for name in ('branch_id', 'truth_grade'):
+        if name in raw.columns:
+            values = raw[name].str.strip()
+            if values.isna().any() or values.eq('').any():
+                raise ValueError(f'{name} metadata must be nonempty')
+            frame[name] = values
+    validate_simulation_branch_metadata(frame)
 
     for name in frame.columns:
-        if name not in {"raw_time", "work_mode", "run_state"}:
+        if name not in {"raw_time", "work_mode", "run_state"} | metadata_columns:
             frame[name] = pd.to_numeric(frame[name], errors="coerce")
 
     frame["elapsed_seconds"] = frame["raw_time"].apply(parse_elapsed_seconds).astype(float)
@@ -244,7 +278,11 @@ def load_frame_table(csv_path: Path) -> pd.DataFrame:
     frame = frame.dropna(subset=["longitude_deg", "latitude_deg", "depth_m", "heading_deg", "pitch_deg", "roll_deg", "elapsed_seconds"])
     frame = frame[(frame["longitude_deg"].abs() > 0.01) & (frame["latitude_deg"].abs() > 0.01)].reset_index(drop=True)
     frame = add_derived_features(frame)
-    frame = frame.ffill().bfill()
+    # With receipt metadata, only causal_history may fill values after filtering
+    # availability. Filling here could copy a late row into an on-time row.
+    if "received_seconds" not in frame:
+        fillable = [name for name in frame.columns if name not in metadata_columns]
+        frame[fillable] = frame[fillable].ffill()
     return frame
 
 
@@ -253,7 +291,7 @@ def add_derived_features(frame: pd.DataFrame) -> pd.DataFrame:
     average_latitude_rad = np.deg2rad(frame["latitude_deg"].rolling(2).mean().fillna(frame["latitude_deg"]))
     meters_per_degree_longitude = meters_per_degree_latitude * np.cos(average_latitude_rad)
 
-    delta_seconds = frame["elapsed_seconds"].diff().replace(0, np.nan).bfill().clip(lower=1e-3)
+    delta_seconds = frame["elapsed_seconds"].diff().where(lambda values: values > 0).fillna(1.0).clip(lower=1e-3)
     east_meters = frame["longitude_deg"].diff().fillna(0.0) * meters_per_degree_longitude
     north_meters = frame["latitude_deg"].diff().fillna(0.0) * meters_per_degree_latitude
     vertical_meters = -(frame["depth_m"].diff().fillna(0.0))
@@ -310,20 +348,16 @@ def split_continuous_segments(frame: pd.DataFrame, max_gap_seconds: float = 60.0
 
 
 def resample_telemetry(frame: pd.DataFrame, sample_interval_seconds: int = 10) -> pd.DataFrame:
-    """Interpolate continuous numeric telemetry onto a fixed engineering time grid."""
+    """Hold already observed telemetry on a fixed grid; never interpolate future inputs."""
     if frame.empty:
         return frame.copy()
     start_seconds = float(frame["elapsed_seconds"].iloc[0])
     end_seconds = float(frame["elapsed_seconds"].iloc[-1])
-    target_seconds = np.arange(start_seconds, end_seconds + sample_interval_seconds * 0.5, sample_interval_seconds, dtype=np.float64)
+    target_seconds = np.arange(start_seconds, end_seconds + 1e-7, sample_interval_seconds, dtype=np.float64)
     indexed = frame.set_index("elapsed_seconds")
     numeric_columns = indexed.select_dtypes(include=[np.number]).columns.tolist()
-    resampled = indexed[numeric_columns].reindex(indexed.index.union(target_seconds)).sort_index().interpolate(method="index")
+    resampled = indexed[numeric_columns].reindex(indexed.index.union(target_seconds)).sort_index().ffill()
     resampled = resampled.reindex(target_seconds)
-    if "heading_deg" in resampled:
-        heading_values = np.unwrap(np.deg2rad(indexed["heading_deg"].to_numpy(dtype=np.float64)))
-        interpolated_heading = np.interp(target_seconds, indexed.index.to_numpy(dtype=np.float64), heading_values)
-        resampled["heading_deg"] = np.rad2deg(interpolated_heading) % 360.0
     resampled.index.name = "elapsed_seconds"
     return resampled.reset_index()
 

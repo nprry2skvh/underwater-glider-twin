@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnderwaterGliderTwin.Mapping;
 using UnderwaterGliderTwin.Playback;
+using UnderwaterGliderTwin.Telemetry;
 
 namespace UnderwaterGliderTwin.Visualization
 {
@@ -9,8 +10,6 @@ namespace UnderwaterGliderTwin.Visualization
         private PlaybackController playback;
         private GeoCoordinateMapper mapper;
         private AttitudeSettings attitudeSettings = AttitudeSettings.Default;
-        private bool hasValidPosition;
-        private Vector3 lastValidPosition;
 
         public void Initialize(PlaybackController playbackController, GeoCoordinateMapper coordinateMapper)
         {
@@ -71,19 +70,25 @@ namespace UnderwaterGliderTwin.Visualization
             if (sample.HasUsableCoordinates)
             {
                 var lowerPosition = mapper.Map(playback.Model.Frames[sample.LowerIndex]);
-                lastValidPosition = sample.LowerIndex == sample.UpperIndex
+                return sample.LowerIndex == sample.UpperIndex
                     ? lowerPosition
                     : Vector3.Lerp(
                         lowerPosition,
                         mapper.Map(playback.Model.Frames[sample.UpperIndex]),
                         sample.Interpolation01);
-                hasValidPosition = true;
-                return lastValidPosition;
             }
 
-            return hasValidPosition
-                ? new Vector3(lastValidPosition.x, mappedDepth, lastValidPosition.z)
-                : new Vector3(0f, mappedDepth, 0f);
+            var frames = playback.Model.Frames;
+            for (var index = sample.LowerIndex; index >= 0; index--)
+            {
+                if (TelemetryPositionUtility.HasUsableCoordinates(frames[index]))
+                {
+                    var position = mapper.Map(frames[index]);
+                    return new Vector3(position.x, mappedDepth, position.z);
+                }
+            }
+
+            return new Vector3(0f, mappedDepth, 0f);
         }
     }
 }

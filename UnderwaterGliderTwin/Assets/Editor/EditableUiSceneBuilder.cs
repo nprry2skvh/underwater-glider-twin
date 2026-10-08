@@ -14,82 +14,8 @@ namespace UnderwaterGliderTwin.Editor
 {
     public static class EditableUiSceneBuilder
     {
-        private const string WelcomeScenePath = "Assets/Scenes/Welcome.unity";
         private const string MainScenePath = "Assets/Scenes/Main.unity";
         private const string PrefabFolderPath = "Assets/UI/Prefabs";
-
-        [MenuItem("UnderwaterGliderTwin/UI/Rebuild Welcome UI")]
-        public static void BuildWelcomeScene()
-        {
-            EnsureNoUnsavedSceneChanges(WelcomeScenePath, "Welcome UI rebuild");
-            var scene = EditorSceneManager.OpenScene(WelcomeScenePath);
-            var bootstrapObject = FindSceneObject(scene, "WelcomeBootstrap") ?? new GameObject("WelcomeBootstrap");
-            if (bootstrapObject.scene != scene)
-            {
-                SceneManager.MoveGameObjectToScene(bootstrapObject, scene);
-            }
-
-            var bootstrap = bootstrapObject.GetComponent<WelcomeBootstrap>() ?? bootstrapObject.AddComponent<WelcomeBootstrap>();
-            var canvasObject = FindSceneObject(scene, "WelcomeCanvas");
-            var canvasWasCreated = canvasObject == null;
-            if (canvasWasCreated)
-            {
-                canvasObject = new GameObject("WelcomeCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-                SceneManager.MoveGameObjectToScene(canvasObject, scene);
-            }
-
-            var canvas = canvasObject.GetComponent<Canvas>() ?? canvasObject.AddComponent<Canvas>();
-            if (canvasWasCreated)
-            {
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                canvas.sortingOrder = 0;
-            }
-
-            var scaler = canvasObject.GetComponent<CanvasScaler>() ?? canvasObject.AddComponent<CanvasScaler>();
-            if (canvasWasCreated)
-            {
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1280f, 720f);
-                scaler.matchWidthOrHeight = 0.5f;
-            }
-
-            if (canvasObject.GetComponent<GraphicRaycaster>() == null)
-            {
-                canvasObject.AddComponent<GraphicRaycaster>();
-            }
-
-            EnsureEventSystem(scene);
-            var refs = CreateWelcomeChildren(canvasObject.transform);
-            AssignWelcomeReferences(bootstrap, canvas, refs);
-            EditorSceneManager.MarkSceneDirty(scene);
-            EditorSceneManager.SaveScene(scene);
-        }
-
-        [MenuItem("UnderwaterGliderTwin/UI/Reset Welcome UI Defaults")]
-        public static void ResetWelcomeDefaults()
-        {
-            EnsureNoUnsavedSceneChanges(WelcomeScenePath, "Welcome UI reset");
-            var scene = EditorSceneManager.OpenScene(WelcomeScenePath);
-            var canvas = FindSceneObject(scene, "WelcomeCanvas");
-            if (canvas == null)
-            {
-                BuildWelcomeScene();
-                return;
-            }
-
-            ResetImage(canvas.transform.Find("BackgroundImage"), Vector2.zero, Vector2.one, new Color(0.025f, 0.12f, 0.18f));
-            var panel = canvas.transform.Find("LaunchPanel");
-            ResetImage(panel, new Vector2(0.10f, 0.08f), new Vector2(0.90f, 0.92f), new Color(0.03f, 0.12f, 0.22f, 0.98f));
-            ResetText(panel, "TitleText", "Underwater Glider Digital Twin", 34, new Vector2(0.08f, 0.83f), new Vector2(0.92f, 0.96f));
-            ResetText(panel, "DescriptionText", "CSV replay, simulation, and short-horizon prediction", 18, new Vector2(0.08f, 0.73f), new Vector2(0.92f, 0.83f));
-            ResetInput(panel, "CsvPathInput", new Vector2(0.08f, 0.58f), new Vector2(0.72f, 0.67f));
-            ResetButton(panel, "ConfirmCsvButton", "Confirm CSV Path", new Vector2(0.74f, 0.58f), new Vector2(0.92f, 0.67f));
-            ResetButton(panel, "StartCsvButton", "Start CSV Replay", new Vector2(0.08f, 0.43f), new Vector2(0.48f, 0.53f));
-            ResetButton(panel, "SimulationButton", "Enter Simulation", new Vector2(0.52f, 0.43f), new Vector2(0.92f, 0.53f));
-            ResetText(panel, "LaunchStatusText", string.Empty, 15, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.30f));
-            EditorSceneManager.MarkSceneDirty(scene);
-            EditorSceneManager.SaveScene(scene);
-        }
 
         [MenuItem("UnderwaterGliderTwin/UI/Rebuild Main UI")]
         public static void BuildMainScene()
@@ -134,60 +60,39 @@ namespace UnderwaterGliderTwin.Editor
                 canvasObject.AddComponent<GraphicRaycaster>();
             }
 
-            var uiRoot = EnsureLayoutContainer(canvas.transform, "UiRoot");
-            ConfigureRect(uiRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            var systemBar = EnsureLayoutContainer(uiRoot, "SystemBar");
-            ConfigureRect(systemBar, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 48f));
-            MoveLegacyChildToContainer(canvas.transform, "CommandCenterHeader", systemBar);
-            var configurationArea = EnsureLayoutContainer(uiRoot, "ConfigurationArea");
-            ConfigureRect(configurationArea, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, UiFactory.CommandCenterPlaybackBarHeight), new Vector2(0f, UiFactory.CommandCenterConfigurationAreaHeight));
-            var playbackBar = EnsureLayoutContainer(uiRoot, "PlaybackBar");
-            ConfigureRect(playbackBar, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, UiFactory.CommandCenterPlaybackBarHeight));
-            var mainBody = EnsureLayoutContainer(uiRoot, "MainBody");
-            ConfigureRect(mainBody, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            mainBody.offsetMin = new Vector2(0f, UiFactory.CommandCenterMainBodyBottomOffset);
-            mainBody.offsetMax = new Vector2(0f, -UiFactory.CommandCenterHeaderHeight);
-            var telemetryColumn = EnsureLayoutContainer(mainBody, "TelemetryColumn");
-            ConfigureRect(telemetryColumn, new Vector2(0f, 0f), new Vector2(0.25f, 1f), new Vector2(0f, 0.5f), Vector2.zero, Vector2.zero);
-            var viewportColumn = EnsureLayoutContainer(mainBody, "ViewportColumn");
-            ConfigureRect(viewportColumn, new Vector2(0.25f, 0f), new Vector2(0.75f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            var statusColumn = EnsureLayoutContainer(mainBody, "StatusColumn");
-            ConfigureRect(statusColumn, new Vector2(0.75f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), Vector2.zero, Vector2.zero);
-            ConfigureMainBodyLayout(mainBody);
-            ConfigureColumnWidth(telemetryColumn, 280f, 280f, 0f);
-            ConfigureColumnWidth(viewportColumn, 640f, 0f, 1f);
-            ConfigureColumnWidth(statusColumn, 320f, 320f, 0f);
-            UiFactory.EnsureViewportSurface(viewportColumn, null);
-            var drawerEntryLayer = EnsureLayoutContainer(uiRoot, "DrawerEntryLayer");
-            ConfigureRect(drawerEntryLayer, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            drawerEntryLayer.SetAsLastSibling();
-            EnsureDrawerEntryToggle(drawerEntryLayer, "TelemetryDrawerToggle", "遥测抽屉", new Vector2(16f, -12f), new Vector2(120f, UiFactory.MinimumDrawerToggleHeight));
-            EnsureDrawerEntryToggle(drawerEntryLayer, "StatusDrawerToggle", "状态抽屉", new Vector2(148f, -12f), new Vector2(120f, UiFactory.MinimumDrawerToggleHeight));
+            EnsureSceneChild(canvas.transform, "CommandCenterHeader", typeof(RectTransform), typeof(Image), out var headerWasCreated);
+            if (headerWasCreated)
+            {
+                ConfigureRect(canvas.transform.Find("CommandCenterHeader") as RectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 48f));
+                canvas.transform.Find("CommandCenterHeader").GetComponent<Image>().color = new Color(0.015f, 0.09f, 0.14f, 0.98f);
+            }
 
-            EnsurePanelPrefabInstance(scene, telemetryColumn, "DashboardPanel");
-            EnsurePanelPrefabInstance(scene, statusColumn, "StatusPanel");
-            EnsurePanelPrefabInstance(scene, configurationArea, "DataInputPanel");
-            EnsurePanelPrefabInstance(scene, playbackBar, "PlaybackControlsPanel");
-            EnsurePanelPrefabInstance(scene, viewportColumn, "OceanCommandToolbar");
+            var panelNames = new[]
+            {
+                "DashboardPanel",
+                "StatusPanel",
+                "DataInputPanel",
+                "PlaybackControlsPanel",
+                "OceanCommandToolbar"
+            };
+            foreach (var panelName in panelNames)
+            {
+                EnsurePanelPrefabInstance(scene, canvas.transform, panelName);
+            }
 
             var modalRoot = FindDirectChild(canvas.transform, "ModalRoot");
             if (modalRoot == null)
             {
                 modalRoot = new GameObject("ModalRoot", typeof(RectTransform));
                 modalRoot.transform.SetParent(canvas.transform, false);
+                ConfigureRect(modalRoot.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             }
-            ConfigureRect(modalRoot.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            var drawerScrim = GetOrCreateImage(modalRoot.transform, "DrawerScrim", Vector2.zero, Vector2.one, new Color(0f, 0f, 0f, 0f));
-            drawerScrim.raycastTarget = false;
-            drawerScrim.transform.SetAsFirstSibling();
 
             EnsureModalPrefabInstance(scene, modalRoot.transform, "OceanCurrentDrawer");
             EnsureModalPrefabInstance(scene, modalRoot.transform, "FlightLegDrawer");
 
             EnsureEventSystem(scene);
-            var responsiveController = uiRoot.GetComponent<ResponsiveUiLayoutController>() ?? uiRoot.gameObject.AddComponent<ResponsiveUiLayoutController>();
-            EditorUtility.SetDirty(responsiveController);
-            AssignMainReferences(runtimeRoot, canvas, uiRoot, modalRoot.GetComponent<RectTransform>());
+            AssignMainReferences(runtimeRoot, canvas, modalRoot.GetComponent<RectTransform>(), rootWasCreated);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
             AssetDatabase.SaveAssets();
@@ -225,19 +130,18 @@ namespace UnderwaterGliderTwin.Editor
             EditorSceneManager.SaveScene(scene);
         }
 
-        private static void AssignMainReferences(RuntimeUiRoot runtimeRoot, Canvas canvas, RectTransform uiRoot, RectTransform modalRoot)
+        private static void AssignMainReferences(RuntimeUiRoot runtimeRoot, Canvas canvas, RectTransform modalRoot, bool rootWasCreated)
         {
             var serialized = new SerializedObject(runtimeRoot);
             serialized.FindProperty("runtimeCanvas").objectReferenceValue = canvas;
             serialized.FindProperty("modalRoot").objectReferenceValue = modalRoot;
             serialized.FindProperty("enabledPanelValidationMask").intValue = (int)RuntimeUiPanelFlags.All;
 
-            var dashboard = FindDescendant(canvas.transform, "DashboardPanel");
-            var status = FindDescendant(canvas.transform, "StatusPanel");
-            var dataInput = FindDescendant(canvas.transform, "DataInputPanel");
-            var playback = FindDescendant(canvas.transform, "PlaybackControlsPanel");
-            var oceanToolbar = FindDescendant(canvas.transform, "OceanCommandToolbar");
-            AssignUiGroup(serialized, new ResponsiveLayoutRefs(), "references.layout", uiRoot, modalRoot);
+            var dashboard = FindDirectChild(canvas.transform, "DashboardPanel");
+            var status = FindDirectChild(canvas.transform, "StatusPanel");
+            var dataInput = FindDirectChild(canvas.transform, "DataInputPanel");
+            var playback = FindDirectChild(canvas.transform, "PlaybackControlsPanel");
+            var oceanToolbar = FindDirectChild(canvas.transform, "OceanCommandToolbar");
             AssignUiGroup(serialized, new DashboardPanelRefs(), "references.dashboard", dashboard != null ? dashboard.transform : null, modalRoot);
             AssignUiGroup(serialized, new StatusPanelRefs(), "references.status", status != null ? status.transform : null, modalRoot);
             AssignUiGroup(serialized, new DataInputPanelRefs(), "references.dataInput", dataInput != null ? dataInput.transform : null, modalRoot);
@@ -253,7 +157,6 @@ namespace UnderwaterGliderTwin.Editor
             {
                 var bootstrapSerialized = new SerializedObject(twinBootstrap);
                 bootstrapSerialized.FindProperty("runtimeUiRoot").objectReferenceValue = runtimeRoot;
-                bootstrapSerialized.FindProperty("useGeneratedRuntimeUi").boolValue = true;
                 bootstrapSerialized.FindProperty("allowRuntimeFallback").boolValue = false;
                 bootstrapSerialized.FindProperty("strictUiValidation").boolValue = true;
                 bootstrapSerialized.ApplyModifiedPropertiesWithoutUndo();
@@ -295,11 +198,7 @@ namespace UnderwaterGliderTwin.Editor
                 }
                 else if (targetRoot != null)
                 {
-                    if (groupPath == "references.layout" && field.Name == "drawerScrim")
-                    {
-                        value = FindDirectChild(modalRoot, "DrawerScrim")?.GetComponent(field.FieldType);
-                    }
-                    else if (groupPath == "references.dataInput.ocean" && field.Name == "oceanCurrentDrawer")
+                    if (groupPath == "references.dataInput.ocean" && field.Name == "oceanCurrentDrawer")
                     {
                         value = FindDirectChild(modalRoot, "OceanCurrentDrawer")?.GetComponent(field.FieldType);
                     }
@@ -326,11 +225,6 @@ namespace UnderwaterGliderTwin.Editor
 
         private static Transform ResolveReferenceRoot(string groupPath, string fieldName, Transform panelRoot, RectTransform modalRoot)
         {
-            if (groupPath == "references.layout")
-            {
-                return fieldName == "drawerScrim" ? modalRoot : panelRoot;
-            }
-
             if (groupPath == "references.dataInput.dynamics"
                 || groupPath == "references.dataInput.flightLeg"
                 || (groupPath == "references.dataInput.ocean" && ShouldLiveInModal("dataInput.ocean", fieldName)))
@@ -422,8 +316,6 @@ namespace UnderwaterGliderTwin.Editor
                     existing.transform.SetParent(runtimeCanvas, false);
                 }
 
-                MigrateLegacyPanelLayout(existing.transform as RectTransform, panelName);
-
                 return;
             }
 
@@ -452,27 +344,12 @@ namespace UnderwaterGliderTwin.Editor
                 prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
             }
 
-            var existing = default(GameObject);
-            foreach (var candidate in FindSceneObjects(scene, drawerName))
-            {
-                if (PrefabUtility.GetPrefabInstanceStatus(candidate) != PrefabInstanceStatus.Connected)
-                {
-                    throw new InvalidOperationException("Main UI contains a same-name non-Prefab modal: " + GetTransformPath(candidate.transform));
-                }
-
-                if (existing != null)
-                {
-                    throw new InvalidOperationException("Main UI contains duplicate connected Prefab modals: " + drawerName);
-                }
-
-                existing = candidate;
-            }
-
+            var existing = FindDirectChild(modalRoot, drawerName);
             if (existing != null)
             {
-                if (existing.transform.parent != modalRoot)
+                if (PrefabUtility.GetPrefabInstanceStatus(existing) != PrefabInstanceStatus.Connected)
                 {
-                    existing.transform.SetParent(modalRoot, false);
+                    throw new InvalidOperationException("Main UI contains a same-name non-Prefab modal: " + GetTransformPath(existing.transform));
                 }
 
                 return;
@@ -806,96 +683,21 @@ namespace UnderwaterGliderTwin.Editor
             switch (panelName)
             {
                 case "DashboardPanel":
-                    ConfigureResponsivePanelRect(rect);
+                    ConfigureRect(rect, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-48f, -208f));
                     break;
                 case "StatusPanel":
-                    ConfigureResponsivePanelRect(rect);
+                    ConfigureRect(rect, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(-48f, 96f));
                     break;
                 case "DataInputPanel":
-                    ConfigureResponsivePanelRect(rect);
+                    ConfigureRect(rect, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 158f), new Vector2(-48f, 48f));
                     break;
                 case "PlaybackControlsPanel":
-                    ConfigureResponsivePanelRect(rect);
+                    ConfigureRect(rect, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 18f), new Vector2(-48f, 124f));
                     break;
                 case "OceanCommandToolbar":
-                    ConfigureResponsivePanelRect(rect);
+                    ConfigureRect(rect, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-24f, -112f), new Vector2(360f, 48f));
                     break;
             }
-        }
-
-        private static void MigrateLegacyPanelLayout(RectTransform rect, string panelName)
-        {
-            if (rect == null || !HasLegacyPanelLayout(rect, panelName))
-            {
-                return;
-            }
-
-            ConfigureResponsivePanelRect(rect);
-        }
-
-        private static bool HasLegacyPanelLayout(RectTransform rect, string panelName)
-        {
-            switch (panelName)
-            {
-                case "DashboardPanel":
-                    return rect.sizeDelta.y < -100f;
-                case "StatusPanel":
-                    return rect.anchorMin.y > 0.9f && rect.sizeDelta.y > 60f;
-                case "DataInputPanel":
-                    return rect.anchorMax.y < 0.1f && rect.sizeDelta.y < 100f;
-                case "PlaybackControlsPanel":
-                    return rect.anchorMax.y < 0.1f && rect.sizeDelta.y >= 100f;
-                case "OceanCommandToolbar":
-                    return rect.anchorMin.x > 0.9f && rect.sizeDelta.x > 100f;
-                default:
-                    return false;
-            }
-        }
-
-        private static void ConfigureResponsivePanelRect(RectTransform rect)
-        {
-            ConfigureRect(rect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-24f, -24f));
-            var layout = rect.GetComponent<LayoutElement>() ?? rect.gameObject.AddComponent<LayoutElement>();
-            layout.minWidth = 0f;
-            layout.preferredWidth = 0f;
-            layout.flexibleWidth = 1f;
-            layout.minHeight = 0f;
-            layout.preferredHeight = 0f;
-            layout.flexibleHeight = 1f;
-        }
-
-        private static void ConfigureMainBodyLayout(RectTransform mainBody)
-        {
-            if (mainBody == null)
-            {
-                return;
-            }
-
-            var layout = mainBody.GetComponent<HorizontalLayoutGroup>() ?? mainBody.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(0, 0, 0, 0);
-            layout.spacing = 12f;
-            layout.childAlignment = TextAnchor.UpperLeft;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = true;
-
-            var element = mainBody.GetComponent<LayoutElement>() ?? mainBody.gameObject.AddComponent<LayoutElement>();
-            element.flexibleHeight = 1f;
-        }
-
-        private static void ConfigureColumnWidth(RectTransform column, float minWidth, float preferredWidth, float flexibleWidth)
-        {
-            if (column == null)
-            {
-                return;
-            }
-
-            var layout = column.GetComponent<LayoutElement>() ?? column.gameObject.AddComponent<LayoutElement>();
-            layout.minWidth = minWidth;
-            layout.preferredWidth = preferredWidth;
-            layout.flexibleWidth = flexibleWidth;
-            layout.flexibleHeight = 1f;
         }
 
         private static GameObject EnsureSceneChild(Transform parent, string name, Type firstComponent, Type secondComponent, out bool wasCreated)
@@ -916,53 +718,6 @@ namespace UnderwaterGliderTwin.Editor
         private static GameObject FindDirectChild(Transform parent, string name)
         {
             return parent == null ? null : parent.Find(name)?.gameObject;
-        }
-
-        private static RectTransform EnsureLayoutContainer(Transform parent, string name)
-        {
-            var existing = FindDirectChild(parent, name);
-            if (existing == null)
-            {
-                existing = new GameObject(name, typeof(RectTransform));
-                existing.transform.SetParent(parent, false);
-            }
-            else if (existing.GetComponent<RectTransform>() == null)
-            {
-                throw new InvalidOperationException(
-                    "Main UI contains a same-name non-layout object: " + GetTransformPath(existing.transform));
-            }
-
-            return existing.GetComponent<RectTransform>();
-        }
-
-        private static void MoveLegacyChildToContainer(Transform parent, string name, Transform destination)
-        {
-            var child = FindDirectChild(parent, name);
-            if (child == null)
-            {
-                return;
-            }
-
-            if (destination == null)
-            {
-                throw new InvalidOperationException(
-                    "Cannot migrate legacy UI object because its destination is missing: " + GetTransformPath(child.transform));
-            }
-
-            child.transform.SetParent(destination, false);
-        }
-
-        private static void EnsureDrawerEntryToggle(Transform parent, string name, string label, Vector2 anchoredPosition, Vector2 size)
-        {
-            var button = GetOrCreateButton(parent, name, label, anchoredPosition, size);
-            var rect = button.GetComponent<RectTransform>();
-            ConfigureRect(rect, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), anchoredPosition, size);
-            var labelText = button.transform.Find(name + "Label")?.GetComponent<Text>();
-            if (labelText != null)
-            {
-                labelText.text = label;
-                labelText.alignment = TextAnchor.MiddleCenter;
-            }
         }
 
         private static void EnsureNoUnsavedSceneChanges(string targetScenePath, string operationName)
@@ -1011,51 +766,6 @@ namespace UnderwaterGliderTwin.Editor
 
             var created = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             SceneManager.MoveGameObjectToScene(created, scene);
-        }
-
-        private readonly struct WelcomeUiBuildRefs
-        {
-            public WelcomeUiBuildRefs(InputField csvInput, Text status, Button confirmCsvButton, Button startCsvButton, Button simulationButton)
-            {
-                CsvInput = csvInput;
-                Status = status;
-                ConfirmCsvButton = confirmCsvButton;
-                StartCsvButton = startCsvButton;
-                SimulationButton = simulationButton;
-            }
-
-            public InputField CsvInput { get; }
-            public Text Status { get; }
-            public Button ConfirmCsvButton { get; }
-            public Button StartCsvButton { get; }
-            public Button SimulationButton { get; }
-        }
-
-        private static WelcomeUiBuildRefs CreateWelcomeChildren(Transform canvas)
-        {
-            GetOrCreateImage(canvas, "BackgroundImage", Vector2.zero, Vector2.one, new Color(0.025f, 0.12f, 0.18f));
-            var panel = GetOrCreateImage(canvas, "LaunchPanel", new Vector2(0.10f, 0.08f), new Vector2(0.90f, 0.92f), new Color(0.03f, 0.12f, 0.22f, 0.98f));
-            GetOrCreateText(panel.transform, "TitleText", "Underwater Glider Digital Twin", 34, new Vector2(0.08f, 0.83f), new Vector2(0.92f, 0.96f));
-            GetOrCreateText(panel.transform, "DescriptionText", "CSV replay, simulation, and short-horizon prediction", 18, new Vector2(0.08f, 0.73f), new Vector2(0.92f, 0.83f));
-            var csvInput = GetOrCreateInput(panel.transform, "CsvPathInput", new Vector2(0.08f, 0.58f), new Vector2(0.72f, 0.67f));
-            var confirm = GetOrCreateButton(panel.transform, "ConfirmCsvButton", "Confirm CSV Path", new Vector2(0.74f, 0.58f), new Vector2(0.92f, 0.67f));
-            var start = GetOrCreateButton(panel.transform, "StartCsvButton", "Start CSV Replay", new Vector2(0.08f, 0.43f), new Vector2(0.48f, 0.53f));
-            var simulation = GetOrCreateButton(panel.transform, "SimulationButton", "Enter Simulation", new Vector2(0.52f, 0.43f), new Vector2(0.92f, 0.53f));
-            var status = GetOrCreateText(panel.transform, "LaunchStatusText", string.Empty, 15, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.30f));
-            return new WelcomeUiBuildRefs(csvInput, status, confirm, start, simulation);
-        }
-
-        private static void AssignWelcomeReferences(WelcomeBootstrap bootstrap, Canvas canvas, WelcomeUiBuildRefs refs)
-        {
-            var serialized = new SerializedObject(bootstrap);
-            serialized.FindProperty("welcomeCanvas").objectReferenceValue = canvas;
-            serialized.FindProperty("csvInput").objectReferenceValue = refs.CsvInput;
-            serialized.FindProperty("status").objectReferenceValue = refs.Status;
-            serialized.FindProperty("confirmCsvButton").objectReferenceValue = refs.ConfirmCsvButton;
-            serialized.FindProperty("startCsvButton").objectReferenceValue = refs.StartCsvButton;
-            serialized.FindProperty("simulationButton").objectReferenceValue = refs.SimulationButton;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-            EditorUtility.SetDirty(bootstrap);
         }
 
         private static Image GetOrCreateImage(Transform parent, string name, Vector2 min, Vector2 max, Color defaultColor)

@@ -38,7 +38,6 @@ function ConvertTo-UnityArgumentText {
 
 $unityArguments = @(
     "-batchmode"
-    "-nographics"
     "-projectPath"
     $projectPath
     "-runTests"

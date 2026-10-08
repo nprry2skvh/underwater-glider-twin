@@ -9,7 +9,6 @@ namespace UnderwaterGliderTwin.Prediction
     public sealed class XGBoostPredictor : IPredictor
     {
         private const float AnchorSeconds = 30f;
-        private const float MaximumHorizonSeconds = 900f;
         private const float MetersPerDegreeLatitude = 111320f;
         private static readonly string[] Targets =
         {
@@ -50,16 +49,13 @@ namespace UnderwaterGliderTwin.Prediction
             }
 
             var timer = Stopwatch.StartNew();
-            var futureFrames = context.Window.FutureFrames;
-            if (futureFrames.Count == 0)
+            if (!PredictionWindow.IsSupportedHorizon(context.Window.HorizonSeconds))
             {
-                return EmptyResult(context, "XGBoost prediction window exhausted.");
+                return EmptyResult(context, "XGBoost unsupported horizon; use 30, 60, 300 or 900 seconds.");
             }
 
-            var requestedSeconds = Mathf.Clamp(
-                futureFrames[futureFrames.Count - 1].ElapsedSeconds - context.CurrentFrame.ElapsedSeconds,
-                AnchorSeconds,
-                MaximumHorizonSeconds);
+            var targetTimes = context.Window.TargetElapsedSeconds;
+            var requestedSeconds = context.Window.HorizonSeconds;
             var anchorCount = Mathf.CeilToInt(requestedSeconds / AnchorSeconds);
             var anchors = new ForecastAnchor[anchorCount];
             for (var index = 0; index < anchorCount; index++)
@@ -76,29 +72,31 @@ namespace UnderwaterGliderTwin.Prediction
                 }
             }
 
-            var predictedPoints = new Vector3[futureFrames.Count];
-            var actualPoints = new Vector3[futureFrames.Count];
-            for (var index = 0; index < futureFrames.Count; index++)
+            var predictedPoints = new Vector3[targetTimes.Count];
+            var forecastFrames = new TelemetryFrame[targetTimes.Count];
+            var times = new float[targetTimes.Count];
+            for (var index = 0; index < targetTimes.Count; index++)
             {
-                var seconds = Mathf.Clamp(
-                    futureFrames[index].ElapsedSeconds - context.CurrentFrame.ElapsedSeconds,
-                    0f,
-                    requestedSeconds);
+                var seconds = targetTimes[index] - context.CurrentFrame.ElapsedSeconds;
                 var anchor = InterpolateAnchor(anchors, seconds);
-                predictedPoints[index] = context.Mapper.Map(CreateForecastFrame(context.CurrentFrame, anchor));
-                actualPoints[index] = context.Mapper.Map(futureFrames[index]);
+                times[index] = targetTimes[index];
+                forecastFrames[index] = CreateForecastFrame(context.CurrentFrame, anchor, times[index], index + 1);
+                predictedPoints[index] = context.Mapper.Map(forecastFrames[index]);
             }
 
             timer.Stop();
-            var metrics = ErrorEvaluator.Evaluate(predictedPoints, actualPoints, (float)timer.Elapsed.TotalMilliseconds);
+            // No unseen observations or retrospective error-derived confidence at publication.
+            var metrics = new PredictionMetrics(float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, (float)timer.Elapsed.TotalMilliseconds);
             return new PredictionResult(
                 GetName(),
-                "XGBoost validated hybrid forecast",
+                "XGBoost deployed + hold fallback; awaiting observations",
                 predictedPoints,
-                actualPoints,
-                context.Window.FutureStartIndex,
-                context.Window.FutureEndIndex,
-                metrics);
+                Array.Empty<Vector3>(),
+                context.Window.WindowEndIndex + 1,
+                context.Window.WindowEndIndex + targetTimes.Count,
+                metrics,
+                forecastFrames,
+                times);
         }
 
         public void Release()
@@ -156,15 +154,15 @@ namespace UnderwaterGliderTwin.Prediction
             return ForecastAnchor.Lerp(lower, upper, interpolation);
         }
 
-        private static TelemetryFrame CreateForecastFrame(TelemetryFrame current, ForecastAnchor anchor)
+        private static TelemetryFrame CreateForecastFrame(TelemetryFrame current, ForecastAnchor anchor, float targetSeconds, int rowOffset)
         {
             var longitudeScale = MetersPerDegreeLatitude * Mathf.Cos((float)(current.LatitudeDeg * Math.PI / 180.0));
             var longitude = current.LongitudeDeg + anchor.EastMeters / longitudeScale;
             var latitude = current.LatitudeDeg + anchor.NorthMeters / MetersPerDegreeLatitude;
             return new TelemetryFrame(
-                current.RowIndex,
-                current.RawTime,
-                current.ElapsedSeconds,
+                current.RowIndex + rowOffset,
+                "forecast",
+                targetSeconds,
                 longitude,
                 latitude,
                 current.DepthM + anchor.DepthDeltaM,

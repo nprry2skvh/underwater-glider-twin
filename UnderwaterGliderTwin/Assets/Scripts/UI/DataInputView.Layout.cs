@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 using UnityEngine.UI;
 using UnderwaterGliderTwin.Telemetry;
@@ -9,83 +8,47 @@ namespace UnderwaterGliderTwin.UI
     {
         private RectTransform bottomDrawerContent;
         private RectTransform bottomDrawerViewport;
-        private RectTransform configurationSummaryBar;
-        private RectTransform configurationExpandedContent;
         private ScrollRect bottomDrawerScrollRect;
         private Button bottomDrawerToggleButton;
         private bool bottomDrawerExpanded;
         private Canvas oceanCurrentModalCanvas;
-        private RectTransform oceanCurrentModalOverlay;
-        private RectTransform oceanCurrentDrawerParent;
         private bool bottomDrawerExpandedBeforeModal;
         private bool bottomDrawerExpandedBeforeFlightLeg;
         private const float ExpandedTaskDrawerHeight = 320f;
         private const float TaskParameterFieldWidth = 280f;
         private const float DrawerScrollSensitivity = 45f;
-
-        public bool ConfigurationExpandedForTests => bottomDrawerExpanded;
+        private const float FlightLegLayoutMargin = 24f;
+        private const float FlightLegLayoutGap = 28f;
+        private const float FlightLegMinimumWideFieldWidth = 220f;
+        private const float FlightLegNarrowFieldWidth = 320f;
+        private const float FlightLegWideDrawerHeight = 240f;
+        private const float FlightLegNarrowDrawerHeight = 340f;
 
         private void ConfigureResponsiveBottomDrawer(RectTransform drawer)
         {
-            if (drawer == null)
+            if (drawer == null || bottomDrawerContent != null)
             {
                 return;
             }
 
-            drawer.gameObject.SetActive(true);
             drawer.anchorMin = new Vector2(0f, 1f);
             drawer.anchorMax = new Vector2(1f, 1f);
             drawer.pivot = new Vector2(0.5f, 1f);
             drawer.anchoredPosition = new Vector2(0f, -UiFactory.CommandCenterHeaderHeight);
             drawer.sizeDelta = new Vector2(0f, 48f);
 
-            configurationSummaryBar = EnsureDrawerPanel(drawer, "ConfigurationSummaryBar", new Color(0.02f, 0.12f, 0.18f, 0.98f));
-            configurationSummaryBar.SetAsFirstSibling();
-            ConfigureRect(configurationSummaryBar, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(-16f, 44f));
-            var legacyHeader = EnsureDrawerPanel(configurationSummaryBar, "MissionConfigurationDrawerHeader", Color.clear);
-            ConfigureRect(legacyHeader, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            legacyHeader.GetComponent<Image>().raycastTarget = false;
-            EnsureDrawerText("MissionConfigurationDrawerLabel", configurationSummaryBar, "任务参数", 16, TextAnchor.MiddleLeft, UiFactory.CommandText, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(16f, 0f), new Vector2(180f, -8f));
-            bottomDrawerToggleButton = EnsureDrawerButton("MissionConfigurationDrawerToggleButton", configurationSummaryBar, "展开参数", new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(-12f, 0f), new Vector2(108f, 30f));
-            bottomDrawerToggleButton.onClick.RemoveListener(ToggleBottomDrawer);
+            var header = UiFactory.Panel("MissionConfigurationDrawerHeader", drawer, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(-16f, 44f), new Color(0.02f, 0.12f, 0.18f, 0.98f));
+            UiFactory.Text("MissionConfigurationDrawerLabel", header, "任务参数", 16, TextAnchor.MiddleLeft, UiFactory.CommandText, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(16f, 0f), new Vector2(180f, -8f));
+            bottomDrawerToggleButton = UiFactory.Button("MissionConfigurationDrawerToggleButton", header, "展开参数", new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(-12f, 0f), new Vector2(108f, 30f));
             bottomDrawerToggleButton.onClick.AddListener(ToggleBottomDrawer);
 
-            configurationExpandedContent = EnsureDrawerPanel(drawer, "ConfigurationExpandedContent", Color.clear);
-            configurationExpandedContent.SetSiblingIndex(Mathf.Min(1, drawer.childCount - 1));
-            ConfigureRect(configurationExpandedContent, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, Vector2.zero);
-            EnsureCanvasGroup(configurationExpandedContent.gameObject);
-            EnsureLayoutElement(configurationExpandedContent.gameObject);
-
-            bottomDrawerViewport = EnsureDrawerPanel(configurationExpandedContent, "ConfigurationScrollViewport", new Color(0f, 0f, 0f, 0.08f));
-            ConfigureRect(bottomDrawerViewport, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            bottomDrawerViewport = UiFactory.Panel("MissionConfigurationViewport", drawer, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.08f));
             bottomDrawerViewport.offsetMin = new Vector2(10f, 10f);
-            bottomDrawerViewport.offsetMax = new Vector2(-10f, -10f);
-            var legacyViewport = EnsureDrawerPanel(configurationExpandedContent, "MissionConfigurationViewport", Color.clear);
-            ConfigureRect(legacyViewport, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            legacyViewport.offsetMin = new Vector2(10f, 10f);
-            legacyViewport.offsetMax = new Vector2(-10f, -44f);
-            legacyViewport.SetAsFirstSibling();
-            var legacyViewportMask = legacyViewport.gameObject.GetComponent<Mask>();
-            if (legacyViewportMask == null)
-            {
-                legacyViewportMask = legacyViewport.gameObject.AddComponent<Mask>();
-            }
-            legacyViewportMask.showMaskGraphic = false;
-            legacyViewport.GetComponent<Image>().raycastTarget = false;
-            var viewportMask = bottomDrawerViewport.gameObject.GetComponent<Mask>();
-            if (viewportMask == null)
-            {
-                viewportMask = bottomDrawerViewport.gameObject.AddComponent<Mask>();
-            }
-            viewportMask.showMaskGraphic = false;
+            bottomDrawerViewport.offsetMax = new Vector2(-10f, -54f);
+            bottomDrawerViewport.gameObject.AddComponent<Mask>().showMaskGraphic = false;
             bottomDrawerViewport.GetComponent<Image>().raycastTarget = false;
-            bottomDrawerContent = EnsureDrawerPanel(bottomDrawerViewport, "MissionConfigurationContent", Color.clear);
-            ConfigureRect(bottomDrawerContent, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 0f));
-            var contentLayout = bottomDrawerContent.gameObject.GetComponent<VerticalLayoutGroup>();
-            if (contentLayout == null)
-            {
-                contentLayout = bottomDrawerContent.gameObject.AddComponent<VerticalLayoutGroup>();
-            }
+            bottomDrawerContent = UiFactory.Panel("MissionConfigurationContent", bottomDrawerViewport, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 0f), Color.clear);
+            var contentLayout = bottomDrawerContent.gameObject.AddComponent<VerticalLayoutGroup>();
             contentLayout.padding = new RectOffset(8, 8, 6, 8);
             contentLayout.spacing = 6f;
             contentLayout.childAlignment = TextAnchor.UpperLeft;
@@ -93,200 +56,62 @@ namespace UnderwaterGliderTwin.UI
             contentLayout.childControlHeight = true;
             contentLayout.childForceExpandWidth = true;
             contentLayout.childForceExpandHeight = false;
-            var fitter = bottomDrawerContent.gameObject.GetComponent<ContentSizeFitter>();
-            if (fitter == null)
-            {
-                fitter = bottomDrawerContent.gameObject.AddComponent<ContentSizeFitter>();
-            }
+            var fitter = bottomDrawerContent.gameObject.AddComponent<ContentSizeFitter>();
             fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            bottomDrawerScrollRect = configurationExpandedContent.gameObject.GetComponent<ScrollRect>();
-            if (bottomDrawerScrollRect == null)
-            {
-                bottomDrawerScrollRect = configurationExpandedContent.gameObject.AddComponent<ScrollRect>();
-            }
+            bottomDrawerScrollRect = drawer.gameObject.AddComponent<ScrollRect>();
             bottomDrawerScrollRect.viewport = bottomDrawerViewport;
             bottomDrawerScrollRect.content = bottomDrawerContent;
             bottomDrawerScrollRect.horizontal = false;
             bottomDrawerScrollRect.vertical = true;
             bottomDrawerScrollRect.movementType = ScrollRect.MovementType.Clamped;
             ConfigureFastDrawerScroll(bottomDrawerScrollRect);
-            DisableRootDrawerScroll(drawer);
 
-            var missionSection = bottomDrawerContent.Find("MissionSectionCard") as RectTransform
-                ?? CreateSectionCard("MissionSectionCard", "任务与预测", bottomDrawerContent);
-            var simulationSection = bottomDrawerContent.Find("SimulationSectionCard") as RectTransform
-                ?? CreateSectionCard("SimulationSectionCard", "仿真参数", bottomDrawerContent);
-            var oceanSection = bottomDrawerContent.Find("OceanSectionCard") as RectTransform
-                ?? CreateSectionCard("OceanSectionCard", "海流与航段", bottomDrawerContent);
+            var missionSection = CreateSectionCard("MissionSectionCard", "任务与预测", bottomDrawerContent);
+            var simulationSection = CreateSectionCard("SimulationSectionCard", "仿真参数", bottomDrawerContent);
+            var oceanSection = CreateSectionCard("OceanSectionCard", "海流与航段", bottomDrawerContent);
 
-            EnsureCompositeField(missionSection, "CsvSourceLabel", "CsvPathInput", "LoadCsvButton", "CsvPathField", true);
-            EnsureCompositeField(missionSection, "PredictionModelLabel", FindExistingModelButtonName(), null, "PredictionModelField", false);
-            EnsureCompositeField(missionSection, "PredictionHorizonLabel", "PredictionHorizonInput", "ApplyPredictionConfigButton", "PredictionHorizonField", false);
-            EnsureCompositeField(missionSection, null, "PredictionToggleButton", "PredictionRuntimeLabel", "PredictionRuntimeField", false);
+            CreateCompositeField(missionSection, "CsvSourceLabel", "CsvPathInput", "LoadCsvButton", "CsvPathField", true);
+            CreateCompositeField(missionSection, "PredictionModelLabel", FindExistingModelButtonName(), null, "PredictionModelField", false);
+            CreateCompositeField(missionSection, "PredictionHorizonLabel", "PredictionHorizonInput", "ApplyPredictionConfigButton", "PredictionHorizonField", false);
+            CreateCompositeField(missionSection, null, "PredictionToggleButton", "PredictionRuntimeLabel", "PredictionRuntimeField", false);
 
-                MoveToSection(simulationSection, "SimulationCyclesInputField");
-                MoveToSection(simulationSection, "SimulationDurationInputField");
-                MoveToSection(simulationSection, "SimulationDepthInputField");
-                MoveToSection(simulationSection, "SimulationWaterColumnInputField");
-                MoveToSection(simulationSection, "ReferenceCycleDurationLabel");
-                MoveToSection(simulationSection, "ReferenceCycleDurationReadout");
-                MoveToSection(simulationSection, "ApplyReferenceCycleButton");
-                MoveToSection(simulationSection, "SimulationHeadingInputField");
-                MoveToSection(simulationSection, "SimulationHeadingDeltaInputField");
-                MoveToSection(simulationSection, "SimulationPitchInputField");
-                MoveToSection(simulationSection, "SimulationRollInputField");
-                MoveToSection(simulationSection, "SimulationApplyButton");
-                MoveToSection(simulationSection, "FlightLegSettingsButton");
+            MoveToSection(simulationSection, "SimulationCyclesInputField");
+            MoveToSection(simulationSection, "SimulationDurationInputField");
+            MoveToSection(simulationSection, "SimulationDepthInputField");
+            MoveToSection(simulationSection, "SimulationWaterColumnInputField");
+            MoveToSection(simulationSection, "ReferenceCycleDurationLabel");
+            MoveToSection(simulationSection, "ReferenceCycleDurationReadout");
+            MoveToSection(simulationSection, "ApplyReferenceCycleButton");
+            MoveToSection(simulationSection, "SimulationHeadingInputField");
+            MoveToSection(simulationSection, "SimulationHeadingDeltaInputField");
+            MoveToSection(simulationSection, "SimulationPitchInputField");
+            MoveToSection(simulationSection, "SimulationRollInputField");
+            MoveToSection(simulationSection, "SimulationApplyButton");
+            MoveToSection(simulationSection, "FlightLegSettingsButton");
 
-                MoveToSection(oceanSection, "OceanCurrentMinDepthInputField");
-                MoveToSection(oceanSection, "OceanCurrentMaxDepthInputField");
-                MoveToSection(oceanSection, "OceanCurrentEastwardInputField");
-                MoveToSection(oceanSection, "OceanCurrentNorthwardInputField");
-                MoveToSection(oceanSection, "MissionLongitudeInputField");
-                MoveToSection(oceanSection, "MissionLatitudeInputField");
-                MoveToSection(oceanSection, "OceanCurrentPreviousLayerButton");
-                MoveToSection(oceanSection, "OceanCurrentNextLayerButton");
-                MoveToSection(oceanSection, "OceanCurrentAddLayerButton");
-                MoveToSection(oceanSection, "OceanCurrentSaveLayerButton");
-                MoveToSection(oceanSection, "OceanCurrentDeleteLayerButton");
-                MoveToSection(oceanSection, "OceanCurrentLookupButton");
-                MoveToSection(oceanSection, "OceanCurrentLayerSummary");
-                MoveToSection(oceanSection, "OceanCurrentDrawerButton");
+            MoveToSection(oceanSection, "OceanCurrentMinDepthInputField");
+            MoveToSection(oceanSection, "OceanCurrentMaxDepthInputField");
+            MoveToSection(oceanSection, "OceanCurrentEastwardInputField");
+            MoveToSection(oceanSection, "OceanCurrentNorthwardInputField");
+            MoveToSection(oceanSection, "MissionLongitudeInputField");
+            MoveToSection(oceanSection, "MissionLatitudeInputField");
+            MoveToSection(oceanSection, "OceanCurrentPreviousLayerButton");
+            MoveToSection(oceanSection, "OceanCurrentNextLayerButton");
+            MoveToSection(oceanSection, "OceanCurrentAddLayerButton");
+            MoveToSection(oceanSection, "OceanCurrentSaveLayerButton");
+            MoveToSection(oceanSection, "OceanCurrentDeleteLayerButton");
+            MoveToSection(oceanSection, "OceanCurrentLookupButton");
+            MoveToSection(oceanSection, "OceanCurrentLayerSummary");
+            MoveToSection(oceanSection, "OceanCurrentDrawerButton");
 
             HideLegacyTextChild("MissionConfigurationTitle");
-            HideLegacyTextChild("TitleText");
-            HideLegacyTextChild("ModelLabel");
             HideLegacyTextChild("SimulationLabel");
             HideLegacyTextChild("OceanCurrentLabel");
             MoveToSectionFooter(missionSection, "MissionConfigurationStatus");
             HideLegacyConfigurationGroups(drawer);
 
-            SetConfigurationExpanded(false);
-        }
-
-        private static RectTransform EnsureDrawerPanel(Transform parent, string name, Color color)
-        {
-            var existing = parent.Find(name) as RectTransform;
-            if (existing == null)
-            {
-                existing = UiFactory.Panel(name, parent, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, color);
-            }
-
-            var image = existing.GetComponent<Image>();
-            if (image == null)
-            {
-                image = existing.gameObject.AddComponent<Image>();
-            }
-            image.color = color;
-            return existing;
-        }
-
-        private static Text EnsureDrawerText(
-            string name,
-            Transform parent,
-            string text,
-            int fontSize,
-            TextAnchor alignment,
-            Color color,
-            Vector2 anchorMin,
-            Vector2 anchorMax,
-            Vector2 pivot,
-            Vector2 anchoredPosition,
-            Vector2 size)
-        {
-            var existing = parent.Find(name);
-            var label = existing != null ? existing.GetComponent<Text>() : null;
-            if (label == null)
-            {
-                label = UiFactory.Text(name, parent, text, fontSize, alignment, color, anchorMin, anchorMax, pivot, anchoredPosition, size);
-            }
-
-            label.text = text;
-            label.fontSize = fontSize;
-            label.alignment = alignment;
-            label.color = color;
-            ConfigureRect(label.transform as RectTransform, anchorMin, anchorMax, pivot, anchoredPosition, size);
-            return label;
-        }
-
-        private static Button EnsureDrawerButton(
-            string name,
-            Transform parent,
-            string text,
-            Vector2 anchorMin,
-            Vector2 anchorMax,
-            Vector2 pivot,
-            Vector2 anchoredPosition,
-            Vector2 size)
-        {
-            var existing = parent.Find(name);
-            var button = existing != null ? existing.GetComponent<Button>() : null;
-            if (button == null)
-            {
-                button = UiFactory.Button(name, parent, text, anchorMin, anchorMax, pivot, anchoredPosition, size);
-            }
-
-            UiFactory.SetButtonText(button, text);
-            ConfigureRect(button.transform as RectTransform, anchorMin, anchorMax, pivot, anchoredPosition, size);
-            return button;
-        }
-
-        private static void ConfigureRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 size)
-        {
-            if (rect == null)
-            {
-                return;
-            }
-
-            rect.anchorMin = anchorMin;
-            rect.anchorMax = anchorMax;
-            rect.pivot = pivot;
-            rect.anchoredPosition = anchoredPosition;
-            rect.sizeDelta = size;
-        }
-
-        private static CanvasGroup EnsureCanvasGroup(GameObject gameObject)
-        {
-            var group = gameObject.GetComponent<CanvasGroup>();
-            if (group == null)
-            {
-                group = gameObject.AddComponent<CanvasGroup>();
-            }
-
-            return group;
-        }
-
-        private static LayoutElement EnsureLayoutElement(GameObject gameObject)
-        {
-            var element = gameObject.GetComponent<LayoutElement>();
-            if (element == null)
-            {
-                element = gameObject.AddComponent<LayoutElement>();
-            }
-
-            return element;
-        }
-
-        private static void DisableRootDrawerScroll(RectTransform drawer)
-        {
-            if (drawer == null)
-            {
-                return;
-            }
-
-            var rootScroll = drawer.GetComponent<ScrollRect>();
-            if (rootScroll == null)
-            {
-                return;
-            }
-
-            rootScroll.StopMovement();
-            rootScroll.viewport = null;
-            rootScroll.content = null;
-            rootScroll.horizontal = false;
-            rootScroll.vertical = false;
-            rootScroll.enabled = false;
+            SetBottomDrawerExpanded(false);
         }
 
         private RectTransform CreateSectionCard(string name, string title, Transform parent)
@@ -330,16 +155,6 @@ namespace UnderwaterGliderTwin.UI
             }
 
             return null;
-        }
-
-        private void EnsureCompositeField(Transform section, string labelName, string controlName, string secondaryName, string wrapperName, bool fullWidth)
-        {
-            if (section == null || section.Find(wrapperName) != null)
-            {
-                return;
-            }
-
-            CreateCompositeField(section, labelName, controlName, secondaryName, wrapperName, fullWidth);
         }
 
         private void CreateCompositeField(Transform section, string labelName, string controlName, string secondaryName, string wrapperName, bool fullWidth)
@@ -395,101 +210,9 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            if (RequiresLegacyFieldWrapper(child, childName))
-            {
-                var wrapper = EnsureLegacyFieldWrapper(fields, childName, GetLegacyFieldLabel(childName));
-                SafeSetParent(child, wrapper);
-                NormalizeLayoutChild(child, 28f);
-                return;
-            }
-
-            SafeSetParent(child, fields);
+            child.SetParent(fields, false);
             NormalizeLayoutChild(child);
             NormalizeFieldCard(child);
-            SetLegacyButtonLabel(child, childName);
-        }
-
-        private static bool RequiresLegacyFieldWrapper(RectTransform child, string childName)
-        {
-            return child != null
-                && (child.GetComponent<InputField>() != null
-                    || (childName == "ReferenceCycleDurationReadout" && child.GetComponent<Text>() != null));
-        }
-
-        private static RectTransform EnsureLegacyFieldWrapper(Transform fields, string childName, string labelText)
-        {
-            var wrapperName = childName + "Field";
-            var wrapper = fields.Find(wrapperName) as RectTransform;
-            if (wrapper != null && wrapper.GetComponent<InputField>() != null)
-            {
-                wrapper = null;
-            }
-            if (wrapper == null)
-            {
-                wrapper = UiFactory.Panel(wrapperName, fields, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.04f, 0.18f, 0.24f, 0.8f));
-            }
-
-            var layout = wrapper.GetComponent<VerticalLayoutGroup>() ?? wrapper.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(8, 8, 5, 5);
-            layout.spacing = 3f;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = false;
-            var element = wrapper.GetComponent<LayoutElement>() ?? wrapper.gameObject.AddComponent<LayoutElement>();
-            element.minWidth = TaskParameterFieldWidth;
-            element.preferredHeight = 62f;
-
-            var labelName = wrapperName + "Label";
-            var label = wrapper.Find(labelName)?.GetComponent<Text>();
-            if (label == null)
-            {
-                label = UiFactory.Text(labelName, wrapper, labelText, 12, TextAnchor.MiddleLeft, UiFactory.CommandText,
-                    Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-                var labelElement = label.gameObject.AddComponent<LayoutElement>();
-                labelElement.preferredHeight = 18f;
-                labelElement.minHeight = 18f;
-                labelElement.flexibleWidth = 1f;
-            }
-
-            return wrapper;
-        }
-
-        private static string GetLegacyFieldLabel(string childName)
-        {
-            switch (childName)
-            {
-                case "SimulationCyclesInputField": return "循环次数";
-                case "SimulationDurationInputField": return "单航段安全上限 (s)";
-                case "SimulationDepthInputField": return "深度 (m)";
-                case "SimulationWaterColumnInputField": return "水柱 (m)";
-                case "SimulationHeadingInputField": return "航向 (°)";
-                case "SimulationHeadingDeltaInputField": return "转向 (°)";
-                case "SimulationPitchInputField": return "默认俯仰 (°)";
-                case "SimulationRollInputField": return "默认横滚 (°)";
-                case "ReferenceCycleDurationReadout": return "航段安全参考";
-                case "OceanCurrentMinDepthInputField": return "最小 (m)";
-                case "OceanCurrentMaxDepthInputField": return "最大 (m)";
-                case "OceanCurrentEastwardInputField": return "东流 (m/s)";
-                case "OceanCurrentNorthwardInputField": return "北流 (m/s)";
-                case "MissionLongitudeInputField": return "经度 (°)";
-                case "MissionLatitudeInputField": return "纬度 (°)";
-                default: return childName;
-            }
-        }
-
-        private static void SetLegacyButtonLabel(RectTransform child, string childName)
-        {
-            if (childName != "ApplyReferenceCycleButton")
-            {
-                return;
-            }
-
-            var button = child.GetComponent<Button>();
-            if (button != null)
-            {
-                UiFactory.SetButtonText(button, "采用参考");
-            }
         }
 
         private void MoveToSectionFooter(Transform section, string childName)
@@ -500,14 +223,20 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            // Keep the asynchronous status line in the mission card's own layout so
-            // it follows the mission fields instead of overlapping them at a fixed
-            // position in the expanded drawer.
-            SafeSetParent(child, section);
+            // Keep the asynchronous status line on its own row.  Placing it in the
+            // mission card lets the flexible grid reuse the same slot as the ocean
+            // configuration controls at narrow resolutions, which causes text and
+            // buttons to overlap.  It is still a child of the configuration panel
+            // so existing lookup names and event wiring remain unchanged.
+            child.SetParent(configurationPanel, false);
             child.SetAsLastSibling();
-            NormalizeLayoutChild(child, 44f);
-            var layoutElement = child.gameObject.GetComponent<LayoutElement>();
-            layoutElement.ignoreLayout = false;
+            child.anchorMin = new Vector2(0f, 1f);
+            child.anchorMax = new Vector2(0f, 1f);
+            child.pivot = new Vector2(0f, 0.5f);
+            child.anchoredPosition = new Vector2(18f, -250f);
+            child.sizeDelta = new Vector2(900f, 22f);
+            var layoutElement = child.gameObject.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
+            layoutElement.ignoreLayout = true;
             var text = child.GetComponent<Text>();
             if (text != null)
             {
@@ -518,10 +247,6 @@ namespace UnderwaterGliderTwin.UI
         private void HideLegacyTextChild(string childName)
         {
             var child = FindDirectChild(childName);
-            if (child == null && configurationExpandedContent != null)
-            {
-                child = configurationExpandedContent.Find(childName) as RectTransform;
-            }
             if (child == null)
             {
                 return;
@@ -533,13 +258,9 @@ namespace UnderwaterGliderTwin.UI
                 var color = text.color;
                 color.a = 0f;
                 text.color = color;
-                text.canvasRenderer.SetAlpha(0f);
             }
 
-            if (configurationExpandedContent == null || !child.IsChildOf(configurationExpandedContent))
-            {
-                SafeSetParent(child, bottomDrawerContent);
-            }
+            child.SetParent(bottomDrawerContent, false);
             var element = child.gameObject.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
             element.ignoreLayout = true;
             child.sizeDelta = Vector2.zero;
@@ -553,81 +274,15 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            SafeSetParent(child, parent);
-            NormalizeLayoutChild(child, preferredHeight);
-        }
-
-        private static bool SafeSetParent(RectTransform child, Transform parent)
-        {
-            if (child == null || parent == null || child.parent == parent)
-            {
-                return child != null && parent != null;
-            }
-#if UNITY_EDITOR
-            if (!Application.isPlaying && UnityEditor.PrefabUtility.IsPartOfPrefabInstance(child))
-            {
-                return false;
-            }
-#endif
             child.SetParent(parent, false);
-            return true;
+            NormalizeLayoutChild(child, preferredHeight);
         }
 
         private RectTransform FindDirectChild(string childName)
         {
-            if (string.IsNullOrWhiteSpace(childName) || configurationPanel == null)
-            {
-                return null;
-            }
-
-            var directChild = configurationPanel.Find(childName) as RectTransform;
-            if (directChild != null)
-            {
-                return directChild;
-            }
-
-            foreach (var alias in GetPrefabChildAliases(childName))
-            {
-                directChild = configurationPanel.Find(alias) as RectTransform;
-                if (directChild != null)
-                {
-                    return directChild;
-                }
-            }
-
-            return null;
-        }
-
-        private static string[] GetPrefabChildAliases(string childName)
-        {
-            switch (childName)
-            {
-                case "PredictionModelLabel": return new[] { "ModelLabel" };
-                case "SimulationCyclesInputField": return new[] { "SimulationCyclesInput" };
-                case "SimulationDurationInputField": return new[] { "SimulationDurationInput" };
-                case "SimulationDepthInputField": return new[] { "SimulationDepthInput", "TargetDepthInput" };
-                case "SimulationWaterColumnInputField": return new[] { "SimulationWaterColumnInput", "WaterColumnDepthInput" };
-                case "SimulationHeadingInputField": return new[] { "SimulationHeadingInput", "HeadingInput" };
-                case "SimulationHeadingDeltaInputField": return new[] { "SimulationHeadingDeltaInput", "HeadingDeltaInput" };
-                case "SimulationPitchInputField": return new[] { "SimulationPitchInput", "PitchInput" };
-                case "SimulationRollInputField": return new[] { "SimulationRollInput", "RollInput" };
-                case "ReferenceCycleDurationReadout": return new[] { "ReferenceCycleDurationValue" };
-                case "OceanCurrentMinDepthInputField": return new[] { "MinDepthInput" };
-                case "OceanCurrentMaxDepthInputField": return new[] { "MaxDepthInput" };
-                case "OceanCurrentEastwardInputField": return new[] { "EastwardInput" };
-                case "OceanCurrentNorthwardInputField": return new[] { "NorthwardInput" };
-                case "MissionLongitudeInputField": return new[] { "MissionLongitudeInput" };
-                case "MissionLatitudeInputField": return new[] { "MissionLatitudeInput" };
-                case "OceanCurrentPreviousLayerButton": return new[] { "PreviousLayerButton" };
-                case "OceanCurrentNextLayerButton": return new[] { "NextLayerButton" };
-                case "OceanCurrentAddLayerButton": return new[] { "AddLayerButton" };
-                case "OceanCurrentSaveLayerButton": return new[] { "SaveLayerButton" };
-                case "OceanCurrentDeleteLayerButton": return new[] { "DeleteLayerButton", "RemoveButton" };
-                case "OceanCurrentLookupButton": return new[] { "LookupButton" };
-                case "OceanCurrentLayerSummary": return new[] { "LayerSummaryText" };
-                case "OceanCurrentDrawerButton": return new[] { "DrawerButton" };
-                default: return Array.Empty<string>();
-            }
+            return string.IsNullOrWhiteSpace(childName) || configurationPanel == null
+                ? null
+                : configurationPanel.Find(childName) as RectTransform;
         }
 
         private static void NormalizeLayoutChild(RectTransform child, float preferredHeight = 54f)
@@ -760,53 +415,28 @@ namespace UnderwaterGliderTwin.UI
             }
 
             var main = mainCanvas != null ? mainCanvas.GetComponent<Canvas>() : null;
-            if (main == null || mainCanvas == null)
-            {
-                return null;
-            }
+            var modalObject = new GameObject("OceanCurrentModalCanvas");
+            modalObject.transform.SetParent(mainCanvas, false);
+            var modalRect = modalObject.AddComponent<RectTransform>();
+            var mainRect = mainCanvas as RectTransform;
+            var modalSize = mainRect != null && mainRect.rect.width > 0f && mainRect.rect.height > 0f
+                ? mainRect.rect.size
+                : new Vector2(1920f, 1080f);
+            modalRect.anchorMin = new Vector2(0.5f, 0.5f);
+            modalRect.anchorMax = new Vector2(0.5f, 0.5f);
+            modalRect.pivot = new Vector2(0.5f, 0.5f);
+            modalRect.anchoredPosition = Vector2.zero;
+            modalRect.sizeDelta = modalSize;
+            oceanCurrentModalCanvas = modalObject.AddComponent<Canvas>();
+            oceanCurrentModalCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            oceanCurrentModalCanvas.overrideSorting = true;
+            oceanCurrentModalCanvas.sortingOrder = (main != null ? main.sortingOrder : 10) + 20;
+            modalObject.AddComponent<GraphicRaycaster>();
 
-            var modalRoot = mainCanvas.Find("ModalRoot") as RectTransform;
-            if (modalRoot == null)
-            {
-                modalRoot = new GameObject("ModalRoot", typeof(RectTransform)).GetComponent<RectTransform>();
-                modalRoot.SetParent(mainCanvas, false);
-                modalRoot.anchorMin = Vector2.zero;
-                modalRoot.anchorMax = Vector2.one;
-                modalRoot.offsetMin = Vector2.zero;
-                modalRoot.offsetMax = Vector2.zero;
-            }
-
-            oceanCurrentModalOverlay = modalRoot.Find("OceanCurrentModalCanvas") as RectTransform;
-            if (oceanCurrentModalOverlay == null)
-            {
-                var overlayObject = new GameObject("OceanCurrentModalCanvas", typeof(RectTransform));
-                overlayObject.transform.SetParent(modalRoot, false);
-                oceanCurrentModalOverlay = overlayObject.GetComponent<RectTransform>();
-            }
-
-            oceanCurrentModalOverlay.anchorMin = Vector2.zero;
-            oceanCurrentModalOverlay.anchorMax = Vector2.one;
-            oceanCurrentModalOverlay.offsetMin = Vector2.zero;
-            oceanCurrentModalOverlay.offsetMax = Vector2.zero;
-
-            var blockerRect = oceanCurrentModalOverlay.Find("OceanCurrentModalRaycastBlocker") as RectTransform;
-            if (blockerRect == null)
-            {
-                var blockerObject = new GameObject("OceanCurrentModalRaycastBlocker", typeof(RectTransform), typeof(Image));
-                blockerObject.transform.SetParent(oceanCurrentModalOverlay, false);
-                blockerRect = blockerObject.GetComponent<RectTransform>();
-            }
-
-            blockerRect.anchorMin = Vector2.zero;
-            blockerRect.anchorMax = Vector2.one;
-            blockerRect.offsetMin = Vector2.zero;
-            blockerRect.offsetMax = Vector2.zero;
-            var blocker = blockerRect.GetComponent<Image>();
-            blocker.color = new Color(0f, 0f, 0f, 0.18f);
-            blocker.raycastTarget = true;
-            oceanCurrentDrawerParent = oceanCurrentModalOverlay;
-            oceanCurrentModalOverlay.gameObject.SetActive(false);
-            oceanCurrentModalCanvas = main;
+            var blocker = UiFactory.Panel("OceanCurrentModalRaycastBlocker", modalObject.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.18f));
+            blocker.GetComponent<Image>().raycastTarget = true;
+            blocker.SetAsFirstSibling();
+            modalObject.SetActive(false);
             return oceanCurrentModalCanvas;
         }
 
@@ -815,86 +445,21 @@ namespace UnderwaterGliderTwin.UI
             SetBottomDrawerExpanded(!bottomDrawerExpanded);
         }
 
-        public void ToggleAdvancedConfiguration()
-        {
-            ToggleBottomDrawer();
-        }
-
-        public void SetConfigurationExpanded(bool expanded)
+        private void SetBottomDrawerExpanded(bool expanded)
         {
             bottomDrawerExpanded = expanded;
-            ApplyConfigurationAreaHeight(expanded);
-            if (configurationExpandedContent == null)
+            var drawer = bottomDrawerContent != null ? bottomDrawerContent.parent?.parent as RectTransform : null;
+            if (drawer == null)
             {
                 return;
             }
 
-            var expandedHeight = Mathf.Max(0f, ExpandedTaskDrawerHeight - 48f);
-            var group = EnsureCanvasGroup(configurationExpandedContent.gameObject);
-            group.alpha = expanded ? 1f : 0f;
-            group.interactable = expanded;
-            group.blocksRaycasts = expanded;
-
-            var contentElement = EnsureLayoutElement(configurationExpandedContent.gameObject);
-            contentElement.minHeight = expanded ? expandedHeight : 0f;
-            contentElement.preferredHeight = expanded ? expandedHeight : 0f;
-            contentElement.flexibleHeight = 0f;
-            configurationExpandedContent.sizeDelta = new Vector2(0f, expanded ? expandedHeight : 0f);
-
-            var drawer = configurationPanel;
-            if (drawer != null)
-            {
-                drawer.sizeDelta = new Vector2(0f, expanded ? ExpandedTaskDrawerHeight : 48f);
-                var drawerElement = EnsureLayoutElement(drawer.gameObject);
-                drawerElement.minHeight = expanded ? ExpandedTaskDrawerHeight : 48f;
-                drawerElement.preferredHeight = expanded ? ExpandedTaskDrawerHeight : 48f;
-            }
-
+            // CanvasScaler makes this 35% at both 1280x720 and 1920x1080.
+            drawer.sizeDelta = new Vector2(0f, expanded ? ExpandedTaskDrawerHeight : 48f);
             if (bottomDrawerToggleButton != null)
             {
                 UiFactory.SetButtonText(bottomDrawerToggleButton, expanded ? "收起参数" : "展开参数");
-                bottomDrawerToggleButton.transform.SetAsLastSibling();
             }
-
-            if (configurationSummaryBar != null)
-            {
-                configurationSummaryBar.SetAsLastSibling();
-            }
-        }
-
-        private void ApplyConfigurationAreaHeight(bool expanded)
-        {
-            var canvas = configurationPanel != null ? configurationPanel.GetComponentInParent<Canvas>() : null;
-            canvas = canvas ?? legacyCanvas ?? GetComponentInParent<Canvas>();
-            var uiRoot = canvas != null ? canvas.transform.Find("UiRoot") : null;
-            var configurationArea = uiRoot != null ? uiRoot.Find("ConfigurationArea") as RectTransform : null;
-            var mainBody = uiRoot != null ? uiRoot.Find("MainBody") as RectTransform : null;
-            if (configurationArea == null || mainBody == null)
-            {
-                return;
-            }
-
-            var configurationHeight = expanded
-                ? UiFactory.CommandCenterConfigurationAreaHeight
-                : UiFactory.CommandCenterCollapsedConfigurationAreaHeight;
-            configurationArea.sizeDelta = new Vector2(configurationArea.sizeDelta.x, configurationHeight);
-
-            var configurationElement = configurationArea.GetComponent<LayoutElement>();
-            if (configurationElement != null)
-            {
-                configurationElement.ignoreLayout = true;
-                configurationElement.minHeight = configurationHeight;
-                configurationElement.preferredHeight = configurationHeight;
-            }
-
-            mainBody.offsetMin = new Vector2(
-                mainBody.offsetMin.x,
-                configurationArea.anchoredPosition.y + configurationHeight);
-        }
-
-        private void SetBottomDrawerExpanded(bool expanded)
-        {
-            SetConfigurationExpanded(expanded);
         }
 
         private void OnActiveRuntimeSessionChanged(SimulationRuntimeSession session)
@@ -943,8 +508,11 @@ namespace UnderwaterGliderTwin.UI
             drawer.anchoredPosition = Vector2.zero;
             drawer.sizeDelta = new Vector2(modalWidth, modalHeight);
 
-            if (drawer.Find("EditorViewport") != null)
+            var existingViewport = drawer.Find("EditorViewport");
+            if (existingViewport != null)
             {
+                var existingContent = existingViewport.Find("EditorContent") as RectTransform;
+                ConfigureFlightLegLayout(existingContent, existingContent != null ? existingContent.rect.width : drawer.rect.width + 16f);
                 return;
             }
 
@@ -1056,13 +624,20 @@ namespace UnderwaterGliderTwin.UI
             drawer.anchorMin = new Vector2(0f, 0f);
             drawer.anchorMax = new Vector2(1f, 0f);
             drawer.pivot = new Vector2(0.5f, 0f);
-            drawer.anchoredPosition = new Vector2(0f, UiFactory.CommandCenterOperationsTopOffset);
+            drawer.anchoredPosition = new Vector2(0f, UiFactory.CommandCenterOperationsTopOffset + 30f);
             drawer.sizeDelta = new Vector2(-24f, 48f);
             var heightLimiter = drawer.gameObject.GetComponent<DrawerHeightLimiter>() ?? drawer.gameObject.AddComponent<DrawerHeightLimiter>();
             heightLimiter.Apply();
 
-            if (drawer.Find("EditorViewport") != null)
+            var existingInlineViewport = drawer.Find("EditorViewport");
+            if (existingInlineViewport != null)
             {
+                var existingContent = existingInlineViewport.Find("EditorContent") as RectTransform;
+                if (drawer.name == "FlightLegDrawerPanel")
+                {
+                    ConfigureFlightLegLayout(existingContent, existingContent != null ? existingContent.rect.width : drawer.rect.width + 16f);
+                    heightLimiter.Apply();
+                }
                 return;
             }
 
@@ -1093,10 +668,15 @@ namespace UnderwaterGliderTwin.UI
             var contentWidth = drawer.name == "FlightLegDrawerPanel"
                 ? drawer.rect.width + 16f
                 : Mathf.Min(760f, availableWidth);
-                content.sizeDelta = new Vector2(contentWidth, drawer.name == "FlightLegDrawerPanel" ? 350f : 620f);
+            content.sizeDelta = new Vector2(contentWidth, drawer.name == "FlightLegDrawerPanel" ? 350f : 620f);
             foreach (var child in existingChildren)
             {
                 child.SetParent(content, false);
+            }
+            if (drawer.name == "FlightLegDrawerPanel")
+            {
+                ConfigureFlightLegLayout(content, contentWidth);
+                heightLimiter.Apply();
             }
             var scroll = drawer.gameObject.GetComponent<ScrollRect>() ?? drawer.gameObject.AddComponent<ScrollRect>();
             scroll.viewport = viewport;
@@ -1105,6 +685,57 @@ namespace UnderwaterGliderTwin.UI
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
             ConfigureFastDrawerScroll(scroll);
+        }
+
+        private static void ConfigureFlightLegLayout(RectTransform content, float contentWidth)
+        {
+            if (content == null)
+            {
+                return;
+            }
+
+            var available = Mathf.Max(0f, contentWidth - FlightLegLayoutMargin * 2f);
+            var wideFieldWidth = (available - FlightLegLayoutGap * 5f) / 6f;
+            var wide = wideFieldWidth >= FlightLegMinimumWideFieldWidth;
+            var fieldWidth = wide
+                ? wideFieldWidth
+                : Mathf.Min(FlightLegNarrowFieldWidth, (available - FlightLegLayoutGap * 2f) / 3f);
+            fieldWidth = Mathf.Max(180f, fieldWidth);
+            var groupWidth = fieldWidth * 3f + FlightLegLayoutGap * 2f;
+            var ascentX = wide ? FlightLegLayoutMargin + groupWidth + FlightLegLayoutGap : FlightLegLayoutMargin;
+            var ascentTitleY = wide ? -70f : -190f;
+            var ascentFieldY = wide ? -104f : -224f;
+            var contentHeight = wide ? 220f : 340f;
+
+            SetFlightLegElement(content, "DescentLegTitle", FlightLegLayoutMargin, -70f, groupWidth, 24f);
+            SetFlightLegElement(content, "AscentLegTitle", ascentX, ascentTitleY, groupWidth, 24f);
+            SetFlightLegElement(content, "FlightLegDrawerStatus", FlightLegLayoutMargin, wide ? -176f : -296f, available, 24f);
+
+            var descentNames = new[] { "DescentNetBuoyancyInputField", "DescentPitchInputField", "DescentRollInputField" };
+            var ascentNames = new[] { "AscentNetBuoyancyInputField", "AscentPitchInputField", "AscentRollInputField" };
+            for (var index = 0; index < 3; index++)
+            {
+                var x = FlightLegLayoutMargin + index * (fieldWidth + FlightLegLayoutGap);
+                SetFlightLegElement(content, descentNames[index], x, -104f, fieldWidth, 48f);
+                SetFlightLegElement(content, ascentNames[index], ascentX + index * (fieldWidth + FlightLegLayoutGap), ascentFieldY, fieldWidth, 48f);
+            }
+
+            content.sizeDelta = new Vector2(contentWidth, contentHeight);
+        }
+
+        private static void SetFlightLegElement(RectTransform content, string childName, float x, float y, float width, float height)
+        {
+            var child = content.Find(childName) as RectTransform;
+            if (child == null)
+            {
+                return;
+            }
+
+            child.anchorMin = new Vector2(0f, 1f);
+            child.anchorMax = new Vector2(0f, 1f);
+            child.pivot = new Vector2(0f, 1f);
+            child.anchoredPosition = new Vector2(x, y);
+            child.sizeDelta = new Vector2(width, height);
         }
 
         private void ConfigureBoundParameterDrawerScrolling()
@@ -1170,7 +801,17 @@ namespace UnderwaterGliderTwin.UI
                 {
                     return;
                 }
-                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, Mathf.Min(canvasRect.rect.height, 1080f) * 0.35f);
+                var maximumHeight = Mathf.Min(canvasRect.rect.height, 1080f) * 0.35f;
+                var height = maximumHeight;
+                if (rect.name == "FlightLegDrawerPanel")
+                {
+                    var content = rect.Find("EditorViewport/EditorContent") as RectTransform;
+                    var isWide = content != null && content.rect.width >= FlightLegMinimumWideFieldWidth * 6f + FlightLegLayoutGap * 5f + FlightLegLayoutMargin * 2f;
+                    height = isWide ? FlightLegWideDrawerHeight : FlightLegNarrowDrawerHeight;
+                    height = Mathf.Min(height, maximumHeight);
+                }
+
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
             }
         }
 
@@ -1202,6 +843,9 @@ namespace UnderwaterGliderTwin.UI
         private const float FixedCardWidth = 280f;
         private const float HorizontalGap = 8f;
         private const float VerticalGap = 4f;
+        private const int WideColumnCount = 6;
+        private const int MediumColumnCount = 5;
+        private const int StandardColumnCount = 4;
         private GridLayoutGroup grid;
         private ContentSizeFitter fitter;
 
@@ -1235,17 +879,21 @@ namespace UnderwaterGliderTwin.UI
             }
 
             var available = Mathf.Max(0f, width - grid.padding.horizontal);
-            var columns = available > FixedCardWidth * 4f + HorizontalGap * 3f
-                ? 4
-                : available > FixedCardWidth * 3f + HorizontalGap * 2f
-                    ? 3
-                    : available >= FixedCardWidth * 2f + HorizontalGap
-                        ? 2
-                        : 1;
+            var columns = available >= FixedCardWidth * WideColumnCount + HorizontalGap * (WideColumnCount - 1)
+                ? WideColumnCount
+                : available >= FixedCardWidth * MediumColumnCount + HorizontalGap * (MediumColumnCount - 1)
+                    ? MediumColumnCount
+                    : available >= FixedCardWidth * StandardColumnCount + HorizontalGap * (StandardColumnCount - 1)
+                        ? StandardColumnCount
+                        : available >= FixedCardWidth * 3f + HorizontalGap * 2f
+                            ? 3
+                            : available >= FixedCardWidth * 2f + HorizontalGap
+                                ? 2
+                                : 1;
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = columns;
             grid.spacing = new Vector2(HorizontalGap, VerticalGap);
-            grid.cellSize = new Vector2(FixedCardWidth, 62f);
+            grid.cellSize = new Vector2(FixedCardWidth, 54f);
             if (fitter != null)
             {
                 fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;

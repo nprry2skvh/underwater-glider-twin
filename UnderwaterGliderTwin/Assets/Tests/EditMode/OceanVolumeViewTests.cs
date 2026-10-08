@@ -67,8 +67,15 @@ namespace UnderwaterGliderTwin.Tests
         [Test]
         public void CalculateVisualDepthScale_CompressesDeepMissionsToAReadableVolume()
         {
-            Assert.That(OceanVolumeView.CalculateVisualDepthScale(1600f, 0.05f), Is.EqualTo(0.02f).Within(0.0001f));
-            Assert.That(OceanVolumeView.CalculateVisualDepthScale(160f, 0.05f), Is.EqualTo(0.05f).Within(0.0001f));
+            Assert.That(OceanVolumeView.CalculateVisualDepthScale(1600f, 0.05f), Is.EqualTo(0.03f).Within(0.0001f));
+            Assert.That(OceanVolumeView.CalculateVisualDepthScale(160f, 0.05f), Is.EqualTo(0.075f).Within(0.0001f));
+        }
+
+        [Test]
+        public void WaterVolumeSurface_UsesADeeperAndMoreTransparentPresentation()
+        {
+            Assert.That(OceanVolumeView.CalculateVisualVolumeDepth(100f, 0.075f), Is.EqualTo(7.5f).Within(0.001f));
+            Assert.That(OceanVolumeView.WaterFloorColor.a, Is.LessThanOrEqualTo(0.35f));
         }
 
         [Test]

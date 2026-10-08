@@ -1,6 +1,5 @@
 using UnityEngine;
 using UnityEngine.UI;
-using System.Collections.Generic;
 using UnderwaterGliderTwin.Bootstrap;
 using UnderwaterGliderTwin.Logging;
 using UnderwaterGliderTwin.Playback;
@@ -12,6 +11,8 @@ namespace UnderwaterGliderTwin.UI
     public sealed class StatusPanelView : MonoBehaviour
     {
         private const float MinUiUpdateIntervalSeconds = 1f / 15f;
+        private const float CompactStatusPanelHeight = 620f;
+        private const float StatusPanelTopOffset = 114f;
         private PlaybackController playback;
         private PredictionController prediction;
         private AlarmEvaluator alarmEvaluator;
@@ -36,12 +37,35 @@ namespace UnderwaterGliderTwin.UI
         private Text engineeringValidationValue;
         private Text alarmValue;
         private Text missionHealthValue;
-        private UiStateBadge missionHealthBadge;
+        private Text depthValue;
+        private Text headingValue;
+        private Text pitchValue;
+        private Text rollValue;
+        private Text eastSpeedValue;
+        private Text northSpeedValue;
+        private Text verticalSpeedValue;
+        private Text waterSpeedValue;
+        private Text groundSpeedValue;
+        private Text currentSpeedValue;
+        private Text elapsedValue;
+        private Text netBuoyancyValue;
+        private Text energyValue;
+        private Text sideSlipValue;
+        private Text angleOfAttackValue;
+        private Text liftValue;
+        private Text dragValue;
+        private Text sideForceValue;
+        private Text angularRateValue;
+        private Text pistonValue;
+        private Text actuatorPowerValue;
         private string lastAlarmMessage;
-        private readonly List<GameObject> predictionMetricRows = new List<GameObject>();
-        private readonly List<Text> predictionMetricUnits = new List<Text>();
         private bool minimalBoundReferences;
-        private RectTransform panel;
+
+        public static float CalculateStatusPanelHeight(float canvasHeight)
+        {
+            var availableHeight = Mathf.Max(0f, canvasHeight - StatusPanelTopOffset - UiFactory.CommandCenterOperationsTopOffset);
+            return Mathf.Min(CompactStatusPanelHeight, availableHeight);
+        }
 
         [System.Obsolete("Use Bind(...) with editable UI references.")]
         public void Initialize(PlaybackController playbackController, AlarmEvaluator evaluator, TwinLogger twinLogger, PredictionController predictionController)
@@ -55,46 +79,85 @@ namespace UnderwaterGliderTwin.UI
             var canvas = UiFactory.EnsureCanvas(transform);
             var canvasRect = canvas.transform as RectTransform;
             var canvasHeight = canvasRect != null && canvasRect.rect.height > 0f ? canvasRect.rect.height : 1080f;
-            var panelHeight = Mathf.Max(420f, canvasHeight - UiFactory.CommandCenterContentTopOffset - UiFactory.CommandCenterOperationsTopOffset);
-            panel = UiFactory.CommandPanel("MissionStatusPanel", canvas.transform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -UiFactory.CommandCenterContentTopOffset), new Vector2(352f, panelHeight));
+            var panelHeight = CalculateStatusPanelHeight(canvasHeight);
+            var panel = UiFactory.CommandPanel("MissionStatusPanel", canvas.transform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -StatusPanelTopOffset), new Vector2(440f, panelHeight));
             UiFactory.Text("MissionStatusTitle", panel, "任务状态", 18, TextAnchor.MiddleLeft, new Color(0.92f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -20f), new Vector2(220f, 28f));
             var healthBadge = UiFactory.Panel("MissionHealthBadge", panel, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-16f, -20f), new Vector2(118f, 28f), new Color(0.02f, 0.28f, 0.22f, 0.96f));
             missionHealthValue = UiFactory.Text("MissionHealthBadgeValue", healthBadge, "正常", 12, TextAnchor.MiddleCenter, Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(106f, 22f));
-            EnsureHealthBadge(healthBadge);
 
-            missionValue = AddRow(panel, "任务来源", "MissionValue", 62f);
-            modeValue = AddRow(panel, "工作模式", "ModeValue", 94f);
-            stateValue = AddRow(panel, "运行状态", "StateValue", 126f);
-            segmentValue = AddRow(panel, "当前航段", "CurrentSegmentValue", 158f);
-            remainingDistanceValue = AddRow(panel, "剩余距离", "RemainingDistanceValue", 230f);
-            etaValue = AddRow(panel, "预计时间", "EtaValue", 262f);
-            predictionStatusValue = AddRow(panel, "预测状态", "PredictionStatusValue", 294f);
-            batteryValue = AddRow(panel, "剩余电量", "RemainingBatteryValue", 326f);
-            driftValue = AddRow(panel, "漂移", "DriftValue", 358f);
-            rmseValue = AddRow(panel, "均方根误差", "RmseValue", 390f);
-            maeValue = AddRow(panel, "平均绝对误差", "MaeValue", 422f);
-            confidenceValue = AddRow(panel, "置信度", "ConfidenceValue", 454f);
-            predictionTimeValue = AddRow(panel, "预测耗时", "PredictionTimeValue", 486f);
-            engineeringValidationValue = AddRow(panel, "工程校核", "EngineeringValidationValue", 518f);
-            predictionMetricRows.Clear();
-            predictionMetricUnits.Clear();
-            RegisterPredictionMetric(panel, "漂移Label", driftValue);
-            RegisterPredictionMetric(panel, "均方根误差Label", rmseValue);
-            RegisterPredictionMetric(panel, "平均绝对误差Label", maeValue);
-            RegisterPredictionMetric(panel, "置信度Label", confidenceValue);
-            RegisterPredictionMetric(panel, "预测耗时Label", predictionTimeValue);
+            UiFactory.Text("MissionProgressLabel", panel, "任务进度", 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.97f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -59f), new Vector2(116f, 20f));
+            progressFill = UiFactory.ProgressBar("MissionProgressBar", panel, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -82f), new Vector2(408f, 14f));
 
-            UiFactory.Text("MissionProgressLabel", panel, "任务进度", 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.97f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -190f), new Vector2(116f, 20f));
-            progressFill = UiFactory.ProgressBar("MissionProgressBar", panel, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -214f), new Vector2(320f, 14f));
+            var viewport = UiFactory.Panel("MissionStatusViewport", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, Color.clear);
+            viewport.offsetMin = new Vector2(12f, 88f);
+            viewport.offsetMax = new Vector2(-12f, -108f);
+            viewport.gameObject.AddComponent<RectMask2D>();
+            var contentObject = new GameObject("MissionStatusContent", typeof(RectTransform));
+            var content = contentObject.GetComponent<RectTransform>();
+            content.SetParent(viewport, false);
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = new Vector2(1f, 1f);
+            content.pivot = new Vector2(0.5f, 1f);
+            content.anchoredPosition = Vector2.zero;
+            var y = 8f;
+            AddSection(content, "任务", ref y);
+            missionValue = AddMetric(content, "任务来源", "MissionValue", 0, y);
+            modeValue = AddMetric(content, "工作模式", "ModeValue", 1, y); y += 24f;
+            stateValue = AddMetric(content, "运行状态", "StateValue", 0, y);
+            segmentValue = AddMetric(content, "当前航段", "CurrentSegmentValue", 1, y); y += 24f;
+            remainingDistanceValue = AddMetric(content, "剩余距离", "RemainingDistanceValue", 0, y);
+            etaValue = AddMetric(content, "预计时间", "EtaValue", 1, y); y += 24f;
+            batteryValue = AddMetric(content, "剩余电量", "RemainingBatteryValue", 0, y);
+            elapsedValue = AddMetric(content, "已运行", "StatusElapsedValue", 1, y); y += 24f;
+            engineeringValidationValue = AddFullMetric(content, "工程校核", "EngineeringValidationValue", y); y += 24f;
+
+            AddSection(content, "运动", ref y);
+            depthValue = AddMetric(content, "深度", "StatusDepthValue", 0, y);
+            headingValue = AddMetric(content, "航向", "StatusHeadingValue", 1, y); y += 24f;
+            pitchValue = AddMetric(content, "俯仰", "StatusPitchValue", 0, y);
+            rollValue = AddMetric(content, "横滚", "StatusRollValue", 1, y); y += 24f;
+            eastSpeedValue = AddMetric(content, "东向速度", "StatusEastSpeedValue", 0, y);
+            northSpeedValue = AddMetric(content, "北向速度", "StatusNorthSpeedValue", 1, y); y += 24f;
+            verticalSpeedValue = AddMetric(content, "垂向速度", "StatusVerticalSpeedValue", 0, y);
+            waterSpeedValue = AddMetric(content, "水中速度", "StatusWaterSpeedValue", 1, y); y += 24f;
+            groundSpeedValue = AddMetric(content, "对地速度", "StatusGroundSpeedValue", 0, y);
+            currentSpeedValue = AddMetric(content, "海流速度", "StatusCurrentSpeedValue", 1, y); y += 24f;
+
+            AddSection(content, "动力", ref y);
+            netBuoyancyValue = AddMetric(content, "净浮力", "StatusNetBuoyancyValue", 0, y);
+            energyValue = AddMetric(content, "能耗", "StatusEnergyValue", 1, y); y += 24f;
+            sideSlipValue = AddMetric(content, "侧滑角", "StatusSideSlipValue", 0, y);
+            angleOfAttackValue = AddMetric(content, "攻角", "StatusAngleOfAttackValue", 1, y); y += 24f;
+            liftValue = AddMetric(content, "升力", "StatusLiftValue", 0, y);
+            dragValue = AddMetric(content, "阻力", "StatusDragValue", 1, y); y += 24f;
+            sideForceValue = AddMetric(content, "侧向力", "StatusSideForceValue", 0, y);
+            angularRateValue = AddMetric(content, "角速度", "StatusAngularRateValue", 1, y); y += 24f;
+            pistonValue = AddMetric(content, "活塞位置", "StatusPistonValue", 0, y);
+            actuatorPowerValue = AddMetric(content, "执行功率", "StatusActuatorPowerValue", 1, y); y += 24f;
+
+            AddSection(content, "预测", ref y);
+            predictionStatusValue = AddMetric(content, "预测状态", "PredictionStatusValue", 0, y);
+            driftValue = AddMetric(content, "漂移", "DriftValue", 1, y); y += 24f;
+            rmseValue = AddMetric(content, "均方根", "RmseValue", 0, y);
+            maeValue = AddMetric(content, "平均误差", "MaeValue", 1, y); y += 24f;
+            confidenceValue = AddMetric(content, "置信度", "ConfidenceValue", 0, y);
+            predictionTimeValue = AddMetric(content, "预测耗时", "PredictionTimeValue", 1, y); y += 24f;
+            content.sizeDelta = new Vector2(0f, y + 8f);
+            var scroll = viewport.gameObject.AddComponent<ScrollRect>();
+            scroll.viewport = viewport;
+            scroll.content = content;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.scrollSensitivity = 24f;
 
             var alarmRect = UiFactory.Panel("AlarmPanel", panel, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(-32f, 72f), new Color(0.02f, 0.16f, 0.15f, 0.8f));
             alarmBackground = alarmRect.GetComponent<Image>();
-            alarmBackground.raycastTarget = false;
-            alarmValue = UiFactory.Text("AlarmValue", alarmRect, "运行正常", 13, TextAnchor.MiddleCenter, Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(260f, 56f));
-            EnsureVisualHierarchy();
+            alarmValue = UiFactory.Text("AlarmValue", alarmRect, "运行正常", 13, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-16f, -8f));
 
             playback.FrameChangedWithReason += OnFrameChanged;
+            playback.ContinuousChanged += OnContinuousChanged;
             OnFrameChanged(playback.Model.CurrentFrame, playback.Model.CurrentIndex, playback.Model.Progress01, FrameUpdateReason.Initial);
+            RefreshLiveMetrics();
         }
 
         public void Bind(StatusPanelRefs refs, PlaybackController playbackController, AlarmEvaluator evaluator, TwinLogger twinLogger, PredictionController predictionController)
@@ -108,7 +171,6 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            panel = refs.panel;
             alarmBackground = refs.alarmBackground;
             progressFill = refs.progressFill;
             missionValue = refs.missionValue;
@@ -127,28 +189,12 @@ namespace UnderwaterGliderTwin.UI
             engineeringValidationValue = refs.engineeringValidationValue;
             alarmValue = refs.alarmValue;
             missionHealthValue = refs.missionHealthValue;
-            EnsureHealthBadge(missionHealthValue != null ? missionHealthValue.transform.parent as RectTransform : null);
-            if (alarmValue != null)
-            {
-                alarmValue.gameObject.SetActive(false);
-            }
-            if (alarmBackground != null)
-            {
-                alarmBackground.gameObject.SetActive(false);
-            }
-            predictionMetricRows.Clear();
-            predictionMetricUnits.Clear();
-            ConfigureBoundRows();
-            EnsureVisualHierarchy();
-            RegisterPredictionMetric(refs.panel, "漂移Label", driftValue);
-            RegisterPredictionMetric(refs.panel, "均方根误差Label", rmseValue);
-            RegisterPredictionMetric(refs.panel, "平均绝对误差Label", maeValue);
-            RegisterPredictionMetric(refs.panel, "置信度Label", confidenceValue);
-            RegisterPredictionMetric(refs.panel, "预测耗时Label", predictionTimeValue);
             minimalBoundReferences = modeValue == null || stateValue == null || alarmValue == null;
             cumulativeDistanceMeters = BuildDistanceCache(playback.Model);
             playback.FrameChangedWithReason -= OnFrameChanged;
             playback.FrameChangedWithReason += OnFrameChanged;
+            playback.ContinuousChanged -= OnContinuousChanged;
+            playback.ContinuousChanged += OnContinuousChanged;
             RefreshFromCurrentFrame();
         }
 
@@ -168,7 +214,7 @@ namespace UnderwaterGliderTwin.UI
 
                 if (batteryValue != null)
                 {
-                    SetValue(batteryValue, $"{playback.Model.CurrentFrame.BatteryPercent:0}", "%");
+                    batteryValue.text = $"{playback.Model.CurrentFrame.BatteryPercent:0} %";
                 }
 
                 return;
@@ -182,6 +228,7 @@ namespace UnderwaterGliderTwin.UI
             if (playback != null)
             {
                 playback.FrameChangedWithReason -= OnFrameChanged;
+                playback.ContinuousChanged -= OnContinuousChanged;
             }
         }
 
@@ -202,356 +249,33 @@ namespace UnderwaterGliderTwin.UI
             return true;
         }
 
-        private static Text AddRow(Transform panel, string label, string valueName, float topOffset)
+        private static void AddSection(Transform content, string title, ref float y)
         {
-            var row = CreateRow(panel, valueName + "Row", topOffset);
-            var labelText = UiFactory.Text(label + "Label", row, label, 12, TextAnchor.MiddleLeft, new Color(0.82f, 0.97f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            var valueText = UiFactory.Text(valueName, row, "-", 13, TextAnchor.MiddleRight, new Color(0.96f, 0.99f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-            ConfigureKeyValueChildren(labelText, valueText);
-            return valueText;
+            UiFactory.Text("MissionStatusSection" + title, content, title, 12, TextAnchor.MiddleLeft,
+                new Color(0.36f, 0.79f, 0.9f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(0f, 1f), new Vector2(8f, -y), new Vector2(390f, 20f));
+            y += 22f;
         }
 
-        private void ConfigureBoundRows()
+        private static Text AddMetric(Transform content, string label, string valueName, int column, float y)
         {
-            ConfigureBoundRow("MissionRow", "任务来源Label", missionValue);
-            ConfigureBoundRow("ModeRow", "工作模式Label", modeValue);
-            ConfigureBoundRow("StateRow", "运行状态Label", stateValue);
-            ConfigureBoundRow("SegmentRow", "当前航段Label", segmentValue);
-            ConfigureBoundRow("RemainingDistanceRow", "剩余距离Label", remainingDistanceValue);
-            ConfigureBoundRow("EtaRow", "预计时间Label", etaValue);
-            ConfigureBoundRow("PredictionStatusRow", "预测状态Label", predictionStatusValue);
-            ConfigureBoundRow("BatteryRow", "剩余电量Label", batteryValue);
-            ConfigureBoundRow("DriftRow", "漂移Label", driftValue);
-            ConfigureBoundRow("RmseRow", "均方根误差Label", rmseValue);
-            ConfigureBoundRow("MaeRow", "平均绝对误差Label", maeValue);
-            ConfigureBoundRow("ConfidenceRow", "置信度Label", confidenceValue);
-            ConfigureBoundRow("PredictionTimeRow", "预测耗时Label", predictionTimeValue);
-            ConfigureBoundRow("EngineeringValidationRow", "工程校核Label", engineeringValidationValue);
+            var x = column == 0 ? 8f : 212f;
+            UiFactory.Text(label + "Label", content, label, 11, TextAnchor.MiddleLeft,
+                new Color(0.67f, 0.8f, 0.83f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(0f, 1f), new Vector2(x, -y), new Vector2(86f, 22f));
+            return UiFactory.Text(valueName, content, "—", 11, TextAnchor.MiddleRight,
+                new Color(0.96f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(0f, 1f), new Vector2(x + 88f, -y), new Vector2(108f, 22f));
         }
 
-        private void EnsureVisualHierarchy()
+        private static Text AddFullMetric(Transform content, string label, string valueName, float y)
         {
-            if (panel == null)
-            {
-                return;
-            }
-
-            UiFactory.EnsureCardSurface(
-                panel,
-                "MissionStatusCard",
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(12f, -176f),
-                new Vector2(-12f, -48f));
-            var progressCard = UiFactory.EnsureCardSurface(
-                panel,
-                "MissionProgressCard",
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(12f, -232f),
-                new Vector2(-12f, -182f),
-                UiVisualRole.ControlFill);
-            UiFactory.EnsureDivider(
-                progressCard,
-                "MissionPredictionDivider",
-                new Vector2(0f, 0f),
-                new Vector2(1f, 0f),
-                new Vector2(10f, 0f),
-                new Vector2(-10f, 1f));
-
-            var predictionCard = UiFactory.EnsureCardSurface(
-                panel,
-                "PredictionQualityCard",
-                Vector2.zero,
-                Vector2.one,
-                new Vector2(12f, 82f),
-                new Vector2(-12f, -238f));
-            UiFactory.EnsureDivider(
-                predictionCard,
-                "PredictionAlarmDivider",
-                new Vector2(0f, 0f),
-                new Vector2(1f, 0f),
-                new Vector2(10f, 0f),
-                new Vector2(-10f, 1f));
-
-            UiFactory.EnsureCardSurface(
-                panel,
-                "AlarmStateCard",
-                Vector2.zero,
-                new Vector2(1f, 0f),
-                new Vector2(12f, 12f),
-                new Vector2(-12f, 74f),
-                UiVisualRole.ControlFill);
-
-            var title = FindText(panel, "MissionStatusTitle") ?? FindText(panel, "TitleText");
-            UiFactory.ApplyTextRole(title, UiTextRole.Title, RuntimeUiLayoutMode.CompressedThreeColumn);
-            UiFactory.ApplyTextRole(FindText(panel, "MissionProgressLabel"), UiTextRole.SectionTitle, RuntimeUiLayoutMode.CompressedThreeColumn);
-            UiFactory.ApplyTextRole(predictionStatusValue, UiTextRole.Value, RuntimeUiLayoutMode.CompressedThreeColumn);
-            UiFactory.ApplyTextRole(alarmValue, UiTextRole.Error, RuntimeUiLayoutMode.CompressedThreeColumn);
-            UiFactory.ApplyRuntimePalette(panel);
-        }
-
-        private void ConfigureBoundRow(string rowName, string labelName, Text value)
-        {
-            if (value == null)
-            {
-                return;
-            }
-
-            UiFactory.ConfigureFixedValueColumn(value);
-
-            var label = FindText(panel, labelName);
-            if (panel == null)
-            {
-                return;
-            }
-
-            var row = EnsureRow(panel, rowName);
-            if (CanReparentConfiguredTransform(value.transform))
-            {
-                value.transform.SetParent(row, false);
-            }
-            if (label != null)
-            {
-                if (CanReparentConfiguredTransform(label.transform))
-                {
-                    label.transform.SetParent(row, false);
-                }
-                ConfigureKeyValueChildren(label, value);
-            }
-            else
-            {
-                label = CreateBoundLabel(row, labelName);
-                ConfigureKeyValueChildren(label, value);
-            }
-        }
-
-        private static bool CanReparentConfiguredTransform(Transform target)
-        {
-#if UNITY_EDITOR
-            return target == null || Application.isPlaying || !UnityEditor.PrefabUtility.IsPartOfPrefabInstance(target);
-#else
-            return true;
-#endif
-        }
-
-        private static Text CreateBoundLabel(Transform row, string labelName)
-        {
-            var display = labelName != null && labelName.EndsWith("Label", System.StringComparison.Ordinal)
-                ? labelName.Substring(0, labelName.Length - "Label".Length)
-                : labelName;
-            return UiFactory.Text(
-                row.name + "Label",
-                row,
-                display,
-                13,
-                TextAnchor.MiddleLeft,
-                UiFactory.CommandText,
-                Vector2.zero,
-                Vector2.one,
-                new Vector2(0.5f, 0.5f),
-                Vector2.zero,
-                Vector2.zero);
-        }
-
-        private static RectTransform CreateRow(Transform parent, string name, float topOffset)
-        {
-            var row = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
-            row.SetParent(parent, false);
-            row.anchorMin = new Vector2(0f, 1f);
-            row.anchorMax = new Vector2(1f, 1f);
-            row.pivot = new Vector2(0.5f, 1f);
-            row.anchoredPosition = new Vector2(0f, -topOffset);
-            row.sizeDelta = new Vector2(-8f, 26f);
-            return ConfigureRow(row);
-        }
-
-        private static RectTransform EnsureRow(Transform parent, string name)
-        {
-            var existing = parent.Find(name) as RectTransform;
-            if (existing != null)
-            {
-                return ConfigureRow(existing);
-            }
-
-            var row = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
-            row.SetParent(parent, false);
-            row.anchorMin = new Vector2(0f, 1f);
-            row.anchorMax = new Vector2(1f, 1f);
-            row.pivot = new Vector2(0.5f, 1f);
-            row.sizeDelta = new Vector2(0f, 26f);
-            PositionNewBoundRow(row, parent);
-            return ConfigureRow(row);
-        }
-
-        private static void PositionNewBoundRow(RectTransform row, Transform parent)
-        {
-            var rowIndex = 0;
-            foreach (Transform child in parent)
-            {
-                if (child == row.transform || !child.name.EndsWith("Row", System.StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                rowIndex++;
-            }
-
-            row.anchoredPosition = new Vector2(0f, -62f - rowIndex * 28f);
-        }
-
-        private static RectTransform ConfigureRow(RectTransform row)
-        {
-            var layout = row.GetComponent<HorizontalLayoutGroup>() ?? row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(6, 6, 2, 2);
-            layout.spacing = 4f;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = false;
-            var element = row.GetComponent<LayoutElement>() ?? row.gameObject.AddComponent<LayoutElement>();
-            element.minHeight = 26f;
-            element.preferredHeight = 26f;
-            element.flexibleWidth = 1f;
-            return row;
-        }
-
-        private static void ConfigureKeyValueChildren(Text label, Text value)
-        {
-            ConfigureKeyText(label, 116f);
-            ConfigureKeyText(value, UiFactory.FixedValueColumnWidth);
-            UiFactory.ConfigureFixedLabelColumn(label);
-            UiFactory.ConfigureFixedValueColumn(value);
-            EnsureUnitColumn(value);
-        }
-
-        private static void ConfigureKeyText(Text text, float preferredWidth)
-        {
-            if (text == null)
-            {
-                return;
-            }
-
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate;
-            text.supportRichText = false;
-            var element = text.GetComponent<LayoutElement>() ?? text.gameObject.AddComponent<LayoutElement>();
-            element.minWidth = preferredWidth > 0f ? preferredWidth : 0f;
-            element.preferredWidth = preferredWidth;
-            element.flexibleWidth = preferredWidth > 0f ? 0f : 1f;
-        }
-
-        private static Text EnsureUnitColumn(Text value)
-        {
-            if (value == null)
-            {
-                return null;
-            }
-
-            var unitName = value.name + "Unit";
-            var unit = value.transform.parent.Find(unitName)?.GetComponent<Text>();
-            if (unit == null)
-            {
-                unit = UiFactory.Text(unitName, value.transform.parent, string.Empty, 10,
-                    TextAnchor.MiddleLeft, UiFactory.CommandMutedText, Vector2.zero, Vector2.zero);
-            }
-
-            unit.text = GetUnitLabel(value.name);
-            UiFactory.ConfigureFixedUnitColumn(unit);
-            unit.gameObject.SetActive(!string.IsNullOrEmpty(unit.text));
-            return unit;
-        }
-
-        private static string GetUnitLabel(string valueName)
-        {
-            if (string.IsNullOrEmpty(valueName))
-            {
-                return string.Empty;
-            }
-
-            if (valueName.IndexOf("PredictionTime", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "ms";
-            }
-
-            if (valueName.IndexOf("Distance", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "km";
-            }
-
-            if (valueName.IndexOf("Battery", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("Confidence", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "%";
-            }
-
-            if (valueName.IndexOf("Time", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("Eta", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "s";
-            }
-
-            if (valueName.IndexOf("Drift", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("Rmse", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || valueName.IndexOf("Mae", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return "m";
-            }
-
-            return string.Empty;
-        }
-
-        private void EnsureHealthBadge(RectTransform badgeRoot)
-        {
-            if (badgeRoot == null || badgeRoot.name != "MissionHealthBadge")
-            {
-                badgeRoot = panel != null ? panel.Find("MissionHealthBadge") as RectTransform : null;
-                if (badgeRoot == null && panel != null)
-                {
-                    badgeRoot = UiFactory.Panel("MissionHealthBadge", panel,
-                        new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
-                        new Vector2(-16f, -20f), new Vector2(118f, 28f), UiFactory.CommandPanelFill);
-                    if (missionHealthValue != null)
-                    {
-                        missionHealthValue.transform.SetParent(badgeRoot, false);
-                    }
-                }
-            }
-
-            if (badgeRoot == null)
-            {
-                return;
-            }
-
-            missionHealthBadge = badgeRoot.GetComponent<UiStateBadge>() ?? badgeRoot.gameObject.AddComponent<UiStateBadge>();
-            if (missionHealthBadge.StateText != null && missionHealthBadge.StateText != missionHealthValue)
-            {
-                UiFactory.ApplyTextRole(missionHealthBadge.StateText, UiTextRole.Value, RuntimeUiLayoutMode.CompressedThreeColumn);
-                if (missionHealthValue != null)
-                {
-                    var legacyColor = missionHealthValue.color;
-                    legacyColor.a = 0f;
-                    missionHealthValue.color = legacyColor;
-                }
-            }
-        }
-
-        private static Text FindText(Transform root, string name)
-        {
-            if (root == null || string.IsNullOrWhiteSpace(name))
-            {
-                return null;
-            }
-
-            foreach (var text in root.GetComponentsInChildren<Text>(true))
-            {
-                if (text.name == name || text.text == name)
-                {
-                    return text;
-                }
-            }
-
-            return null;
+            UiFactory.Text(label + "Label", content, label, 11, TextAnchor.MiddleLeft,
+                new Color(0.67f, 0.8f, 0.83f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(0f, 1f), new Vector2(8f, -y), new Vector2(86f, 22f));
+            return UiFactory.Text(valueName, content, "—", 11, TextAnchor.MiddleRight,
+                new Color(0.96f, 0.99f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(0f, 1f), new Vector2(96f, -y), new Vector2(304f, 22f));
         }
 
         private void OnFrameChanged(TelemetryFrame frame, int index, float progress01, FrameUpdateReason reason)
@@ -568,17 +292,18 @@ namespace UnderwaterGliderTwin.UI
             segmentValue.text = RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation
                 ? $"{frame.TargetSegment:0} / {Mathf.Max(1, RuntimeDataSourceState.SimulationProfile?.CycleCount ?? 1)}"
                 : $"{frame.TargetSegment:0}";
-            SetValue(remainingDistanceValue, $"{GetRemainingDistance(index) / 1000f:0.00}", "km");
+            remainingDistanceValue.text = $"{GetRemainingDistance(index) / 1000f:0.00} km";
             etaValue.text = EstimateEta(index);
             predictionStatusValue.text = FormatPredictionStatus(snapshot);
             predictionStatusValue.color = snapshot.SampleCount > 1 ? new Color(0.74f, 0.95f, 1f) : new Color(1f, 0.72f, 0.32f);
-            SetValue(batteryValue, $"{frame.BatteryPercent:0}", "%");
-            SetValue(driftValue, $"{snapshot.CurrentErrorMeters:0.00}", "m");
-            SetValue(rmseValue, $"{snapshot.RmseMeters:0.00}", "m");
-            SetValue(maeValue, $"{snapshot.MaeMeters:0.00}", "m");
-            SetValue(confidenceValue, $"{snapshot.Confidence01 * 100f:0}", "%");
-            SetValue(predictionTimeValue, $"{snapshot.ComputeMilliseconds:0.00}", "ms");
-            SetPredictionMetricsVisible(snapshot.SampleCount > 1);
+            batteryValue.text = $"{frame.BatteryPercent:0} %";
+            var hasPredictionMetrics = snapshot.HasScoredMetrics;
+            driftValue.text = hasPredictionMetrics ? $"{snapshot.CurrentErrorMeters:0.00} m" : "—";
+            rmseValue.text = hasPredictionMetrics ? $"{snapshot.RmseMeters:0.00} m" : "—";
+            maeValue.text = hasPredictionMetrics ? $"{snapshot.MaeMeters:0.00} m" : "—";
+            confidenceValue.text = hasPredictionMetrics && !float.IsNaN(snapshot.Confidence01) && !float.IsInfinity(snapshot.Confidence01)
+                ? $"{snapshot.Confidence01 * 100f:0} %" : "—";
+            predictionTimeValue.text = snapshot.SampleCount > 1 ? $"{snapshot.ComputeMilliseconds:0.00} ms" : "—";
 
             var validation = MissionValidationEvaluator.Evaluate(
                 RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation
@@ -602,58 +327,87 @@ namespace UnderwaterGliderTwin.UI
             var attentionMessage = alarm.HasAny ? alarm.Message : FormatEngineeringValidation(validation);
             alarmValue.text = needsAttention ? attentionMessage : "运行正常";
             alarmBackground.color = needsAttention ? new Color(0.75f, 0.18f, 0.05f, 0.88f) : new Color(0.02f, 0.16f, 0.15f, 0.8f);
-            var healthLabel = needsAttention ? (alarm.HasAny ? "告警" : "注意") : snapshot.SampleCount > 1 ? "预测" : "正常";
-            if (missionHealthValue != null)
-            {
-                missionHealthValue.text = healthLabel;
-            }
-            if (missionHealthBadge != null)
-            {
-                missionHealthBadge.SetState(needsAttention ? UiStateKind.Warning : snapshot.SampleCount > 1 ? UiStateKind.Prediction : UiStateKind.Normal, healthLabel);
-            }
+            missionHealthValue.text = needsAttention ? (alarm.HasAny ? "告警" : "注意") : "正常";
             missionHealthValue.transform.parent.GetComponent<Image>().color = needsAttention ? new Color(0.78f, 0.22f, 0.08f, 0.96f) : new Color(0.02f, 0.28f, 0.22f, 0.96f);
             if (alarm.HasAny && alarm.Message != lastAlarmMessage)
             {
-                logger.AppendAlarm($"row {index}: {alarm.Message}");
+                logger?.AppendAlarm($"row {index}: {alarm.Message}");
                 lastAlarmMessage = alarm.Message;
             }
         }
 
-        private void RegisterPredictionMetric(Transform panel, string labelName, Text value)
+        private void OnContinuousChanged(float continuousIndex, float progress01, FrameUpdateReason reason)
         {
-            var label = FindText(panel, labelName);
-            if (label != null)
-            {
-                predictionMetricRows.Add(label.gameObject);
-            }
-
-            if (value != null)
-            {
-                predictionMetricRows.Add(value.gameObject);
-                var unit = value.transform.parent != null
-                    ? value.transform.parent.Find(value.name + "Unit")?.GetComponent<Text>()
-                    : null;
-                if (unit != null)
-                {
-                    predictionMetricUnits.Add(unit);
-                }
-            }
+            RefreshLiveMetrics();
         }
 
-        private void SetPredictionMetricsVisible(bool visible)
+        private void RefreshLiveMetrics()
         {
-            foreach (var row in predictionMetricRows)
+            if (depthValue == null || playback == null || playback.Model == null || playback.Model.FrameCount == 0)
             {
-                row.SetActive(visible);
+                return;
             }
 
-            foreach (var unit in predictionMetricUnits)
-            {
-                if (unit != null)
-                {
-                    unit.canvasRenderer.SetAlpha(visible ? 1f : 0f);
-                }
-            }
+            var sample = ContinuousMotionSampler.Sample(playback.Model.Frames, playback.Model.ContinuousElapsedSeconds);
+            var lower = playback.Model.Frames[sample.LowerIndex];
+            var upper = playback.Model.Frames[sample.UpperIndex];
+            var hasPosition = sample.HasUsableCoordinates;
+            var waterValid = sample.HasDiagnostics
+                && IsFiniteVector(lower.Diagnostics.Value.WaterVelocityEndMps)
+                && IsFiniteVector(upper.Diagnostics.Value.WaterVelocityEndMps);
+            var currentValid = sample.HasDiagnostics
+                && IsFiniteVector(lower.Diagnostics.Value.CurrentVelocityEndMps)
+                && IsFiniteVector(upper.Diagnostics.Value.CurrentVelocityEndMps);
+            var hasVelocity = hasPosition && (sample.HasDiagnostics
+                ? waterValid && currentValid
+                : sample.LowerIndex > 0 || sample.UpperIndex > 0);
+            depthValue.text = hasPosition && IsFinite(lower.DepthM) && IsFinite(upper.DepthM)
+                ? FormatValue(sample.DepthM, "0.0", "m") : "—";
+            headingValue.text = IsFinite(lower.HeadingDeg) && IsFinite(upper.HeadingDeg)
+                ? FormatValue(sample.HeadingDeg, "0.0", "°") : "—";
+            pitchValue.text = IsFinite(lower.PitchDeg) && IsFinite(upper.PitchDeg)
+                ? FormatValue(sample.PitchDeg, "0.0", "°") : "—";
+            rollValue.text = IsFinite(lower.RollDeg) && IsFinite(upper.RollDeg)
+                ? FormatValue(sample.RollDeg, "0.0", "°") : "—";
+            eastSpeedValue.text = hasVelocity ? FormatValue(sample.DisplayVelocityEnuMps.x, "0.00", "m/s") : "—";
+            northSpeedValue.text = hasVelocity ? FormatValue(sample.DisplayVelocityEnuMps.z, "0.00", "m/s") : "—";
+            verticalSpeedValue.text = hasVelocity ? FormatValue(sample.DisplayVelocityEnuMps.y, "0.00", "m/s") : "—";
+            groundSpeedValue.text = hasVelocity ? FormatValue(sample.DisplayVelocityEnuMps.magnitude, "0.00", "m/s") : "—";
+            waterSpeedValue.text = waterValid ? FormatValue(sample.WaterVelocityEndMps.magnitude, "0.00", "m/s") : "—";
+            currentSpeedValue.text = currentValid ? FormatValue(sample.CurrentVelocityEndMps.magnitude, "0.00", "m/s") : "—";
+            var seconds = Mathf.Max(0, Mathf.RoundToInt(sample.ElapsedSeconds));
+            elapsedValue.text = $"{seconds / 3600:00}:{(seconds % 3600) / 60:00}:{seconds % 60:00}";
+
+            var diagnostics = playback.Model.CurrentFrame.Diagnostics;
+            netBuoyancyValue.text = diagnostics.HasValue ? FormatValue(diagnostics.Value.NetBuoyancyForceN, "0.0", "N") : "—";
+            energyValue.text = diagnostics.HasValue ? FormatValue(diagnostics.Value.EnergyWatts, "0.0", "W") : "—";
+            sideSlipValue.text = diagnostics.HasValue ? FormatValue(diagnostics.Value.SideSlipDeg, "0.0", "°") : "—";
+            angleOfAttackValue.text = diagnostics.HasValue ? FormatValue(diagnostics.Value.AngleOfAttackDeg, "0.0", "°") : "—";
+            liftValue.text = diagnostics.HasValue ? FormatValue(diagnostics.Value.LiftForceN, "0.0", "N") : "—";
+            dragValue.text = diagnostics.HasValue ? FormatValue(diagnostics.Value.DragForceN, "0.0", "N") : "—";
+            sideForceValue.text = diagnostics.HasValue ? FormatValue(diagnostics.Value.SideForceN, "0.0", "N") : "—";
+            angularRateValue.text = diagnostics.HasValue
+                ? FormatValue(diagnostics.Value.AngularVelocityRadPerSecond.magnitude * Mathf.Rad2Deg, "0.00", "°/s")
+                : "—";
+            pistonValue.text = diagnostics.HasValue ? FormatValue(diagnostics.Value.PistonPositionMm, "0.0", "mm") : "—";
+            actuatorPowerValue.text = diagnostics.HasValue ? FormatValue(diagnostics.Value.ActuatorPowerWatts, "0.0", "W") : "—";
+        }
+
+        private static string FormatValue(float value, string format, string unit)
+        {
+            return !IsFinite(value)
+                ? "—"
+                : $"{value.ToString(format, System.Globalization.CultureInfo.InvariantCulture)} {unit}".Replace(" °", "°");
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static bool IsFiniteVector(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
         }
 
         private static string FormatEngineeringValidation(MissionValidationReport report)
@@ -741,23 +495,6 @@ namespace UnderwaterGliderTwin.UI
             var minutes = (totalSeconds % 3600) / 60;
             var seconds = totalSeconds % 60;
             return $"{hours:00}:{minutes:00}:{seconds:00}";
-        }
-
-        private static void SetValue(Text value, string text, string unit)
-        {
-            if (value == null)
-            {
-                return;
-            }
-
-            value.text = text ?? string.Empty;
-            var parent = value.transform.parent;
-            var unitText = parent == null ? null : parent.Find(value.name + "Unit")?.GetComponent<Text>();
-            if (unitText != null)
-            {
-                unitText.text = unit ?? string.Empty;
-                unitText.gameObject.SetActive(!string.IsNullOrEmpty(unitText.text));
-            }
         }
 
         private static float[] BuildDistanceCache(PlaybackModel model)

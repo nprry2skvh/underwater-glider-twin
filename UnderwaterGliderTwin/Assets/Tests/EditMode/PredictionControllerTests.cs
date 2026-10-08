@@ -69,6 +69,36 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(error, Does.Contain("fake load failed"));
         }
 
+        [Test]
+        public void Controller_RepeatedSeekPreservesPublishedForecastIdentity()
+        {
+            var controller = CreateController(new FakePredictorFactory(succeeds: true));
+            var ledgerProperty = typeof(PredictionController).GetProperty("Ledger");
+            Assert.That(ledgerProperty, Is.Not.Null, "controller must own frozen forecast ledger");
+            var ledger = ledgerProperty.GetValue(controller);
+            var records = ledger.GetType().GetProperty("Forecasts").GetValue(ledger) as System.Collections.IList;
+            var before = records.Count;
+            var first = records[0];
+            var playback = objects[0].GetComponent<PlaybackController>();
+            playback.Seek(0f);
+            playback.Seek(0f);
+            records = ledger.GetType().GetProperty("Forecasts").GetValue(ledger) as System.Collections.IList;
+            Assert.That(records.Count, Is.EqualTo(before));
+            Assert.That(records[0], Is.SameAs(first));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Controller_InferenceExceptionOrNonfiniteOutputIsFrozenAsFailure(bool nonfinite)
+        {
+            PredictionController controller = null;
+            Assert.DoesNotThrow(() => controller = CreateController(new FaultingFactory(nonfinite)));
+            Assert.That(controller.Ledger.Forecasts, Has.Count.EqualTo(1));
+            Assert.That(controller.Ledger.Forecasts[0].Failure, Is.Not.Empty);
+            Assert.That(controller.Ledger.Forecasts[0].Frames, Is.Empty);
+            Assert.That(controller.CurrentSnapshot.PredictedPoints, Is.Empty);
+        }
+
         private PredictionController CreateController(IPredictorFactory factory)
         {
             var frames = Frames(12);
@@ -167,6 +197,29 @@ namespace UnderwaterGliderTwin.Tests
 
             public void Release()
             {
+            }
+        }
+
+        private sealed class FaultingFactory : IPredictorFactory
+        {
+            private readonly bool nonfinite;
+            public FaultingFactory(bool nonfinite) { this.nonfinite = nonfinite; }
+            public bool TryCreate(string root, out IPredictor predictor, out string errorMessage)
+            { predictor = new FaultingPredictor(nonfinite); errorMessage = ""; return true; }
+        }
+
+        private sealed class FaultingPredictor : IPredictor
+        {
+            private readonly bool nonfinite;
+            public FaultingPredictor(bool nonfinite) { this.nonfinite = nonfinite; }
+            public string GetName() => "faulting";
+            public void LoadModel(string root) { }
+            public void Release() { }
+            public PredictionResult Predict(PredictionContext context)
+            {
+                if (!nonfinite) throw new InvalidOperationException("inference failed");
+                return new PredictionResult("invalid", "", new[] { Vector3.zero }, Array.Empty<Vector3>(), 0, 0,
+                    new PredictionMetrics(0, 0, 0, 0, 0, 0), new[] { ForecastLedgerTests.Point(10f, depth: float.NaN) });
             }
         }
     }

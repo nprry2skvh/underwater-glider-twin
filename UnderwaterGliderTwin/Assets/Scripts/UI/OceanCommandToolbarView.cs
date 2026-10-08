@@ -8,9 +8,6 @@ namespace UnderwaterGliderTwin.UI
     {
         private Text visibleArrowCountText;
         private OceanVolumeView oceanVolume;
-        private TwinCameraController boundCameraController;
-        private OceanToolbarRefs boundRefs;
-        private Transform boundToolbarParent;
 
         [System.Obsolete("Use Bind(...) with editable UI references.")]
         public void Initialize(TwinCameraController cameraController, TrajectoryView trajectoryView)
@@ -22,9 +19,10 @@ namespace UnderwaterGliderTwin.UI
                 Vector2.zero,
                 Vector2.one,
                 new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -75f),
-                new Vector2(-764f, -524f),
+                new Vector2(-12f, -102f),
+                new Vector2(-716f, -524f),
                 new Color(0.01f, 0.08f, 0.14f, 0.025f));
+            ConfigureViewportFrame(viewportFrame);
             viewportFrame.GetComponent<Image>().raycastTarget = false;
             AddViewportBorder(viewportFrame);
             viewportFrame.SetAsFirstSibling();
@@ -37,19 +35,7 @@ namespace UnderwaterGliderTwin.UI
                 new Vector2(0.5f, 1f),
                 new Vector2(0f, -320f),
                 new Vector2(880f, 58f));
-            // The obsolete fallback path still lives in the responsive viewport column.
-            // Reserve an explicit horizontal gutter so its fixed legacy controls never
-            // extend into the adjacent telemetry or status columns.
-            panel.anchorMin = new Vector2(0f, 1f);
-            panel.anchorMax = new Vector2(1f, 1f);
-            panel.pivot = new Vector2(0.5f, 1f);
-            panel.anchoredPosition = new Vector2(0f, -320f);
-            panel.sizeDelta = new Vector2(-120f, 58f);
-            var panelLayout = panel.GetComponent<LayoutElement>() ?? panel.gameObject.AddComponent<LayoutElement>();
-            panelLayout.ignoreLayout = true;
-            boundCameraController = cameraController;
-            boundRefs = null;
-            boundToolbarParent = panel;
+            ConfigureToolbarPanel(panel);
 
             UiFactory.Text("OceanToolbarTitle", panel, "3D \u6d77\u6d41\u573a\u53ef\u89c6\u5316", 16, TextAnchor.MiddleLeft, UiFactory.CommandText,
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(18f, 0f), new Vector2(166f, 32f));
@@ -71,9 +57,7 @@ namespace UnderwaterGliderTwin.UI
             {
                 cameraController.ResetView();
                 trajectoryView.SetCameraMode(CameraMode.Global);
-                SetCameraSelection(panel, CameraMode.Global);
             });
-            SetCameraSelection(panel, cameraController != null ? cameraController.CurrentMode : CameraMode.Follow);
         }
 
         public void Bind(OceanToolbarRefs refs, TwinCameraController cameraController, TrajectoryView trajectoryView)
@@ -83,17 +67,14 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            boundCameraController = cameraController;
-            boundRefs = refs;
-            boundToolbarParent = null;
+            ConfigureViewportFrame(refs.viewportFrame);
+            ConfigureToolbarPanel(refs.panel);
             visibleArrowCountText = refs.visibleArrowCount;
-            ConfigureBoundLayout(refs);
             BindCameraButton(refs.cameraFollowCommand, cameraController, trajectoryView, CameraMode.Follow);
             BindCameraButton(refs.cameraGlobalCommand, cameraController, trajectoryView, CameraMode.Global);
             BindCameraButton(refs.cameraTopCommand, cameraController, trajectoryView, CameraMode.Top);
             BindCameraButton(refs.cameraSideCommand, cameraController, trajectoryView, CameraMode.Side);
             BindCameraButton(refs.cameraOrbitCommand, cameraController, trajectoryView, CameraMode.Orbit);
-            SetCameraSelection(refs, cameraController != null ? cameraController.CurrentMode : CameraMode.Follow);
             if (refs.cameraResetCommand != null)
             {
                 refs.cameraResetCommand.onClick.RemoveAllListeners();
@@ -101,25 +82,12 @@ namespace UnderwaterGliderTwin.UI
                 {
                     cameraController?.ResetView();
                     trajectoryView?.SetCameraMode(CameraMode.Global);
-                    SetCameraSelection(refs, CameraMode.Global);
                 });
             }
         }
 
         private void Update()
         {
-            if (boundCameraController != null)
-            {
-                if (boundRefs != null)
-                {
-                    SetCameraSelection(boundRefs, boundCameraController.CurrentMode);
-                }
-                else if (boundToolbarParent != null)
-                {
-                    SetCameraSelection(boundToolbarParent, boundCameraController.CurrentMode);
-                }
-            }
-
             if (visibleArrowCountText == null)
             {
                 return;
@@ -141,7 +109,6 @@ namespace UnderwaterGliderTwin.UI
             {
                 cameraController.SetMode(mode);
                 trajectoryView.SetCameraMode(mode);
-                SetCameraSelection(button);
             });
         }
 
@@ -157,165 +124,7 @@ namespace UnderwaterGliderTwin.UI
             {
                 cameraController?.SetMode(mode);
                 trajectoryView?.SetCameraMode(mode);
-                SetCameraSelection(button);
             });
-        }
-
-        private static void SetCameraSelection(Button selected)
-        {
-            if (selected == null || selected.transform.parent == null)
-            {
-                return;
-            }
-
-            foreach (var button in selected.transform.parent.GetComponentsInChildren<Button>(true))
-            {
-                if (button.name.IndexOf("Camera", System.StringComparison.OrdinalIgnoreCase) < 0
-                    || button.name.IndexOf("Command", System.StringComparison.OrdinalIgnoreCase) < 0
-                    || button.name.IndexOf("Reset", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    continue;
-                }
-
-                UiFactory.SetButtonSelected(button, button == selected);
-            }
-        }
-
-        private static void ConfigureBoundLayout(OceanToolbarRefs refs)
-        {
-            if (refs == null || refs.panel == null)
-            {
-                return;
-            }
-
-            var row = refs.panel.Find("OceanToolbarCommandsRow") as RectTransform;
-            if (row == null)
-            {
-                row = new GameObject("OceanToolbarCommandsRow", typeof(RectTransform)).GetComponent<RectTransform>();
-                row.SetParent(refs.panel, false);
-            }
-
-            row.anchorMin = new Vector2(0f, 1f);
-            row.anchorMax = new Vector2(1f, 1f);
-            row.pivot = new Vector2(0.5f, 1f);
-            row.offsetMin = new Vector2(12f, -46f);
-            row.offsetMax = new Vector2(-12f, -8f);
-            var layout = row.GetComponent<HorizontalLayoutGroup>() ?? row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(0, 0, 0, 0);
-            layout.spacing = 8f;
-            layout.childAlignment = TextAnchor.MiddleLeft;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = false;
-
-            MoveToolbarChild(refs.panel, row, "TitleText", 150f);
-            MoveToolbarChild(refs.panel, row, "VisibleArrowCount", 120f);
-            MoveToolbarChild(refs.panel, row, "CameraFollowCommand", 60f);
-            MoveToolbarChild(refs.panel, row, "CameraGlobalCommand", 60f);
-            MoveToolbarChild(refs.panel, row, "CameraTopCommand", 60f);
-            MoveToolbarChild(refs.panel, row, "CameraSideCommand", 60f);
-            MoveToolbarChild(refs.panel, row, "CameraOrbitCommand", 60f);
-            MoveToolbarChild(refs.panel, row, "CameraResetCommand", 96f);
-        }
-
-        private static void MoveToolbarChild(Transform panel, Transform row, string name, float preferredWidth)
-        {
-            var child = FindDescendant(panel, name);
-            if (child == null || child == row)
-            {
-                return;
-            }
-
-            child.SetParent(row, false);
-            child.anchorMin = Vector2.zero;
-            child.anchorMax = Vector2.one;
-            child.offsetMin = Vector2.zero;
-            child.offsetMax = Vector2.zero;
-            var element = child.GetComponent<LayoutElement>() ?? child.gameObject.AddComponent<LayoutElement>();
-            element.minWidth = preferredWidth;
-            element.preferredWidth = preferredWidth;
-            element.flexibleWidth = 0f;
-            element.minHeight = 28f;
-            element.preferredHeight = 28f;
-            foreach (var text in child.GetComponentsInChildren<Text>(true))
-            {
-                if (text.transform.parent != child)
-                {
-                    continue;
-                }
-
-                text.rectTransform.anchorMin = Vector2.zero;
-                text.rectTransform.anchorMax = Vector2.one;
-                text.rectTransform.offsetMin = new Vector2(4f, 0f);
-                text.rectTransform.offsetMax = new Vector2(-4f, 0f);
-                text.alignment = TextAnchor.MiddleCenter;
-            }
-        }
-
-        private static RectTransform FindDescendant(Transform root, string name)
-        {
-            if (root == null || string.IsNullOrWhiteSpace(name))
-            {
-                return null;
-            }
-
-            foreach (var child in root.GetComponentsInChildren<RectTransform>(true))
-            {
-                if (child.name == name)
-                {
-                    return child;
-                }
-            }
-
-            return null;
-        }
-
-        private static void SetCameraSelection(Transform parent, CameraMode mode)
-        {
-            if (parent == null)
-            {
-                return;
-            }
-
-            var selectedName = CameraCommandName(mode);
-            foreach (var button in parent.GetComponentsInChildren<Button>(true))
-            {
-                if (button.name.IndexOf("Camera", System.StringComparison.OrdinalIgnoreCase) < 0
-                    || button.name.IndexOf("Command", System.StringComparison.OrdinalIgnoreCase) < 0
-                    || button.name.IndexOf("Reset", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    continue;
-                }
-
-                UiFactory.SetButtonSelected(button, button.name == selectedName);
-            }
-        }
-
-        private static void SetCameraSelection(OceanToolbarRefs refs, CameraMode mode)
-        {
-            if (refs == null)
-            {
-                return;
-            }
-
-            UiFactory.SetButtonSelected(refs.cameraFollowCommand, mode == CameraMode.Follow);
-            UiFactory.SetButtonSelected(refs.cameraGlobalCommand, mode == CameraMode.Global);
-            UiFactory.SetButtonSelected(refs.cameraTopCommand, mode == CameraMode.Top);
-            UiFactory.SetButtonSelected(refs.cameraSideCommand, mode == CameraMode.Side);
-            UiFactory.SetButtonSelected(refs.cameraOrbitCommand, mode == CameraMode.Orbit);
-        }
-
-        private static string CameraCommandName(CameraMode mode)
-        {
-            switch (mode)
-            {
-                case CameraMode.Global: return "CameraGlobalCommand";
-                case CameraMode.Top: return "CameraTopCommand";
-                case CameraMode.Side: return "CameraSideCommand";
-                case CameraMode.Orbit: return "CameraOrbitCommand";
-                default: return "CameraFollowCommand";
-            }
         }
 
         private static void AddViewportBorder(RectTransform frame)
@@ -325,6 +134,33 @@ namespace UnderwaterGliderTwin.UI
             AddBorderLine("OceanViewportBorderBottom", frame, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, 1f), color);
             AddBorderLine("OceanViewportBorderLeft", frame, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), Vector2.zero, new Vector2(1f, 0f), color);
             AddBorderLine("OceanViewportBorderRight", frame, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), Vector2.zero, new Vector2(1f, 0f), color);
+        }
+
+        private static void ConfigureViewportFrame(RectTransform frame)
+        {
+            if (frame == null)
+            {
+                return;
+            }
+
+            frame.anchorMin = Vector2.zero;
+            frame.anchorMax = Vector2.one;
+            frame.pivot = new Vector2(0.5f, 0.5f);
+            frame.anchoredPosition = new Vector2(-56f, -102f);
+            frame.sizeDelta = new Vector2(-804f, -524f);
+        }
+
+        private static void ConfigureToolbarPanel(RectTransform panel)
+        {
+            if (panel == null)
+            {
+                return;
+            }
+
+            panel.anchorMin = new Vector2(0.5f, 0f);
+            panel.anchorMax = new Vector2(0.5f, 0f);
+            panel.pivot = new Vector2(0.5f, 0f);
+            panel.anchoredPosition = new Vector2(0f, UiFactory.CommandCenterViewportBottomOffset);
         }
 
         private static void AddBorderLine(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 position, Vector2 size, Color color)

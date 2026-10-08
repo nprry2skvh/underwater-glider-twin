@@ -59,5 +59,6 @@ namespace UnderwaterGliderTwin.Prediction
         public string Status { get; }
         public float ComputeMilliseconds { get; }
         public int SampleCount => PredictedPoints.Length;
+        public bool HasScoredMetrics => !float.IsNaN(RmseMeters) && !float.IsInfinity(RmseMeters) && SampleCount > 1;
     }
 }

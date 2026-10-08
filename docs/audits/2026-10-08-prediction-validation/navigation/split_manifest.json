@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "source_sha256": "d5f890b2004528d3cc2643fdcc7de3f9207f9443fe275cfa87ac10cff09af8da",
+  "status": "insufficient_independent_segments",
+  "segments": [
+    {
+      "segment_index": 0,
+      "row_count": 236163,
+      "start_seconds": -1.0,
+      "end_seconds": 2361618.0
+    }
+  ]
+}
