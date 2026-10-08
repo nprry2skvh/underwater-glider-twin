@@ -164,6 +164,43 @@ namespace UnderwaterGliderTwin.Tests
             }
         }
 
+        [UnityTest]
+        public IEnumerator MainScene_StatusDrawerContainsLiveMetricsAndToolbarsShareCenter()
+        {
+            RuntimeDataSourceState.UseSimulation(SimulationProfile.Default);
+            yield return SceneManager.LoadSceneAsync("Main");
+            yield return null;
+            yield return null;
+
+            var runtimeRoot = FindSceneObject(SceneManager.GetActiveScene(), "RuntimeUI");
+            Assert.That(runtimeRoot, Is.Not.Null);
+            var layout = runtimeRoot.GetComponentInChildren<ReferenceHudLayoutController>(true);
+            Assert.That(layout, Is.Not.Null);
+            layout.SetDrawerOpen(ReferenceHudLayoutController.StatusDrawerId, true);
+            Canvas.ForceUpdateCanvases();
+
+            var panel = FindDescendant(runtimeRoot.transform, "MissionStatusPanel");
+            var viewport = FindDescendant(runtimeRoot.transform, "MissionStatusViewport");
+            Assert.That(panel.activeInHierarchy, Is.True);
+            Assert.That(viewport.GetComponent<ScrollRect>(), Is.Not.Null);
+            foreach (var name in new[]
+            {
+                "StatusDepthValue", "StatusHeadingValue", "StatusWaterSpeedValue", "StatusGroundSpeedValue",
+                "StatusNetBuoyancyValue", "StatusLiftValue", "StatusPistonValue", "PredictionStatusValue",
+                "DriftValue", "EngineeringValidationValue"
+            })
+            {
+                Assert.That(FindDescendant(viewport.transform, name)?.GetComponent<Text>(), Is.Not.Null, name);
+            }
+
+            var playbackBar = FindDescendant(runtimeRoot.transform, "PlaybackControlsPanel").GetComponent<RectTransform>();
+            var oceanBar = FindDescendant(runtimeRoot.transform, "OceanCommandToolbar").GetComponent<RectTransform>();
+            Assert.That(playbackBar.anchorMin.x, Is.EqualTo(0.5f));
+            Assert.That(oceanBar.anchorMin.x, Is.EqualTo(0.5f));
+            Assert.That(playbackBar.anchoredPosition.x, Is.EqualTo(0f).Within(0.1f));
+            Assert.That(oceanBar.anchoredPosition.x, Is.EqualTo(0f).Within(0.1f));
+        }
+
         private static GameObject FindDescendant(Transform root, string objectName)
         {
             foreach (var transform in root.GetComponentsInChildren<Transform>(true))

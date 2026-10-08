@@ -15,6 +15,8 @@ namespace UnderwaterGliderTwin.UI
         private const string RightDrawerGroup = "right";
         private const string BottomDrawerGroup = "bottom";
         private const float TopMargin = 60f;
+        private const float OceanToolbarBottom = 146f;
+        private const float OceanToolbarHeight = 58f;
         private static readonly Color QgcToolbar = new Color(0.105f, 0.125f, 0.14f, 0.98f);
         private static readonly Color QgcPanel = new Color(0.12f, 0.14f, 0.155f, 0.95f);
         private static readonly Color QgcPanelHeader = new Color(0.155f, 0.18f, 0.195f, 0.98f);
@@ -155,7 +157,7 @@ namespace UnderwaterGliderTwin.UI
             ConfigureTelemetryDrawer(canvasSize);
             ConfigureStatusDrawer(canvasSize);
             ConfigurePlaybackBar(canvasSize);
-            ConfigureOceanToolbar();
+            ConfigureOceanToolbar(canvasSize);
             if (viewportFrame != null)
             {
                 viewportFrame.gameObject.SetActive(false);
@@ -315,9 +317,16 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            var availableHeight = Mathf.Max(360f, canvasSize.y - TopMargin - 36f);
             var size = statusPanel.sizeDelta;
-            size.y = Mathf.Min(size.y, availableHeight);
+            var bottomClearance = UiFactory.CommandCenterOperationsTopOffset;
+            var oceanWidth = Mathf.Max(0f, Mathf.Min(880f, canvasSize.x - 24f));
+            var statusLeft = canvasSize.x - 12f - size.x;
+            if (oceanToolbar != null && statusLeft < (canvasSize.x + oceanWidth) * 0.5f)
+            {
+                bottomClearance = Mathf.Max(bottomClearance, OceanToolbarBottom + OceanToolbarHeight + 6f);
+            }
+            var availableHeight = Mathf.Max(0f, canvasSize.y - TopMargin - bottomClearance);
+            size.y = Mathf.Min(620f, availableHeight);
             SetFixedRect(statusPanel, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-12f, -TopMargin), size);
             SetPanelOpacity(statusPanel, 0.94f);
         }
@@ -329,19 +338,20 @@ namespace UnderwaterGliderTwin.UI
                 return;
             }
 
-            var width = Mathf.Clamp(canvasSize.x - 240f, 1320f, 1480f);
-            SetFixedRect(playbackPanel, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(34f, 12f), new Vector2(width, 124f));
+            var width = Mathf.Max(0f, Mathf.Min(1480f, canvasSize.x - 24f));
+            SetFixedRect(playbackPanel, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 12f), new Vector2(width, 124f));
             SetPanelOpacity(playbackPanel, 0.94f);
         }
 
-        private void ConfigureOceanToolbar()
+        private void ConfigureOceanToolbar(Vector2 canvasSize)
         {
             if (oceanToolbar == null)
             {
                 return;
             }
 
-            SetFixedRect(oceanToolbar, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(78f, 146f), new Vector2(880f, 58f));
+            var width = Mathf.Max(0f, Mathf.Min(880f, canvasSize.x - 24f));
+            SetFixedRect(oceanToolbar, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, OceanToolbarBottom), new Vector2(width, OceanToolbarHeight));
             SetPanelOpacity(oceanToolbar, 0.94f);
         }
 

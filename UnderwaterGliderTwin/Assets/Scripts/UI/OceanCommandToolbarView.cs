@@ -146,8 +146,8 @@ namespace UnderwaterGliderTwin.UI
             frame.anchorMin = Vector2.zero;
             frame.anchorMax = Vector2.one;
             frame.pivot = new Vector2(0.5f, 0.5f);
-            frame.anchoredPosition = new Vector2(-12f, -102f);
-            frame.sizeDelta = new Vector2(-716f, -524f);
+            frame.anchoredPosition = new Vector2(-56f, -102f);
+            frame.sizeDelta = new Vector2(-804f, -524f);
         }
 
         private static void ConfigureToolbarPanel(RectTransform panel)

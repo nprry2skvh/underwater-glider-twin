@@ -120,6 +120,77 @@ namespace UnderwaterGliderTwin.Tests
             }
         }
 
+        [TestCase(1280f)]
+        [TestCase(1920f)]
+        public void BottomToolbars_ShareCanvasCenterWithoutExtendingOffScreen(float canvasWidth)
+        {
+            using (var scope = new UiTestObjectScope())
+            {
+                var root = scope.CreateRoot("RuntimeUI");
+                var canvasObject = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas));
+                canvasObject.transform.SetParent(root.transform, false);
+                var canvasRect = canvasObject.GetComponent<RectTransform>();
+                canvasRect.sizeDelta = new Vector2(canvasWidth, 1080f);
+                var playback = CreatePanel(canvasRect, "PlaybackControlsPanel", new Vector2(1540f, 124f));
+                var ocean = CreatePanel(canvasRect, "OceanCommandToolbar", new Vector2(880f, 58f));
+
+                ReferenceHudLayoutController.Install(canvasObject);
+
+                foreach (var panel in new[] { playback, ocean })
+                {
+                    Assert.That(panel.anchorMin.x, Is.EqualTo(0.5f));
+                    Assert.That(panel.anchorMax.x, Is.EqualTo(0.5f));
+                    Assert.That(panel.anchoredPosition.x, Is.EqualTo(0f).Within(0.1f));
+                    Assert.That(panel.sizeDelta.x, Is.LessThanOrEqualTo(canvasWidth - 24f));
+                }
+            }
+        }
+
+        [Test]
+        public void StatusDrawer_UsesAvailableHeightAbovePlaybackAt720p()
+        {
+            using (var scope = new UiTestObjectScope())
+            {
+                var root = scope.CreateRoot("RuntimeUI");
+                var canvasObject = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas));
+                canvasObject.transform.SetParent(root.transform, false);
+                canvasObject.GetComponent<RectTransform>().sizeDelta = new Vector2(1280f, 720f);
+                var status = CreatePanel(canvasObject.transform, "MissionStatusPanel", new Vector2(440f, 464f));
+                CreatePanel(canvasObject.transform, "PlaybackControlsPanel", new Vector2(1480f, 124f));
+
+                ReferenceHudLayoutController.Install(canvasObject);
+
+                Assert.That(status.anchoredPosition.y, Is.EqualTo(-60f).Within(0.1f));
+                Assert.That(status.sizeDelta.y, Is.EqualTo(518f).Within(0.1f));
+                Assert.That(60f + status.sizeDelta.y, Is.LessThanOrEqualTo(720f - UiFactory.CommandCenterOperationsTopOffset));
+            }
+        }
+
+        [TestCase(1280f)]
+        [TestCase(1920f)]
+        public void StatusDrawer_DoesNotCoverOceanToolbarAt720p(float width)
+        {
+            using (var scope = new UiTestObjectScope())
+            {
+                var root = scope.CreateRoot("RuntimeUI");
+                var canvasObject = new GameObject("RuntimeCanvas", typeof(RectTransform), typeof(Canvas));
+                canvasObject.transform.SetParent(root.transform, false);
+                var canvasRect = canvasObject.GetComponent<RectTransform>();
+                canvasRect.sizeDelta = new Vector2(width, 720f);
+                var status = CreatePanel(canvasRect, "MissionStatusPanel", new Vector2(440f, 464f));
+                var ocean = CreatePanel(canvasRect, "OceanCommandToolbar", new Vector2(880f, 58f));
+                var controller = ReferenceHudLayoutController.Install(canvasObject);
+                controller.SetDrawerOpen(ReferenceHudLayoutController.StatusDrawerId, true);
+
+                var statusLeft = width + status.anchoredPosition.x - status.sizeDelta.x;
+                var oceanRight = width * 0.5f + ocean.anchoredPosition.x + ocean.sizeDelta.x * 0.5f;
+                var statusBottom = 720f + status.anchoredPosition.y - status.sizeDelta.y;
+                var oceanTop = ocean.anchoredPosition.y + ocean.sizeDelta.y;
+                Assert.That(statusLeft >= oceanRight || statusBottom >= oceanTop, Is.True,
+                    "The status drawer must leave the ocean camera controls reachable.");
+            }
+        }
+
         private static RectTransform CreatePanel(Transform parent, string name, Vector2 size)
         {
             var panel = new GameObject(name, typeof(RectTransform), typeof(Image));

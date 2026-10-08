@@ -439,9 +439,9 @@ namespace UnderwaterGliderTwin.Tests
             new GameObject("Toolbar").AddComponent<OceanCommandToolbarView>().Initialize(cameraController, trajectory);
 
             var viewport = GameObject.Find("OceanViewportFrame").GetComponent<RectTransform>();
-            Assert.That(viewport.anchoredPosition.x, Is.EqualTo(-12f).Within(.1f));
+            Assert.That(viewport.anchoredPosition.x, Is.EqualTo(-56f).Within(.1f));
             Assert.That(viewport.anchoredPosition.y, Is.EqualTo(-102f).Within(.1f));
-            Assert.That(viewport.sizeDelta.x, Is.EqualTo(-716f).Within(.1f));
+            Assert.That(viewport.sizeDelta.x, Is.EqualTo(-804f).Within(.1f));
             Assert.That(viewport.sizeDelta.y, Is.LessThanOrEqualTo(-520f));
 
             var toolbar = GameObject.Find("OceanCommandToolbar").GetComponent<RectTransform>();
@@ -1540,6 +1540,77 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void StatusPanelView_ShowsUnavailablePredictionMetricsWithoutFalseZeroes()
+        {
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+            panel.Initialize(CreatePlayback(Frames(2)), new AlarmEvaluator(1000f, 1f, 90f), null, null);
+
+            foreach (var name in new[] { "DriftValue", "RmseValue", "MaeValue", "ConfidenceValue", "PredictionTimeValue" })
+            {
+                var metric = GameObject.Find(name)?.GetComponent<Text>();
+                Assert.That(metric, Is.Not.Null, name + " must remain visible while prediction is unavailable");
+                Assert.That(metric.text, Is.EqualTo("—"), name + " must not imply a measured zero");
+            }
+        }
+
+        [Test]
+        public void StatusPanelView_LiveMotionFollowsFractionalPlaybackAndKeepsUnavailableDiagnosticsExplicit()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+            panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), null, null);
+
+            playback.PlayForward();
+            playback.Step(0.5f);
+
+            Assert.That(FindText("StatusDepthValue").text, Is.EqualTo("10.5 m"));
+            Assert.That(FindText("StatusHeadingValue").text, Is.EqualTo("30.5°"));
+            Assert.That(FindText("StatusNetBuoyancyValue").text, Is.EqualTo("—"));
+            Assert.That(FindText("StatusLiftValue").text, Is.EqualTo("—"));
+        }
+
+        [Test]
+        public void StatusPanelView_ShowsMeasuredDynamicsWhenAvailable()
+        {
+            var diagnostics = new SimulationDiagnostics(
+                new Vector3(0.3f, -0.1f, 0.4f), new Vector3(0.2f, 0f, -0.1f),
+                6.5f, 8.2f, 12.4f, 3.2f, 4.5f, 7.8f, -1.1f,
+                new Vector3(0.02f, 0.01f, 0.03f), new Vector3(1.2f, 2.4f, 0.8f),
+                12.5f, new Vector3(4f, -3f, 1.5f), 6.7f);
+            var frame = new TelemetryFrame(0, "t0", 0f, 120d, 25d, 10f, 100f, 30f, 4f, -3f,
+                28.5f, 0.3f, 90f, "Parameter Simulation", "Glide", 2f, 44f, 120f, 80f,
+                0f, 17f, 32f, diagnostics);
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+
+            panel.Initialize(CreatePlayback(new[] { frame }), new AlarmEvaluator(1000f, 1f, 90f), null, null);
+
+            Assert.That(FindText("StatusWaterSpeedValue").text, Is.EqualTo("0.51 m/s"));
+            Assert.That(FindText("StatusGroundSpeedValue").text, Is.EqualTo("0.59 m/s"));
+            Assert.That(FindText("StatusNetBuoyancyValue").text, Is.EqualTo("6.5 N"));
+            Assert.That(FindText("StatusLiftValue").text, Is.EqualTo("4.5 N"));
+            Assert.That(FindText("StatusPistonValue").text, Is.EqualTo("12.5 mm"));
+        }
+
+        [Test]
+        public void StatusPanelView_DoesNotPresentInvalidMotionAsMeasuredZero()
+        {
+            var diagnostics = new SimulationDiagnostics(
+                new Vector3(float.NaN, 0f, 0f), Vector3.zero, float.NaN, 0f, 0f);
+            var frame = new TelemetryFrame(0, "t0", 0f, 0d, 0d, 10f, 100f, float.NaN, 0f, 0f,
+                28.5f, 0.3f, 90f, "Parameter Simulation", "Glide", 2f, 44f, 120f, 80f,
+                0f, 17f, 32f, diagnostics);
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+
+            panel.Initialize(CreatePlayback(new[] { frame }), new AlarmEvaluator(1000f, 1f, 90f), null, null);
+
+            Assert.That(FindText("StatusDepthValue").text, Is.EqualTo("—"));
+            Assert.That(FindText("StatusHeadingValue").text, Is.EqualTo("—"));
+            Assert.That(FindText("StatusWaterSpeedValue").text, Is.EqualTo("—"));
+            Assert.That(FindText("StatusGroundSpeedValue").text, Is.EqualTo("—"));
+            Assert.That(FindText("StatusNetBuoyancyValue").text, Is.EqualTo("—"));
+        }
+
+        [Test]
         public void StatusPanelView_UsesChineseMissionCopy()
         {
             var logDirectory = Path.Combine(Application.temporaryCachePath, "ui-status-copy-" + System.Guid.NewGuid().ToString("N"));
@@ -1600,17 +1671,22 @@ namespace UnderwaterGliderTwin.Tests
             panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), new TwinLogger(logDirectory), null);
 
             var statusRect = GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>();
-            Assert.That(statusRect.anchoredPosition.y, Is.EqualTo(-364f).Within(.1f));
-            Assert.That(statusRect.sizeDelta.y, Is.LessThanOrEqualTo(574f));
-            Assert.That(FindText("MissionValue").rectTransform.anchoredPosition.y, Is.EqualTo(-54f).Within(.1f));
-            Assert.That(FindText("EngineeringValidationValue").rectTransform.anchoredPosition.y, Is.EqualTo(-396f).Within(.1f));
+            Assert.That(statusRect.anchoredPosition.y, Is.EqualTo(-114f).Within(.1f));
+            Assert.That(statusRect.sizeDelta.y, Is.LessThanOrEqualTo(620f));
+            var viewport = GameObject.Find("MissionStatusViewport").GetComponent<RectTransform>();
+            var scroll = viewport.GetComponent<ScrollRect>();
+            Assert.That(scroll, Is.Not.Null);
+            Assert.That(scroll.content.rect.height, Is.GreaterThan(viewport.rect.height));
+            Assert.That(FindText("MissionValue").transform.IsChildOf(scroll.content), Is.True);
+            Assert.That(GameObject.Find("MissionProgressBar").transform.IsChildOf(scroll.content), Is.False);
+            Assert.That(GameObject.Find("AlarmPanel").transform.IsChildOf(scroll.content), Is.False);
         }
 
         [Test]
         public void StatusPanelView_ExtendsToOperationsBoundaryAt1080p()
         {
-            Assert.That(StatusPanelView.CalculateStatusPanelHeight(1080f), Is.EqualTo(574f).Within(.1f));
-            Assert.That(StatusPanelView.CalculateStatusPanelHeight(720f), Is.EqualTo(214f).Within(.1f));
+            Assert.That(StatusPanelView.CalculateStatusPanelHeight(1080f), Is.EqualTo(620f).Within(.1f));
+            Assert.That(StatusPanelView.CalculateStatusPanelHeight(720f), Is.EqualTo(464f).Within(.1f));
         }
 
         [Test]
@@ -1633,8 +1709,8 @@ namespace UnderwaterGliderTwin.Tests
             var statusRect = GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>();
             Assert.That(statusRect.anchorMin, Is.EqualTo(new Vector2(1f, 1f)));
             Assert.That(statusRect.anchorMax, Is.EqualTo(new Vector2(1f, 1f)));
-            Assert.That(statusRect.anchoredPosition.y, Is.EqualTo(-364f).Within(.1f));
-            Assert.That(statusRect.sizeDelta.y, Is.LessThanOrEqualTo(720f - 364f - 142f));
+            Assert.That(statusRect.anchoredPosition.y, Is.EqualTo(-114f).Within(.1f));
+            Assert.That(statusRect.sizeDelta.y, Is.LessThanOrEqualTo(720f - 114f - 142f));
         }
 
         [Test]
@@ -1648,7 +1724,7 @@ namespace UnderwaterGliderTwin.Tests
             var statusRect = GameObject.Find("MissionStatusPanel").GetComponent<RectTransform>();
             var parameterHeader = GameObject.Find("MissionConfigurationDrawerHeader").GetComponent<RectTransform>();
             AssertRectanglesDoNotOverlap(statusRect, parameterHeader);
-            Assert.That(statusRect.anchoredPosition.y, Is.LessThanOrEqualTo(-364f));
+            Assert.That(statusRect.anchoredPosition.y, Is.LessThanOrEqualTo(-114f));
         }
 
         [Test]
