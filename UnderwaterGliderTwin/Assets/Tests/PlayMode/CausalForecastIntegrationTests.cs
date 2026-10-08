@@ -65,8 +65,11 @@ namespace UnderwaterGliderTwin.Tests
         public IEnumerator HotUpdatePreservesOldForecastAndSeekUsesHistoricalBranch()
         {
             var controller = Create(1f, out var playback, out var timeline);
-            playback.Seek(20f / 79f);
+            playback.Seek(30f / 79f);
             var historical = controller.Ledger.Forecasts.Last();
+            Assert.That(historical.Origin.ElapsedSeconds, Is.EqualTo(300f));
+            Assert.That(historical.Frames.Count, Is.EqualTo(3));
+            Assert.That(historical.Failure, Is.Empty);
             playback.Seek(39f / 79f);
             var old = controller.Ledger.Forecasts.First();
             var points = old.Frames.ToArray();
@@ -81,10 +84,13 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(updated.ProfileSequence, Is.EqualTo(1));
             Assert.That(old.Frames, Is.EqualTo(points));
             var count = controller.Ledger.Forecasts.Count;
-            playback.Seek(20f / 79f);
-            playback.Seek(20f / 79f);
+            playback.Seek(30f / 79f);
+            playback.Seek(30f / 79f);
             Assert.That(controller.Ledger.Forecasts.Count, Is.EqualTo(count), "historical seek must reuse original branch record");
-            Assert.That(controller.Ledger.Forecasts.Any(record => record.ForecastId == historical.ForecastId), Is.True);
+            var revisited = controller.Ledger.Forecasts.Single(record => record.Origin.ElapsedSeconds == 300f);
+            Assert.That(revisited.ForecastId, Is.EqualTo(historical.ForecastId));
+            Assert.That(revisited.BranchId, Is.EqualTo(old.BranchId));
+            Assert.That(revisited.Failure, Is.Empty);
         }
 
         [UnityTest]
@@ -145,10 +151,24 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(controller.Ledger.Forecasts.Last().CurrentVersion, Is.EqualTo(previous.CurrentVersion));
         }
 
-        private PredictionController Create(float scale, out PlaybackController playback,
-            out SimulationTrajectoryTimeline timeline)
+        [UnityTest]
+        public IEnumerator FractionalOriginShowsAvailableDelayedScore()
         {
-            var frames = Frames();
+            var controller = Create(1f, out var playback, out _, timeOffset: 120.1f);
+            var forecast = controller.Ledger.Forecasts.Single();
+            Assert.That(forecast.Origin.ElapsedSeconds, Is.EqualTo(510.1f));
+            playback.Seek(42f / 79f);
+            yield return null;
+            var scored = controller.Ledger.GetMetrics(forecast.ForecastId, 0f);
+            Assert.That(scored.RmseMeters, Is.Not.NaN);
+            Assert.That(controller.CurrentSnapshot.RmseMeters, Is.EqualTo(scored.RmseMeters).Within(.001f),
+                "available score must be shown even when endpoint-origin rounds away from the requested horizon");
+        }
+
+        private PredictionController Create(float scale, out PlaybackController playback,
+            out SimulationTrajectoryTimeline timeline, float timeOffset = 0f)
+        {
+            var frames = Frames(timeOffset: timeOffset);
             timeline = SimulationTrajectoryTimeline.CreateInitial(frames, RuntimeDataSourceState.SimulationProfile);
             var host = new GameObject("CausalForecastIntegration");
             objects.Add(host);
@@ -165,11 +185,11 @@ namespace UnderwaterGliderTwin.Tests
             return controller;
         }
 
-        private static List<TelemetryFrame> Frames(int count = 80)
+        private static List<TelemetryFrame> Frames(int count = 80, float timeOffset = 0f)
         {
             var frames = new List<TelemetryFrame>();
             for (var index = 0; index < count; index++)
-                frames.Add(new TelemetryFrame(index, "t" + index, index * 10f,
+                frames.Add(new TelemetryFrame(index, "t" + index, index * 10f + timeOffset,
                     120.0 + index * .00001, 25.0 + index * .00002, 10f + index * .1f,
                     80f, 359f, 2f, -1f, 28f, .6f, 90f, "simulation", "descent",
                     1f, 359f, 100f, 0f, 0f, 0f, 0f));

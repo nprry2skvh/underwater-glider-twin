@@ -41,6 +41,14 @@ namespace UnderwaterGliderTwin.Prediction
         public FrozenForecast Publish(string requestKey, TelemetryFrame origin, IReadOnlyList<TelemetryFrame> predicted,
             string branchId, bool isSimulation, int profileSequence, string modelHash,
             string inputDigest, string currentVersion, string failure)
+            => PublishRequest(requestKey, origin, predicted, branchId, isSimulation, profileSequence,
+                modelHash, inputDigest, currentVersion, failure,
+                predicted != null && predicted.Count > 0
+                    ? predicted[predicted.Count - 1].ElapsedSeconds - origin.ElapsedSeconds : float.NaN);
+
+        public FrozenForecast PublishRequest(string requestKey, TelemetryFrame origin, IReadOnlyList<TelemetryFrame> predicted,
+            string branchId, bool isSimulation, int profileSequence, string modelHash,
+            string inputDigest, string currentVersion, string failure, float requestedHorizonSeconds)
         {
             if (requests.TryGetValue(requestKey, out var previous)) return previous;
             if (predicted == null || string.IsNullOrWhiteSpace(requestKey)) throw new ArgumentException("Invalid forecast request");
@@ -53,7 +61,7 @@ namespace UnderwaterGliderTwin.Prediction
             }
             var record = new FrozenForecast(RunId, requestKey, origin, predicted, branchId, isSimulation,
                 profileSequence, modelHash, inputDigest, currentVersion, failure,
-                TimeToleranceSeconds, MaximumInterpolationGapSeconds, WaitDeadlineSeconds);
+                TimeToleranceSeconds, MaximumInterpolationGapSeconds, WaitDeadlineSeconds, requestedHorizonSeconds);
             requests.Add(requestKey, record); forecasts.Add(record);
             scoresByForecast.Add(record.ForecastId, new List<ForecastScore>());
             var clock = Clock(isSimulation, branchId, origin.ElapsedSeconds);

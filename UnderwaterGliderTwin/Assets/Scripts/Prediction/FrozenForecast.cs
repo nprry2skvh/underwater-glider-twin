@@ -9,7 +9,8 @@ namespace UnderwaterGliderTwin.Prediction
         internal FrozenForecast(string runId, string requestKey, TelemetryFrame origin,
             IReadOnlyList<TelemetryFrame> frames, string branchId, bool simulation,
             int profileSequence, string modelHash, string inputDigest, string currentVersion, string failure,
-            float timeToleranceSeconds, float maximumInterpolationGapSeconds, float waitDeadlineSeconds)
+            float timeToleranceSeconds, float maximumInterpolationGapSeconds, float waitDeadlineSeconds,
+            float requestedHorizonSeconds)
         {
             ForecastId = Guid.NewGuid().ToString("N");
             RunId = runId;
@@ -26,6 +27,8 @@ namespace UnderwaterGliderTwin.Prediction
             TimeToleranceSeconds = timeToleranceSeconds;
             MaximumInterpolationGapSeconds = maximumInterpolationGapSeconds;
             WaitDeadlineSeconds = waitDeadlineSeconds;
+            RequestedHorizonSeconds = float.IsNaN(requestedHorizonSeconds) || float.IsInfinity(requestedHorizonSeconds)
+                ? (float?)null : requestedHorizonSeconds;
         }
 
         public string ForecastId { get; }
@@ -43,6 +46,7 @@ namespace UnderwaterGliderTwin.Prediction
         public float TimeToleranceSeconds { get; }
         public float MaximumInterpolationGapSeconds { get; }
         public float WaitDeadlineSeconds { get; }
+        public float? RequestedHorizonSeconds { get; }
         // TelemetryFrame has no receipt clock; do not invent operational provenance.
         public string InputMode => "sample_time_replay";
         public string AlgorithmVersion => "causal-forecast-v1";

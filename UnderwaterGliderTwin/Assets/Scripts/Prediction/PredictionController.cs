@@ -202,17 +202,17 @@ namespace UnderwaterGliderTwin.Prediction
                 {
                     result = predictor.Predict(new PredictionContext(window.WindowFrames, mapper, window));
                     if (result == null) throw new InvalidOperationException("Predictor returned no result");
-                    record = Ledger.Publish(key, currentFrame, result.ForecastFrames, issueBranch.Id,
+                    record = Ledger.PublishRequest(key, currentFrame, result.ForecastFrames, issueBranch.Id,
                         RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation, issueBranch.Sequence,
                         modelHash, digest, issueBranch.CurrentVersion,
-                        result.ForecastFrames.Length == 0 ? result.Status : string.Empty);
+                        result.ForecastFrames.Length == 0 ? result.Status : string.Empty, HorizonSeconds);
                 }
                 catch (Exception exception)
                 {
                     var failure = "Prediction failed: " + exception.Message;
-                    record = Ledger.Publish(key, currentFrame, Array.Empty<TelemetryFrame>(), issueBranch.Id,
+                    record = Ledger.PublishRequest(key, currentFrame, Array.Empty<TelemetryFrame>(), issueBranch.Id,
                         RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation, issueBranch.Sequence,
-                        modelHash, digest, issueBranch.CurrentVersion, failure);
+                        modelHash, digest, issueBranch.CurrentVersion, failure, HorizonSeconds);
                     result = new PredictionResult(predictor.GetName(), failure, Array.Empty<Vector3>(),
                         Array.Empty<Vector3>(), currentIndex, currentIndex,
                         new PredictionMetrics(float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, 0f));
@@ -280,7 +280,7 @@ namespace UnderwaterGliderTwin.Prediction
                 var record = Ledger.Forecasts[index];
                 if (record.ModelHash != modelHash || record.BranchId != issueBranch
                     || record.Origin.ElapsedSeconds > now || record.Frames.Count == 0
-                    || record.Frames[record.Frames.Count - 1].ElapsedSeconds - record.Origin.ElapsedSeconds != HorizonSeconds) continue;
+                    || record.RequestedHorizonSeconds != HorizonSeconds) continue;
                 var delayed = Ledger.GetMetricsThrough(record.ForecastId, result.Metrics.ComputeMilliseconds, now);
                 if (float.IsNaN(delayed.RmseMeters)) continue;
                 metrics = delayed;
