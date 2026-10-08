@@ -72,3 +72,7 @@ I2 RED：Edit529中528通过、唯一新回归失败，缺坐标时左翼应10�
 推送后主目录HEAD/index/tracked diff三摘要再次完全匹配基线，集成树干净、Models无修改、备份引用91ba2da仍在。主目录本地目标分支故意保持6142262，不能在其脏索引背后移动分支；未经另行授权不自动同步、stash或覆盖。根HANDOFF属于并行物理基线任务，本轮没有改写。来源与集成工作树及两个旧运行包均保留。
 
 本回执仅修改文档，会正常提交并推送，不改变已验收的产品源码。最终回执提交哈希可由 `codex/prediction-p2-integration` HEAD和目标远端核对，不需重新运行五门槛。用户可运行集成树 `Builds/UnderwaterGliderTwin/UnderwaterGliderTwin.exe` 查看新版；主目录运行包未被本次替换。
+
+回执88d3a19首次推送遇到连接重置，普通远端读取随后连接443失败；DNS正常，TCP443检查False。Windows系统现有代理已启用且监听，Git/进程未配置代理。仅对这次Git传递 `-c http.proxy=<已核验的系统代理>` 后，读取确认远端仍0016ef2，正常推送0016ef2..5947a5f成功，最终ls-remote匹配5947a5f8fae033320c9e0fd17a79ed9f01bb5aa0。未改全局网络配置、未降低TLS校验或强推。此经验记入隔离树LESSONS，不冻结端口为长期配置。
+
+集成HANDOFF结构校验ready（991字符、单一目标/下一步、3里程碑）；最后保护检查主目录HEAD/index/diff仍匹配。文档回执及本次网络恢复记录与0016ef2产品源码完全相同，最终记录提交仍以分支HEAD及目标远端核对。
