@@ -225,6 +225,15 @@ def main() -> None:
     print(f"Summary written to {summary_path}")
 
 
+def parse_position_reference(value: object) -> bool:
+    token = str(value).strip().casefold()
+    if token in {'true', '1', '1.0'}:
+        return True
+    if token in {'false', '0', '0.0'}:
+        return False
+    raise ValueError('has_position_reference must explicitly be true/false or 1/0')
+
+
 def load_frame_table(csv_path: Path) -> pd.DataFrame:
     try:
         raw = pd.read_csv(csv_path, encoding="gbk", header=0, dtype=str, low_memory=False)
@@ -236,9 +245,18 @@ def load_frame_table(csv_path: Path) -> pd.DataFrame:
         frame[name] = raw.iloc[:, index]
     if "received_seconds" in raw.columns:
         frame["received_seconds"] = pd.to_numeric(raw["received_seconds"], errors="coerce")
+    metadata_columns = {'has_position_reference', 'branch_id', 'truth_grade'}
+    if 'has_position_reference' in raw.columns:
+        frame['has_position_reference'] = raw['has_position_reference'].map(parse_position_reference)
+    for name in ('branch_id', 'truth_grade'):
+        if name in raw.columns:
+            values = raw[name].str.strip()
+            if values.isna().any() or values.eq('').any():
+                raise ValueError(f'{name} metadata must be nonempty')
+            frame[name] = values
 
     for name in frame.columns:
-        if name not in {"raw_time", "work_mode", "run_state"}:
+        if name not in {"raw_time", "work_mode", "run_state"} | metadata_columns:
             frame[name] = pd.to_numeric(frame[name], errors="coerce")
 
     frame["elapsed_seconds"] = frame["raw_time"].apply(parse_elapsed_seconds).astype(float)
@@ -249,7 +267,8 @@ def load_frame_table(csv_path: Path) -> pd.DataFrame:
     # With receipt metadata, only causal_history may fill values after filtering
     # availability. Filling here could copy a late row into an on-time row.
     if "received_seconds" not in frame:
-        frame = frame.ffill()
+        fillable = [name for name in frame.columns if name not in metadata_columns]
+        frame[fillable] = frame[fillable].ffill()
     return frame
 
 

@@ -294,8 +294,11 @@ def score_frozen_forecast(record: dict, frame: pd.DataFrame, received_seconds: f
         radius = max(config['maximum_interpolation_gap_seconds'], config['time_tolerance_seconds'])
         visible = (np.isfinite(received) & (received >= sampled) & (received <= received_seconds)
                    & (received < deadline) & (np.abs(sampled - target) <= radius))
-        if 'branch_id' in frame and 'simulation' in truth_grade:
-            visible &= frame.branch_id.to_numpy() == record['branch_id']
+        if 'branch_id' in frame:
+            simulation_rows = np.full(len(frame), 'simulation' in truth_grade, dtype=bool)
+            if 'truth_grade' in frame:
+                simulation_rows |= frame.truth_grade.astype(str).str.contains('simulation', case=False).to_numpy()
+            visible &= ~simulation_rows | (frame.branch_id.to_numpy() == record['branch_id'])
         events = frame.loc[visible].copy()
         events['_received_at'] = received[visible]
         events = events.sort_values('_received_at', kind='stable').drop_duplicates('elapsed_seconds', keep='first')
@@ -317,7 +320,8 @@ def score_frozen_forecast(record: dict, frame: pd.DataFrame, received_seconds: f
                  'horizontal_error_m': None, 'position_error_m': None, 'available_at_seconds': availability}
         if actual is not None:
             valid_position = all(math.isfinite(float(actual[name])) for name in ('longitude_deg', 'latitude_deg', 'depth_m'))
-            if not valid_position or not bool(actual.get('has_position_reference', True)):
+            score['truth_grade'] = actual.get('truth_grade', truth_grade)
+            if not valid_position or not train_models.parse_position_reference(actual.get('has_position_reference', True)):
                 score.update(status='no_position_reference')
                 result.append(score)
                 continue
@@ -348,6 +352,12 @@ def _align_truth(candidates: pd.DataFrame, target: float, config: dict):
         return None
     if 'branch_id' in candidates and lower.branch_id != upper.branch_id:
         return None
+    if 'truth_grade' in candidates and lower.truth_grade != upper.truth_grade:
+        return None
+    for endpoint in (lower, upper):
+        if (not train_models.parse_position_reference(endpoint.get('has_position_reference', True))
+                or not all(math.isfinite(float(endpoint[name])) for name in ('longitude_deg', 'latitude_deg', 'depth_m'))):
+            return None
     alpha = (target - float(lower.elapsed_seconds)) / gap
     actual = lower.copy()
     for column in ('longitude_deg', 'latitude_deg', 'depth_m', 'pitch_deg', 'roll_deg'):

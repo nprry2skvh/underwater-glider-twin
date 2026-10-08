@@ -119,6 +119,100 @@ class ReviewRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(ValueError, 'current|issued'):
             residual_candidate.train_candidate(rows, manifest, Path(directory), ['speed_mps'])
 
+    @staticmethod
+    def _write_quality_csv(path, reference_flags, branch='branch-a', grade='navigation_reference'):
+        rows = []
+        for index, flag in enumerate(reference_flags):
+            row = [0] * 51
+            row[0] = f'0d0h0m{index * 10}s'
+            row[21:28] = [120. + index * .00001, 25. + index * .00002, index, 80., 359., 2., -1.]
+            row[30:32] = [359., 100.]
+            rows.append(row)
+        source = pd.DataFrame(rows)
+        source['has_position_reference'] = reference_flags
+        source['branch_id'], source['truth_grade'] = branch, grade
+        source.to_csv(path, index=False)
+
+    def test_csv_quality_false_is_preserved_and_cannot_score(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'truth.csv'
+            self._write_quality_csv(path, ['False'] * 50)
+            loaded = replay.train_models.load_frame_table(path)
+            record = replay.freeze_forecast(loaded, 200., 30, 'constant_velocity', 'run', 'branch-a')
+            scores = replay.score_frozen_forecast(record, loaded, 290.)
+            self.assertEqual([score['status'] for score in scores], ['no_position_reference'] * 3)
+            self.assertTrue(all(score['position_error_m'] is None for score in scores))
+            self.assertEqual(loaded.branch_id.tolist(), ['branch-a'] * 50)
+            self.assertEqual(loaded.truth_grade.tolist(), ['navigation_reference'] * 50)
+
+    def test_csv_quality_parser_handles_boolean_values_without_truthy_strings(self):
+        flags = ['false', '0', 'true', '1', ' FALSE ', ' TRUE ']
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'quality.csv'
+            self._write_quality_csv(path, flags)
+            loaded = replay.train_models.load_frame_table(path)
+            self.assertIn('has_position_reference', loaded.columns)
+            self.assertEqual(loaded.has_position_reference.tolist(), [False, False, True, True, False, True])
+
+    def test_csv_explicit_quality_missing_or_invalid_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for bad in ('unknown', '', None, '2'):
+                with self.subTest(bad=bad):
+                    path = Path(directory) / 'quality.csv'
+                    self._write_quality_csv(path, ['true', bad])
+                    with self.assertRaisesRegex(ValueError, 'has_position_reference'):
+                        replay.train_models.load_frame_table(path)
+
+    def test_invalid_interpolation_endpoint_waits_for_a_valid_exact_observation(self):
+        for endpoint in (20, 22):
+            with self.subTest(endpoint=endpoint):
+                source = fixtures.ForecastReplayTests.frame()
+                source['has_position_reference'] = True
+                record = replay.freeze_forecast(source, 200., 30, 'constant_velocity', 'run', 'branch-a')
+                source.loc[21, 'received_seconds'] = 250.
+                source.loc[endpoint, 'has_position_reference'] = False
+                before = replay.score_frozen_forecast(record, source, 220.)[0]
+                self.assertEqual(before['status'], 'awaiting')
+                self.assertIsNone(before['position_error_m'])
+                after = replay.score_frozen_forecast(record, source, 250.)[0]
+                self.assertEqual(after['status'], 'scored')
+                self.assertEqual(after['available_at_seconds'], 250.)
+
+    def test_truth_interpolation_cannot_cross_quality_grade(self):
+        source = fixtures.ForecastReplayTests.frame()
+        record = replay.freeze_forecast(source, 200., 30, 'constant_velocity', 'run', 'branch-a')
+        source['truth_grade'] = 'grade-a'
+        source.loc[21, 'received_seconds'] = 250.
+        source.loc[22, 'truth_grade'] = 'grade-b'
+        self.assertEqual(replay.score_frozen_forecast(record, source, 220.)[0]['status'], 'awaiting')
+
+    def test_direct_truth_false_string_cannot_become_a_successful_score(self):
+        source = fixtures.ForecastReplayTests.frame()
+        source['has_position_reference'] = 'False'
+        record = replay.freeze_forecast(source, 200., 30, 'constant_velocity', 'run', 'branch-a')
+        self.assertEqual(replay.score_frozen_forecast(record, source, 240.)[0]['status'], 'no_position_reference')
+
+    def test_imported_simulation_truth_cannot_score_foreign_branch_under_default_grade(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'truth.csv'
+            self._write_quality_csv(path, ['True'] * 50, branch='foreign', grade='simulation_branch')
+            loaded = replay.train_models.load_frame_table(path)
+            record = replay.freeze_forecast(loaded, 200., 30, 'constant_velocity', 'run', 'branch-a')
+            scores = replay.score_frozen_forecast(record, loaded, 290.)
+            self.assertEqual([score['status'] for score in scores], ['missing'] * 3)
+
+    def test_imported_branch_and_grade_metadata_cannot_be_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for column in ('branch_id', 'truth_grade'):
+                with self.subTest(column=column):
+                    path = Path(directory) / 'truth.csv'
+                    self._write_quality_csv(path, ['True', 'True'])
+                    raw = pd.read_csv(path)
+                    raw.loc[1, column] = ''
+                    raw.to_csv(path, index=False)
+                    with self.assertRaisesRegex(ValueError, column):
+                        replay.train_models.load_frame_table(path)
+
 
 if __name__ == '__main__':
     unittest.main()
