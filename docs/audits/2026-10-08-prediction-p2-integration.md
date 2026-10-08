@@ -8,12 +8,12 @@
 ## 工作步骤
 
 - [x] 独立树远端基线Python/EditMode通过：Python11/11、Edit528/528。
-- [ ] 合并预测源，保留运动与预测的两套已验收改动；冲突记录具体取舍。
+- [x] 合并预测源，保留运动与预测的两套已验收改动；冲突记录具体取舍。
 - [x] 合并结果Python/EditMode/PlayMode全量、Windows重建、默认Player烟测通过。
-- [ ] 保存验收证据、确认规则，正常推送HEAD到明确目标；不强推。
-- [ ] 核对远端提交、备份引用和主目录HEAD/未提交内容未被本次操作改变。
+- [x] 保存验收证据、确认规则，正常推送HEAD到明确目标；不强推。
+- [x] 核对远端提交、备份引用和主目录HEAD/未提交内容未被本次操作改变。
 
-合并后验收已完成；待集成审核结论后提交merge及正常推送。不把功能测试通过等同于实测精度提升。
+合并、审核发现修复、最终验收及正常推送均已完成；最终回执见文末。不把功能测试通过等同于实测精度提升。
 
 主目录保护基线：HEAD6142262e101a2c8f3618a389b334a3aa18794a7c、index SHA256 BA4F318457CA09655A75536479C71DE996FF7888F506D8594ABA8F0A1A7A9958、tracked diff SHA256 A6740260F57BADC7D56623EFB1D9D086DB6FA546D1521BCE6012C198EE8952DB，176个status项；仅保存摘要，不保存diff中的私密内容。并行任务可能新增未跟踪文档，本轮不得改写。
 merge-tree预检查有8个源码/测试冲突：Bootstrap、Geo映射、Dashboard、transform/visual driver、PlaybackModelTests、VisualizationTests、MotionDataConsistencyPlayModeTests；逐处保留双方行为后再验收。
@@ -64,3 +64,11 @@ I2 RED：Edit529中528通过、唯一新回归失败，缺坐标时左翼应10�
 控制器依据两项RED→GREEN及全量套件裁决Important已解决，Minor单位保护已补强，无延期项；并非宣称审核者重新批准或独立运行。最终源码较审核TREE仅增加详情登记、移除重复清零、对应测试及单位断言，没有扩大算法范围。Unity结束后清理Main唯一新增空值尾空格，YAML语义不变。
 
 提交前再次fetch远端仍91ba2da；Models diff为空。主目录三摘要完全匹配保护基线。两旧运行包DLL再次验证保持8B3742A8…与AD725B07…，备份引用仍91ba2da。待提交merge、正常推送和远端回执；不调整主目录的本地目标分支。
+
+## 合并与推送回执
+
+10-09 02:35（Asia/Shanghai）正常推送成功：`91ba2da..0016ef2 HEAD -> feature/underwater-glider-csv-twin`，`ls-remote`核对目标为 `0016ef2312c155118cafb9664e0b25dab7ae9d20`。合并父提交为df6cce9与27f8086，验证原远端91ba2da和预测来源27f8086均为祖先，双方历史保留；未强推。
+
+推送后主目录HEAD/index/tracked diff三摘要再次完全匹配基线，集成树干净、Models无修改、备份引用91ba2da仍在。主目录本地目标分支故意保持6142262，不能在其脏索引背后移动分支；未经另行授权不自动同步、stash或覆盖。根HANDOFF属于并行物理基线任务，本轮没有改写。来源与集成工作树及两个旧运行包均保留。
+
+本回执仅修改文档，会正常提交并推送，不改变已验收的产品源码。最终回执提交哈希可由 `codex/prediction-p2-integration` HEAD和目标远端核对，不需重新运行五门槛。用户可运行集成树 `Builds/UnderwaterGliderTwin/UnderwaterGliderTwin.exe` 查看新版；主目录运行包未被本次替换。

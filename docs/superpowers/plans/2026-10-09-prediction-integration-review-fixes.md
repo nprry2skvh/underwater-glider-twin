@@ -45,4 +45,4 @@
 - [x] Step 5: 仅移除缺坐标分支重复清零；保留无诊断复位，重跑EditMode全绿。
 - [x] Step 6: 收紧已有AssertReadout：独立节点存在则数值和单位均精确检查；否则必须有内嵌单位。不改变运动阈值或生产接口。
 - [x] Step 7: 运行 `TestResults/validate-integration.ps1`，预期Python58、EditMode新增回归全通过、Play21、Windows重建和默认Player smoke通过。保存新DLL hash。
-- [ ] Step 8: 登记两P2修复、单位补强、审核未裁决范围及保护摘要；正常提交merge和推送 `HEAD:refs/heads/feature/underwater-glider-csv-twin`，核对远端，保留主目录和旧包。
+- [x] Step 8: 登记两P2修复、单位补强、审核未裁决范围及保护摘要；正常提交merge和推送 `HEAD:refs/heads/feature/underwater-glider-csv-twin`，核对远端，保留主目录和旧包。
