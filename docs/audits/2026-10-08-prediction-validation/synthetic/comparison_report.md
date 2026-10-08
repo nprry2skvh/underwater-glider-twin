@@ -8,7 +8,7 @@
 | 方法 | 状态/尝试 | 已评分 | 失败 | 未评分 | 水平 MAE(m) | 三维 RMSE(m) |
 |---|---:|---:|---:|---:|---:|---:|
 | constant_velocity | 32 | 32 | 0 | 0 | 4.699 | 13.737 |
-| current_deployed_xgboost_with_hold_fallback | 32 | 32 | 0 | 0 | 12.864 | 22.655 |
+| current_deployed_xgboost_with_hold_fallback | 32 | 32 | 0 | 0 | 12.745 | 22.530 |
 | event_driven_physics_with_current | unavailable | — | — | — | — | — |
 | physics_plus_residual_candidate | not_trained | — | — | — | — | — |
 
@@ -27,7 +27,7 @@
 | constant_velocity | 60 | 48 | 0.572 | 0.981 |
 | constant_velocity | 300 | 240 | 2.820 | 6.347 |
 | constant_velocity | 900 | 720 | 15.035 | 39.423 |
-| current_deployed_xgboost_with_hold_fallback | 30 | 24 | 7.429 | 11.091 |
-| current_deployed_xgboost_with_hold_fallback | 60 | 48 | 7.616 | 6.316 |
-| current_deployed_xgboost_with_hold_fallback | 300 | 240 | 8.804 | 14.491 |
-| current_deployed_xgboost_with_hold_fallback | 900 | 720 | 27.605 | 77.868 |
+| current_deployed_xgboost_with_hold_fallback | 30 | 24 | 7.340 | 10.955 |
+| current_deployed_xgboost_with_hold_fallback | 60 | 48 | 7.526 | 6.269 |
+| current_deployed_xgboost_with_hold_fallback | 300 | 240 | 8.626 | 14.290 |
+| current_deployed_xgboost_with_hold_fallback | 900 | 720 | 27.488 | 76.798 |

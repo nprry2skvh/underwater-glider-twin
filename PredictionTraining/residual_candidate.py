@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -31,9 +32,27 @@ def _validate(rows: pd.DataFrame, manifest: dict, features: list[str]) -> None:
         raise ValueError('feature contract forbids actual/future observations')
     if any(name not in rows for name in LINEAGE) or rows[list(LINEAGE)].isna().any().any():
         raise ValueError('paired physics lineage is required')
+    if ('physics_available' not in rows or not rows.physics_available.eq(True).all()
+            or 'current_kind' not in rows or not rows.current_kind.isin(('configured', 'declared_zero', 'observed_product')).all()):
+        raise ValueError('paired physics/current lineage must explicitly be available')
     for column in LINEAGE:
         if (rows[column].astype(str).str.len() == 0).any():
             raise ValueError('paired physics lineage cannot be empty')
+    for column in ('profile_hash', 'current_hash'):
+        if not rows[column].astype(str).map(lambda value: bool(re.fullmatch('[0-9a-fA-F]{64}', value))).all():
+            raise ValueError('paired physics lineage requires real content hashes, not unavailable placeholders')
+    products = rows[rows.current_kind == 'observed_product']
+    if not products.empty:
+        clocks = ['current_issued_seconds', 'current_valid_start_seconds', 'current_valid_end_seconds']
+        if any(name not in products for name in clocks + ['current_version']):
+            raise ValueError('observed current product requires issued/version/valid-time provenance')
+        if (not np.isfinite(products[clocks].to_numpy(dtype=float)).all()
+                or (products.current_issued_seconds > products.origin_elapsed_seconds).any()
+                or (products.current_valid_start_seconds > products.origin_elapsed_seconds).any()
+                or (products.current_valid_end_seconds < products.target_elapsed_seconds).any()
+                or products.current_version.isna().any()
+                or products.current_version.astype(str).isin(('', 'unavailable', 'not_provided')).any()):
+            raise ValueError('current product was not issued/valid at forecast time or lacks a version')
     segments = manifest.get('segments', [])
     mapping = {row['segment_index']: row for row in segments}
     if len(mapping) != len(segments) or {row['partition'] for row in segments} != {'train', 'development', 'final_test'}:

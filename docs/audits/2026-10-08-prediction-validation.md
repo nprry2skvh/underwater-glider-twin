@@ -14,7 +14,7 @@
 
 | 数据 | 加载有效行 | 连续段 | 本次评估 | 预测/评分点 | 解释 |
 |---|---:|---:|---|---:|---|
-| `2.csv` | 236163 | 1 | exploratory、2 起点 | 16 / 516 | 与未知来源导航记录的一致性 |
+| `2.csv` | 236163 | 1 | exploratory、2 起点 | 12 / 387 | 与未知来源导航记录的一致性 |
 | 合成 CSV | 50400 | 20 | 固定12/4/4，final_test 4段×2起点 | 64 / 2064 | 合成功能验证 |
 
 质量报告、固定清单、冻结预测 JSONL、逐点评分 JSONL、尝试 JSONL 与分时长对照均位于：
@@ -38,17 +38,38 @@ py -3.14 PredictionTraining/validate_forecasts.py --csv 'E:\upan\digital twin\gl
 py -3.14 PredictionTraining/residual_candidate.py --pairs paired.csv --manifest paired-manifest.json --output CandidateRuns/unique-run --features speed_mps horizon_seconds
 ```
 
-配对 CSV 必须有 `segment_index,partition,origin_elapsed_seconds,target_elapsed_seconds,horizon_seconds,physics_forecast_id,profile_hash,current_hash`，以及 `physics_`/`actual_` 前缀的 `east_m,north_m,depth_m,heading_deg,pitch_deg,roll_deg`。坐标是同一预测起点的物理米制 ENU，不是 Unity 显示坐标。manifest 保存配对 CSV SHA-256、整段边界和三份固定分区；CLI 验证源 hash，历史 290 秒及目标不可跨边界。特征只允许显式起点特征/物理模型输出，不允许实际未来标签。
+配对 CSV 必须有 `segment_index,partition,origin_elapsed_seconds,target_elapsed_seconds,horizon_seconds,physics_forecast_id,profile_hash,current_hash,physics_available,current_kind`，以及 `physics_`/`actual_` 前缀的 `east_m,north_m,depth_m,heading_deg,pitch_deg,roll_deg`。`physics_available` 必须为 true，两种 hash 必须是64位十六进制内容哈希，不接受 unavailable/not_provided；`current_kind` 明确配置海流或 declared_zero 等来源。坐标是同一预测起点的物理米制 ENU，不是 Unity 显示坐标。manifest 保存配对 CSV SHA-256、整段边界和三份固定分区；CLI 验证源 hash，历史 290 秒及目标不可跨边界。特征只允许显式起点特征/物理模型输出，不允许实际未来标签。
 
-JSONL 使用 UTF-8、严格有限数值；缺失误差为 null。工程默认时间参数随每条预测保存，不视为实测传感器规格。Python 回放使用双精度数值，Unity 显示/时间使用 float；这里不声称跨运行时逐位相等。
+若 `current_kind=observed_product`，还必须提供 `current_issued_seconds,current_valid_start_seconds,current_valid_end_seconds,current_version`：发布时间不得晚于预测起点，有效区间必须覆盖起点至目标时间，版本不得为空或占位值。缺失海流产品信息不能用配置零流冒充实测产品。
+
+JSONL 使用 UTF-8、严格有限数值；缺失误差为 null。工程默认时间参数随每条预测保存，不视为实测传感器规格。Python 回放的几何/评分使用双精度，部署树推理按 Unity 的 float32 运算；Unity 显示/时间使用 float。这里不声称跨运行时逐位相等。
 
 ## 验证记录
 
-- Python：35/35；基线 `datetime.utcnow()` 弃用警告仍存在，未增加新警告。
-- 全量 EditMode：512/512。
-- 全量 PlayMode：待最终运行结果写入。
-- Windows 构建、无参数默认仿真 smoke：待最终运行结果写入。
-- 全分支新上下文审核：待完成。
+- Python：45/45；基线 `datetime.utcnow()` 弃用警告仍存在，未增加新警告。
+- 全量 EditMode：520/520。
+- 全量 PlayMode：18/18，进程正常退出；本次没有出现既有原生退出挂起。
+- Windows 构建成功；无参数默认仿真 Player smoke 通过，Exit=0、source=simulation；日志 `TestResults/DefaultSimulation-f105525a356442ca9bafc783436305c1.log`。这是启动/运行验收，不代替真实位置精度验收。
+- 一次独立全分支审核 `f5f294b..145ea7c`（Gauss）提出11项重要问题、无Critical；以下修复经 RED→GREEN 和全量测试验证。没有派第二次审核，不把作者修复验证冒称为再次独立通过。
+
+### 独立审核修复闭环
+
+| 问题 | 修复与回归证据 |
+|---|---|
+| 晚到数据参与速度清洗 | 先按发布时可见性过滤，再清洗输入；真值准备独立。`test_late_rows_are_removed_before_navigation_cleaning` |
+| 全历史重复扫描/超时分配 | 待评分目标按时间索引，观测按采样时间索引；已完成档案退出活动索引，汇总按forecastId索引。90,000个目标档案的重复deadline检查从RED的162ms降为测试预算内（<20ms）。完整档案保留仍占内存，不宣称无界常量空间。 |
+| 首次回看无法评分 | 新发布回放预测先与原接收事件缓存对齐，再处理deadline。`FirstBackwardPublicationReconcilesAlreadyReceivedTruth` |
+| 回看提前显示迟到评分 | 保存AvailableAtSeconds，回放按评分实际可用时间筛选。`ReplayMetricsWaitForActualScoreAvailabilityNotOnlyTargetTime` |
+| 离线后到精确点覆盖先前插值 | 按接收事件顺序冻结第一个可用分数；相同键不替换。`test_first_interpolated_score_is_not_replaced_by_later_exact_observation` |
+| 历史输入窗口不一致 | 两端统一30个过去保持的10秒格点；共享24维特征fixture通过，误差容差2e-4。5秒原始采样不再只取145秒。 |
+| 树阈值选择不同叶子 | 特征、阈值、叶值、base score和累加采用float32；等值边界两叶100/200反例通过。 |
+| 离线绕过artifact验收 | 验证manifest版本/accepted/文件SHA-256及大小/完整输出来源；有效JSON的模型篡改同样拒绝。 |
+| 非整除输出间隔漏终点 | 本批仅接受10秒输出间隔；0、NaN、7、40等显式拒绝，不返回截断成功。 |
+| 物理接口用默认依赖伪装可用 | Snapshot保留显式profile/dynamics/current来源标志；缺依赖拒绝。明确传入的空配置表示仿真零海流，null表示缺数据。 |
+| 残差接受占位来源 | 要求有效hash、physics_available与current_kind，不接受占位值/无物理配对；实测海流产品需发布时间、版本及有效区间，晚于起点发布的产品拒绝。`test_observed_current_product_cannot_be_issued_after_forecast_origin` |
+| 海流hash漏resolver设置（原Minor升Important） | preference及IDW radius进入规范hash；两个字段分别变化的回归通过。 |
+
+导航重新回放共16次尝试，其中恒速4次因最后两格点来自同一保持观测而失败，保留在分母中，不生成虚假零误差。因此只有12条冻结成功预测；该变化不被掩盖。此前报告已被本次重生成结果替代。
 
 ## 实施裁决与限制
 
@@ -58,5 +79,12 @@ JSONL 使用 UTF-8、严格有限数值；缺失误差为 null。工程默认时
 4. 初查误判合成数据为一段，后按实际清洗确认20段并更正为固定三份清单；仍保留部署训练重叠未知的限制，不将其升级为独立验收。
 5. 物理/残差只交付验证接口，不启用新运行模型、不在未配对 CSV 上伪造训练；真实残差性能仍需配对数据。
 6. 为维持既有调用，保留两参数 `GetMetrics`，增加按回放时刻过滤的 `GetMetricsThrough`；代价是两个明确聚合入口。
+7. resolver hash遗漏影响输入身份，原Minor升级Important并修复；代价是额外hash契约测试，而非忽略该问题。
+8. 实测准确率/优胜者、部署模型替换/新模型启用、CFD/视觉验收不在本次评判内；代价是这些事项仍未验证，不声称完成。
+9. 独立审核不并发运行Unity；修复后由实施者重跑完整验证，不派重复审核；代价是测试证据来自实施者。
+10. 模型历史统一10秒格点，本批输出间隔也只支持10秒；代价是5秒数据同样需要290秒历史，旧1秒Fake测试不再要求原始行数量。
+11. 明确给出的空海流配置是仿真零流，缺少来源是unavailable；代价是调用者必须保留显式依赖来源，不能把配置流解释为海流实测产品。
 
-仅在隔离分支提交，不合并/推送；部署 Models 与动力学默认值保持不变。上一运行包应保存在 `Builds/UnderwaterGliderTwin.pre-prediction-20261008`，新包发布在 `Builds/UnderwaterGliderTwin`。
+延期Minor：无（唯一Minor已按实际影响升级并修复）。
+
+仅在隔离分支提交，不合并/推送；部署 Models 与动力学默认值保持不变。上一运行包已保存在 `Builds/UnderwaterGliderTwin.pre-prediction-20261008`，新包发布在 `Builds/UnderwaterGliderTwin`。

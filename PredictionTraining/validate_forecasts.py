@@ -46,9 +46,61 @@ def fit_training_statistics(rows: pd.DataFrame, value_column: str) -> dict:
             'standard_deviation': float(values.std())}
 
 
+def prepare_forecast_input(frame: pd.DataFrame, issued_seconds: float) -> pd.DataFrame:
+    if frame.attrs.get('causally_cleaned_at') == issued_seconds:
+        return frame
+    sampled = frame.elapsed_seconds.to_numpy(dtype=float)
+    visible = np.isfinite(sampled) & (sampled <= issued_seconds)
+    if 'received_seconds' in frame:
+        received = frame.received_seconds.to_numpy(dtype=float)
+        visible &= np.isfinite(received) & (received >= sampled) & (received <= issued_seconds)
+    selected = frame.loc[visible].sort_values('elapsed_seconds', kind='stable')
+    result = train_models.clean_navigation_rows(selected)
+    result.attrs['causally_cleaned_at'] = issued_seconds
+    return result
+
+
+def _require_interval(seconds: float) -> None:
+    if seconds != 10:
+        raise ValueError('unsupported output interval; this version supports 10 seconds only')
+
+
+def validate_artifact(root: Path) -> tuple[dict, dict]:
+    root = Path(root).resolve()
+    try:
+        manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
+        if (manifest.get('artifact_schema_version') != 1 or manifest.get('validation_status') != 'accepted'
+                or not manifest.get('training_run_id') or not manifest.get('files')):
+            raise ValueError('artifact manifest must declare accepted version and files')
+        declared = set()
+        for item in manifest['files']:
+            path = (root / item['path']).resolve()
+            relative = path.relative_to(root).as_posix()
+            if relative in declared or file_sha256(path) != item['sha256'] or path.stat().st_size != item['size_bytes']:
+                raise ValueError('artifact SHA-256/size mismatch or duplicate manifest file')
+            declared.add(relative)
+        schema = json.loads((root / 'feature_schema.json').read_text(encoding='utf-8'))
+        sources = json.loads((root / 'validation_report.json').read_text(encoding='utf-8')).get('output_sources')
+        if not sources or any(sources.get(target) not in ('xgboost', 'stable') for target in TARGETS):
+            raise ValueError('artifact output sources are missing or unsupported')
+        if 'feature_schema.json' not in declared or any(
+                f'models/{target}.json' not in declared for target in TARGETS if sources[target] == 'xgboost'):
+            raise ValueError('artifact manifest omits an active model or feature schema')
+        if schema.get('history_length') != 30 or schema.get('sample_interval_seconds') != 10:
+            raise ValueError('artifact history contract must be 30 past-held 10-second samples')
+        names = schema.get('feature_names') or []
+        if not names or len(schema.get('mean', [])) != len(names) or len(schema.get('scale', [])) != len(names):
+            raise ValueError('artifact feature schema is incomplete')
+        return schema, sources
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exception:
+        raise ValueError('artifact manifest/schema is invalid: ' + str(exception)) from exception
+
+
 def constant_velocity_forecast(frame: pd.DataFrame, issued_seconds: float, horizon_seconds: int,
                                sample_interval_seconds: int = 10) -> list[dict]:
     _require_horizon(horizon_seconds)
+    _require_interval(sample_interval_seconds)
+    frame = prepare_forecast_input(frame, issued_seconds)
     history = forecast_data.causal_history(frame, issued_seconds, window_size=30,
                                            sample_interval_seconds=sample_interval_seconds)
     required = ('longitude_deg', 'latitude_deg', 'depth_m', 'heading_deg', 'pitch_deg', 'roll_deg')
@@ -79,7 +131,7 @@ def constant_velocity_forecast(frame: pd.DataFrame, issued_seconds: float, horiz
 
 def evaluate_flat_tree(model: dict, features: Iterable[float]) -> float:
     feature_values = list(features)
-    total = float(model.get('base_score', 0.0))
+    total = np.float32(model.get('base_score', 0.0))
     for tree in model.get('trees', []):
         nodes = tree.get('nodes') or []
         index = 0
@@ -87,30 +139,30 @@ def evaluate_flat_tree(model: dict, features: Iterable[float]) -> float:
             node = nodes[index]
             feature_index = int(node.get('feature_index', -1))
             if feature_index < 0:
-                total += float(node.get('leaf_value', 0.0))
+                total = np.float32(total + np.float32(node.get('leaf_value', 0.0)))
                 break
-            value = feature_values[feature_index]
+            value = np.float32(feature_values[feature_index])
             if not math.isfinite(value):
                 index = int(node['missing_index'])
-            elif value < float(node['threshold']):
+            elif value < np.float32(node['threshold']):
                 index = int(node['yes_index'])
             else:
                 index = int(node['no_index'])
         else:
             raise ValueError('flat tree did not reach a leaf')
-    return total
+    return float(total)
 
 
 def deployed_forecast(frame: pd.DataFrame, issued_seconds: float, horizon_seconds: int,
                       artifact_root: Path, sample_interval_seconds: int = 10) -> list[dict]:
     _require_horizon(horizon_seconds)
+    _require_interval(sample_interval_seconds)
+    frame = prepare_forecast_input(frame, issued_seconds)
     history = forecast_data.causal_history(frame, issued_seconds, window_size=30,
                                            sample_interval_seconds=sample_interval_seconds)
-    schema = json.loads((Path(artifact_root) / 'feature_schema.json').read_text(encoding='utf-8'))
+    schema, sources = validate_artifact(artifact_root)
     if len(history) < int(schema['history_length']):
         raise ValueError('deployed model requires 30 causal history samples')
-    report = json.loads((Path(artifact_root) / 'validation_report.json').read_text(encoding='utf-8'))
-    sources = report.get('output_sources') or {}
     models = {}
     for target in TARGETS:
         if sources.get(target) == 'xgboost':
@@ -135,6 +187,7 @@ def deployed_forecast(frame: pd.DataFrame, issued_seconds: float, horizon_second
 
 
 def runtime_features(frame: pd.DataFrame, issued_seconds: float, names: list[str], horizon: float) -> list[float]:
+    frame = prepare_forecast_input(frame, issued_seconds)
     history = forecast_data.causal_history(frame, issued_seconds, window_size=30)
     if len(history) < 2:
         raise ValueError('insufficient causal history')
@@ -200,6 +253,7 @@ def select_replay_segments(segments: list[pd.DataFrame], manifest: dict, partiti
 
 def freeze_forecast(frame: pd.DataFrame, issued: float, horizon: int, method: str,
                     run_id: str, branch_id: str, artifact_root: Path | None = None) -> dict:
+    frame = prepare_forecast_input(frame, issued)
     history = forecast_data.causal_history(frame, issued)
     raw_columns = [column for column in history if not column.startswith('velocity_')
                    and column not in {'current_speed', 'x_m', 'y_m', 'z_m'}]
@@ -237,29 +291,36 @@ def score_frozen_forecast(record: dict, frame: pd.DataFrame, received_seconds: f
     for point in record['points']:
         target = point['target_elapsed_seconds']
         deadline = target + config['wait_deadline_seconds']
-        visible = np.isfinite(received) & (received >= sampled) & (received <= received_seconds) & (received < deadline)
-        candidates = frame.loc[visible].sort_values('elapsed_seconds')
-        actual = None
-        exact = candidates[(candidates.elapsed_seconds - target).abs() <= config['time_tolerance_seconds']]
-        if not exact.empty:
-            actual = exact.iloc[(exact.elapsed_seconds - target).abs().argmin()]
-        else:
-            before = candidates[candidates.elapsed_seconds < target]
-            after = candidates[candidates.elapsed_seconds > target]
-            if not before.empty and not after.empty:
-                lower, upper = before.iloc[-1], after.iloc[0]
-                gap = float(upper.elapsed_seconds - lower.elapsed_seconds)
-                if gap <= config['maximum_interpolation_gap_seconds']:
-                    alpha = (target - float(lower.elapsed_seconds)) / gap
-                    actual = lower.copy()
-                    for column in ('longitude_deg', 'latitude_deg', 'depth_m', 'pitch_deg', 'roll_deg'):
-                        actual[column] = float(lower[column]) + (float(upper[column]) - float(lower[column])) * alpha
-                    actual['heading_deg'] = float(lower.heading_deg) + train_models.wrap_degrees(float(upper.heading_deg) - float(lower.heading_deg)) * alpha
+        radius = max(config['maximum_interpolation_gap_seconds'], config['time_tolerance_seconds'])
+        visible = (np.isfinite(received) & (received >= sampled) & (received <= received_seconds)
+                   & (received < deadline) & (np.abs(sampled - target) <= radius))
+        if 'branch_id' in frame and 'simulation' in truth_grade:
+            visible &= frame.branch_id.to_numpy() == record['branch_id']
+        events = frame.loc[visible].copy()
+        events['_received_at'] = received[visible]
+        events = events.sort_values('_received_at', kind='stable').drop_duplicates('elapsed_seconds', keep='first')
+        actual, availability = None, None
+        # Finalize at the first arrival event that permits alignment, not the
+        # best observation available by the end of the entire waiting period.
+        for arrival in events['_received_at'].drop_duplicates():
+            event_time = max(target, float(arrival))
+            if event_time > received_seconds or event_time >= deadline:
+                continue
+            candidates = events[events['_received_at'] <= arrival].sort_values('elapsed_seconds')
+            actual = _align_truth(candidates, target, config)
+            if actual is not None:
+                availability = event_time
+                break
         score = {'score_key': f"{record['run_id']}:{record['forecast_id']}:{target}:{config['metric_version']}",
                  'forecast_id': record['forecast_id'], 'target_elapsed_seconds': target,
                  'truth_grade': truth_grade, 'status': 'missing' if received_seconds >= deadline else 'awaiting',
-                 'horizontal_error_m': None, 'position_error_m': None}
+                 'horizontal_error_m': None, 'position_error_m': None, 'available_at_seconds': availability}
         if actual is not None:
+            valid_position = all(math.isfinite(float(actual[name])) for name in ('longitude_deg', 'latitude_deg', 'depth_m'))
+            if not valid_position or not bool(actual.get('has_position_reference', True)):
+                score.update(status='no_position_reference')
+                result.append(score)
+                continue
             origin = record['origin']
             east = (float(actual.longitude_deg) - origin['longitude_deg']) * 111320. * math.cos(math.radians(origin['latitude_deg']))
             north = (float(actual.latitude_deg) - origin['latitude_deg']) * 111320.
@@ -272,6 +333,27 @@ def score_frozen_forecast(record: dict, frame: pd.DataFrame, received_seconds: f
                          roll_error_deg=abs(point['roll_deg'] - float(actual.roll_deg)))
         result.append(score)
     return result
+
+
+def _align_truth(candidates: pd.DataFrame, target: float, config: dict):
+    exact = candidates[(candidates.elapsed_seconds - target).abs() <= config['time_tolerance_seconds']]
+    if not exact.empty:
+        return exact.iloc[(exact.elapsed_seconds - target).abs().argmin()]
+    before, after = candidates[candidates.elapsed_seconds < target], candidates[candidates.elapsed_seconds > target]
+    if before.empty or after.empty:
+        return None
+    lower, upper = before.iloc[-1], after.iloc[0]
+    gap = float(upper.elapsed_seconds - lower.elapsed_seconds)
+    if gap <= 0 or gap > config['maximum_interpolation_gap_seconds']:
+        return None
+    if 'branch_id' in candidates and lower.branch_id != upper.branch_id:
+        return None
+    alpha = (target - float(lower.elapsed_seconds)) / gap
+    actual = lower.copy()
+    for column in ('longitude_deg', 'latitude_deg', 'depth_m', 'pitch_deg', 'roll_deg'):
+        actual[column] = float(lower[column]) + (float(upper[column]) - float(lower[column])) * alpha
+    actual['heading_deg'] = float(lower.heading_deg) + train_models.wrap_degrees(float(upper.heading_deg) - float(lower.heading_deg)) * alpha
+    return actual
 
 
 def build_quality_report(*, source_path: str, source_sha256: str, source_kind: str,
@@ -370,13 +452,11 @@ def run_validation(csv_path: Path, artifact_root: Path, output_root: Path,
     run_id = run_id or uuid.uuid4().hex
     frame = train_models.load_frame_table(csv_path)
     cleaned = train_models.clean_navigation_rows(frame)
-    raw_segments = train_models.split_continuous_segments(cleaned)
+    raw_segments = train_models.split_continuous_segments(frame)
     raw_segments = [segment for segment in raw_segments if len(segment) > 120]
     # Preserve raw availability for receipt-time replay; never globally fill
     # late values before the per-issue visibility filter.
-    prepared = [segment.copy() if 'received_seconds' in segment else
-                train_models.add_derived_features(train_models.resample_telemetry(segment))
-                for segment in raw_segments]
+    prepared = [segment.copy() for segment in raw_segments]
     quality = build_quality_report(
         source_path=str(csv_path), source_sha256=source_hash, source_kind=source_kind,
         row_count=len(frame), segment_count=len(prepared), has_received_time='received_seconds' in frame,
@@ -411,14 +491,17 @@ def run_validation(csv_path: Path, artifact_root: Path, output_root: Path,
                                           min(max_origins, len(candidates)), dtype=int)]
         for origin_index in selected:
             issued = float(segment.elapsed_seconds.iloc[origin_index])
+            input_frame = prepare_forecast_input(segment, issued)
+            truth_frame = (raw_segments[segment_index] if 'received_seconds' in frame else
+                           train_models.clean_navigation_rows(raw_segments[segment_index]))
             for horizon in forecast_data.SUPPORTED_HORIZONS:
                 for method in ('constant_velocity', 'current_deployed_xgboost_with_hold_fallback'):
                     try:
-                        record = freeze_forecast(segment, issued, horizon, method, run_id,
+                        record = freeze_forecast(input_frame, issued, horizon, method, run_id,
                                                  f'segment-{segment_index}', artifact_root)
                         record.update(segment_index=segment_index, partition=partition, source_sha256=source_hash)
                         frozen.append(record)
-                        scored = score_frozen_forecast(record, raw_segments[segment_index],
+                        scored = score_frozen_forecast(record, truth_frame,
                                                       issued + horizon + SCORING_CONFIG['wait_deadline_seconds'], quality['truth_grade'])
                         score_rows.extend({'method': method, 'horizon_seconds': horizon,
                                            'is_endpoint': score['target_elapsed_seconds'] == issued + horizon, **score} for score in scored)

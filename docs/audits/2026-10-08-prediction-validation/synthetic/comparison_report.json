@@ -63,8 +63,8 @@
       "scoring_success_rate": 1.0,
       "failure_rate": 0.0,
       "unscored_fraction": 0.0,
-      "horizontal_mae_m": 12.863666219209684,
-      "position_rmse_m": 22.65477978618039,
+      "horizontal_mae_m": 12.744976108339756,
+      "position_rmse_m": 22.529578047858404,
       "prediction_region_90_coverage": null,
       "probability_note": "not_applicable_model_does_not_emit_independently_calibrated_region",
       "eligible_point_count": 1032,
@@ -73,28 +73,28 @@
       "awaiting_point_count": 0,
       "depth_mae_m": 0.5424418604651168,
       "heading_mae_deg": 0.737596899224806,
-      "pitch_mae_deg": 0.8852360891902556,
-      "roll_mae_deg": 0.529250347592348,
+      "pitch_mae_deg": 0.8876420784397508,
+      "roll_mae_deg": 0.5281821678775226,
       "by_horizon": {
         "30": {
           "scored_point_count": 24,
-          "horizontal_mae_m": 7.429431972777358,
-          "endpoint_horizontal_mae_m": 11.090888032960418
+          "horizontal_mae_m": 7.339708903136472,
+          "endpoint_horizontal_mae_m": 10.95495870875363
         },
         "60": {
           "scored_point_count": 48,
-          "horizontal_mae_m": 7.6160494245304475,
-          "endpoint_horizontal_mae_m": 6.315730813317163
+          "horizontal_mae_m": 7.526256840644187,
+          "endpoint_horizontal_mae_m": 6.2694150644767905
         },
         "300": {
           "scored_point_count": 240,
-          "horizontal_mae_m": 8.804252383218587,
-          "endpoint_horizontal_mae_m": 14.491225828321262
+          "horizontal_mae_m": 8.625626476625309,
+          "endpoint_horizontal_mae_m": 14.290264710966568
         },
         "900": {
           "scored_point_count": 720,
-          "horizontal_mae_m": 27.604931096312338,
-          "endpoint_horizontal_mae_m": 77.86841301924761
+          "horizontal_mae_m": 27.48831221295306,
+          "endpoint_horizontal_mae_m": 76.7976245450738
         }
       }
     },

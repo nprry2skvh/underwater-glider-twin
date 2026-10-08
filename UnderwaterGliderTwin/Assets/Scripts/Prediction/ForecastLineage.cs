@@ -41,6 +41,8 @@ namespace UnderwaterGliderTwin.Prediction
         {
             if (profile == null) return "not_provided";
             var text = new StringBuilder("simulation_config_no_product_issue_metadata|");
+            text.AppendFormat(CultureInfo.InvariantCulture, "resolver={0};idwRadiusKm={1:R};",
+                profile.OceanCurrentSourcePreference, profile.IrregularFieldIdwRadiusKm);
             if (profile.OceanCurrentProfile != null)
                 foreach (var layer in profile.OceanCurrentProfile.Layers)
                     text.AppendFormat(CultureInfo.InvariantCulture, "{0:R},{1:R},{2:R},{3:R};",

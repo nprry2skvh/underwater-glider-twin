@@ -150,9 +150,15 @@ class ForecastReplayTests(unittest.TestCase):
             artifact = root / 'artifact'
             artifact.mkdir()
             (artifact / 'feature_schema.json').write_text(json.dumps({
-                'history_length': 30, 'feature_names': ['depth_m', 'forecast_horizon_seconds']}), encoding='utf-8')
+                'history_length': 30, 'sample_interval_seconds': 10,
+                'feature_names': ['depth_m', 'forecast_horizon_seconds'], 'mean': [0., 0.], 'scale': [1., 1.]}), encoding='utf-8')
             (artifact / 'validation_report.json').write_text(json.dumps({
                 'output_sources': {target: 'stable' for target in self.api().TARGETS}}), encoding='utf-8')
+            schema_path = artifact / 'feature_schema.json'
+            (artifact / 'manifest.json').write_text(json.dumps({
+                'artifact_schema_version': 1, 'validation_status': 'accepted', 'training_run_id': 'fixture',
+                'files': [{'path': 'feature_schema.json', 'sha256': self.api().file_sha256(schema_path),
+                           'size_bytes': schema_path.stat().st_size}]}), encoding='utf-8')
             short = [0] * 51
             short[0] = '0d0h0m0s'
             short[21:28] = [120., 25., 10., 80., 359., 2., -1.]

@@ -13,6 +13,13 @@ namespace UnderwaterGliderTwin.Prediction
             IReadOnlyList<float> targetElapsedSeconds)
         {
             if (profile == null) throw new ArgumentNullException(nameof(profile));
+            if (!snapshot.HasExplicitProfile || !snapshot.HasExplicitDynamics || !snapshot.HasExplicitCurrent
+                || profile.Dynamics == null || (profile.OceanCurrentProfile == null && profile.OceanCurrentField == null))
+                throw new InvalidOperationException("Physical baseline unavailable: explicit profile/dynamics/current dependencies required.");
+            if (!GliderDynamicsProfileValidator.TryValidate(profile.Dynamics, out var dynamicsError))
+                throw new InvalidOperationException("Physical baseline unavailable: " + dynamicsError);
+            // An explicitly supplied empty current configuration declares zero
+            // simulated flow; null sources mean missing data, never zero truth.
             if (snapshot.Profile == null || !snapshot.Frame.MissionState.HasValue
                 || !snapshot.Frame.Diagnostics.HasValue)
                 throw new InvalidOperationException("Physical baseline unavailable: explicit mission/dynamics state required.");

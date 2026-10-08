@@ -53,7 +53,8 @@ namespace UnderwaterGliderTwin.Prediction
         public const string MetricVersion = "physical-local-end-v1";
         internal ForecastScore(FrozenForecast forecast, int targetIndex, string status, string truthGrade,
             double horizontal = double.NaN, double position = double.NaN, double depth = double.NaN,
-            double heading = double.NaN, double pitch = double.NaN, double roll = double.NaN)
+            double heading = double.NaN, double pitch = double.NaN, double roll = double.NaN,
+            float availableAtSeconds = float.NaN)
         {
             ForecastId = forecast.ForecastId;
             RunId = forecast.RunId;
@@ -67,12 +68,14 @@ namespace UnderwaterGliderTwin.Prediction
             HeadingErrorDegrees = heading;
             PitchErrorDegrees = pitch;
             RollErrorDegrees = roll;
+            AvailableAtSeconds = availableAtSeconds;
         }
 
         public string ForecastId { get; }
         public string RunId { get; }
         public int TargetIndex { get; }
         public float TargetElapsedSeconds { get; }
+        public float AvailableAtSeconds { get; }
         public string Status { get; }
         public string TruthGrade { get; }
         public double HorizontalErrorMeters { get; }

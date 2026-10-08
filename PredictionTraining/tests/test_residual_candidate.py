@@ -28,7 +28,7 @@ class ResidualCandidateTests(unittest.TestCase):
                        'target_elapsed_seconds': segment * 1000. + 320. + index * 10,
                        'horizon_seconds': 30., 'speed_mps': .5 + index * .1,
                        'physics_forecast_id': f'{segment}-{index}', 'profile_hash': 'a' * 64,
-                       'current_hash': 'b' * 64}
+                       'current_hash': 'b' * 64, 'physics_available': True, 'current_kind': 'declared_zero'}
                 for target in ('east_m', 'north_m', 'depth_m', 'heading_deg', 'pitch_deg', 'roll_deg'):
                     row['physics_' + target] = 359. if target == 'heading_deg' else 0.
                     row['actual_' + target] = 1. if target == 'heading_deg' else 2. + index * .1
