@@ -244,7 +244,7 @@ def load_frame_table(csv_path: Path) -> pd.DataFrame:
     frame = frame.dropna(subset=["longitude_deg", "latitude_deg", "depth_m", "heading_deg", "pitch_deg", "roll_deg", "elapsed_seconds"])
     frame = frame[(frame["longitude_deg"].abs() > 0.01) & (frame["latitude_deg"].abs() > 0.01)].reset_index(drop=True)
     frame = add_derived_features(frame)
-    frame = frame.ffill().bfill()
+    frame = frame.ffill()
     return frame
 
 
@@ -253,7 +253,7 @@ def add_derived_features(frame: pd.DataFrame) -> pd.DataFrame:
     average_latitude_rad = np.deg2rad(frame["latitude_deg"].rolling(2).mean().fillna(frame["latitude_deg"]))
     meters_per_degree_longitude = meters_per_degree_latitude * np.cos(average_latitude_rad)
 
-    delta_seconds = frame["elapsed_seconds"].diff().replace(0, np.nan).bfill().clip(lower=1e-3)
+    delta_seconds = frame["elapsed_seconds"].diff().where(lambda values: values > 0).fillna(1.0).clip(lower=1e-3)
     east_meters = frame["longitude_deg"].diff().fillna(0.0) * meters_per_degree_longitude
     north_meters = frame["latitude_deg"].diff().fillna(0.0) * meters_per_degree_latitude
     vertical_meters = -(frame["depth_m"].diff().fillna(0.0))
@@ -310,20 +310,16 @@ def split_continuous_segments(frame: pd.DataFrame, max_gap_seconds: float = 60.0
 
 
 def resample_telemetry(frame: pd.DataFrame, sample_interval_seconds: int = 10) -> pd.DataFrame:
-    """Interpolate continuous numeric telemetry onto a fixed engineering time grid."""
+    """Hold already observed telemetry on a fixed grid; never interpolate future inputs."""
     if frame.empty:
         return frame.copy()
     start_seconds = float(frame["elapsed_seconds"].iloc[0])
     end_seconds = float(frame["elapsed_seconds"].iloc[-1])
-    target_seconds = np.arange(start_seconds, end_seconds + sample_interval_seconds * 0.5, sample_interval_seconds, dtype=np.float64)
+    target_seconds = np.arange(start_seconds, end_seconds + 1e-7, sample_interval_seconds, dtype=np.float64)
     indexed = frame.set_index("elapsed_seconds")
     numeric_columns = indexed.select_dtypes(include=[np.number]).columns.tolist()
-    resampled = indexed[numeric_columns].reindex(indexed.index.union(target_seconds)).sort_index().interpolate(method="index")
+    resampled = indexed[numeric_columns].reindex(indexed.index.union(target_seconds)).sort_index().ffill()
     resampled = resampled.reindex(target_seconds)
-    if "heading_deg" in resampled:
-        heading_values = np.unwrap(np.deg2rad(indexed["heading_deg"].to_numpy(dtype=np.float64)))
-        interpolated_heading = np.interp(target_seconds, indexed.index.to_numpy(dtype=np.float64), heading_values)
-        resampled["heading_deg"] = np.rad2deg(interpolated_heading) % 360.0
     resampled.index.name = "elapsed_seconds"
     return resampled.reset_index()
 
