@@ -111,10 +111,14 @@ def train_candidate(rows: pd.DataFrame, manifest: dict, output_root: Path,
                              n_jobs=1, random_state=0, objective='reg:squarederror')
         model.fit(train[feature_names].to_numpy(dtype=float), train_y)
         predicted = np.clip(model.predict(development[feature_names].to_numpy(dtype=float)), -limit, limit)
-        candidate_error = float(np.mean(np.abs(predicted - dev_y)))
+        difference = predicted - dev_y
+        if target == 'heading_deg':
+            difference = (difference + 180.) % 360. - 180.
+        candidate_error = float(np.mean(np.abs(difference)))
         baseline_error = float(np.mean(np.abs(dev_y)))
         source = 'candidate' if candidate_error < baseline_error else 'zero_residual'
         report['outputs'][target] = {'source': source, 'limit': limit,
+                                     'selection_metric': 'wrapped_angle_mae_deg' if target == 'heading_deg' else 'linear_mae',
                                      'development_mae': candidate_error,
                                      'zero_residual_development_mae': baseline_error,
                                      'model_file': target + '.model.json'}

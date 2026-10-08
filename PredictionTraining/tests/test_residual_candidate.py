@@ -82,6 +82,25 @@ class ResidualCandidateTests(unittest.TestCase):
             second = self.api().train_candidate(changed, manifest, Path(directory) / 'two', ['speed_mps'])
             self.assertEqual(first, second)
 
+    def test_heading_candidate_selection_uses_wrapped_development_error(self):
+        rows, manifest = self.fixtures()
+        rows['physics_heading_deg'] = 0.
+        rows.loc[rows.partition == 'train', 'actual_heading_deg'] = 179.
+        rows.loc[rows.partition == 'development', 'actual_heading_deg'] = -179.
+        rows.loc[rows.partition == 'train', 'actual_east_m'] = 179.
+        rows.loc[rows.partition == 'development', 'actual_east_m'] = -179.
+        with tempfile.TemporaryDirectory() as directory:
+            report = self.api().train_candidate(rows, manifest, Path(directory), ['speed_mps'])
+            heading = report['outputs']['heading_deg']
+            self.assertAlmostEqual(heading['development_mae'], 2., delta=.001)
+            self.assertEqual(heading['source'], 'candidate')
+            self.assertEqual(heading['zero_residual_development_mae'], 179.)
+            self.assertEqual(heading['selection_metric'], 'wrapped_angle_mae_deg')
+            east = report['outputs']['east_m']
+            self.assertAlmostEqual(east['development_mae'], 358., delta=.001)
+            self.assertEqual(east['source'], 'zero_residual')
+            self.assertEqual(east['selection_metric'], 'linear_mae')
+
 
 if __name__ == '__main__':
     unittest.main()
