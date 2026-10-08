@@ -33,6 +33,8 @@
 py -3.14 -m unittest discover -s PredictionTraining/tests -q
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-editmode.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-playmode.ps1 -All
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-player-default-simulation.ps1
 py -3.14 PredictionTraining/validate_forecasts.py --csv 'E:\upan\digital twin\2.csv' --artifact Models/XGBoost --output docs/audits/2026-10-08-prediction-validation/navigation --source-kind navigation --max-origins 2 --run-id navigation-20261008
 py -3.14 PredictionTraining/validate_forecasts.py --csv 'E:\upan\digital twin\glider_underwater_synthetic.csv' --artifact Models/XGBoost --output docs/audits/2026-10-08-prediction-validation/synthetic --source-kind synthetic --max-origins 2 --run-id synthetic-20261008
 py -3.14 PredictionTraining/residual_candidate.py --pairs paired.csv --manifest paired-manifest.json --output CandidateRuns/unique-run --features speed_mps horizon_seconds
@@ -49,8 +51,11 @@ JSONL 使用 UTF-8、严格有限数值；缺失误差为 null。工程默认时
 - Python：45/45；基线 `datetime.utcnow()` 弃用警告仍存在，未增加新警告。
 - 全量 EditMode：520/520。
 - 全量 PlayMode：18/18，进程正常退出；本次没有出现既有原生退出挂起。
-- Windows 构建成功；无参数默认仿真 Player smoke 通过，Exit=0、source=simulation；日志 `TestResults/DefaultSimulation-f105525a356442ca9bafc783436305c1.log`。这是启动/运行验收，不代替真实位置精度验收。
+- Windows 构建成功；无参数默认仿真 Player smoke 通过，Exit=0、source=simulation；最终日志 `TestResults/DefaultSimulation-7348c487286c481599258d64e8784693.log`。这是启动/运行验收，不代替真实位置精度验收。
 - 一次独立全分支审核 `f5f294b..145ea7c`（Gauss）提出11项重要问题、无Critical；以下修复经 RED→GREEN 和全量测试验证。没有派第二次审核，不把作者修复验证冒称为再次独立通过。
+- 任务6收尾验收在修复提交 `98cb2b7` 上顺序重跑上述五个检查，全部通过；完整任务范围 `293caa3..98cb2b7`，六个计划任务完成。导航与合成报告已按修复代码重生成。
+
+四项防泄漏/一致性门槛有回归覆盖：修改未来或晚到历史不改冻结预测/摘要（Python replay tests）；目标轴由请求确定（因果预测 EditMode tests）；显示缩放不改物理评分、Seek不重复累计（`PhysicalScoresIgnoreDisplayScaleAndRepeatedSeekDoesNotAccumulate`）；热更新保留旧预测并按历史分支回看（`HotUpdatePreservesOldForecastAndSeekUsesHistoricalBranch`）。这不是实际观测真值质量的替代证明。
 
 ### 独立审核修复闭环
 
@@ -88,3 +93,5 @@ JSONL 使用 UTF-8、严格有限数值；缺失误差为 null。工程默认时
 延期Minor：无（唯一Minor已按实际影响升级并修复）。
 
 仅在隔离分支提交，不合并/推送；部署 Models 与动力学默认值保持不变。上一运行包已保存在 `Builds/UnderwaterGliderTwin.pre-prediction-20261008`，新包发布在 `Builds/UnderwaterGliderTwin`。
+
+保存版本的 `UnderwaterGliderTwin.Runtime.dll` SHA-256 为 `AD725B0771C167AD529618BDFFF7F459BDC383239875C277E0458FEA971088E5`，最终新包为 `8B3742A89099B72CF0071235ECFE7D6B415103484F13E9F053F00A00C5E72C5B`。可用该 DLL 确认运行时版本，不能用相同的 Unity launcher exe hash 判定功能未更新。
