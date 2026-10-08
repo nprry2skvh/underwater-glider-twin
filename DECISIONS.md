@@ -24,4 +24,4 @@
 ## 2026-10-08：执行中验证的元数据边界
 
 一次新上下文审核发现的3项Important由 `8dbf130`集中修复，逐项RED→GREEN、Python58/58：预测branch从发布时已可见的起点取得，连续段index独立保存；显式仿真等级必须有branch身份，导入与直接评分均拒绝无身份数据；逐行truth_grade优先于默认等级，明确导航可跨branch评分。无质量/等级的旧输入不被升级为独立真值。
-这是已验证的实现契约，不是新增用户批准；最终五门槛、报告与验收裁决仍需完成。不扩大到部署训练、模型替换、实际精度或合并/推送。审核原始裁决和代价见 `docs/audits/2026-10-08-prediction-p2-final-review.md`、`docs/audits/2026-10-08-prediction-p2-repair.md`。
+这是已验证的实现契约，不是新增用户批准。追加修复后eed3fef上Python58/58、Edit525/525、Play21/21、Windows重建与默认Player烟测通过；两份报告重生成并校验源码hash。本轮功能修复通过实现者验收，未再次派审核、未宣称独立运行验收。范围仍不扩大到部署训练、模型替换、实际精度或合并/推送。审核原始裁决和代价见 `docs/audits/2026-10-08-prediction-p2-final-review.md`、`docs/audits/2026-10-08-prediction-p2-repair.md`；以后任何相关源码变更均须重新验证。

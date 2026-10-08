@@ -1,25 +1,25 @@
 # 当前任务检查点
 
 ## 当前目标
-修复预测独立复审R1–R5并重新验收、提交；用户“开始”已授权。在 `codex/digital-twin-stage01` 隔离工作树执行，根HANDOFF属CFD未覆盖；不合并/推送，不替换Models或动力学默认值。
+预测独立复审R1–R5修复、重新验收并本地提交：已完成。隔离分支 `codex/digital-twin-stage01`保留，不合并/推送；根工作区任务记忆未覆盖，Models/动力学默认值未替换。
 
 ## 当前状态
-新计划Task1–4完成：`2fcd640`分支/域时钟，`cf4d13c`原始请求时长，`bdf57f9`质量/元数据，`fd52c1a`环绕残差。fd52c1a上Python54/Edit525/Play21、构建/smoke通过。Averroes一次只读审核返回3项Important：CLI真实branch、显式仿真缺branch、默认等级覆盖导航，已一次RED→GREEN修复，Python58/58；审核人已关闭不重派。最终五门槛与两份报告需按追加修复重跑。
+计划五任务完成。实现提交：`2fcd640`分支/域时钟、`cf4d13c`原始时长、`bdf57f9`质量元数据、`fd52c1a`环绕角、`8dbf130`追加CLI分支/仿真身份/等级优先。一次只读Averroes审核的3项Important逐项RED→GREEN后解决，未重复派审核。eed3fef上最终Python58/58、Edit525/525、Play21/21、Windows构建及默认Player smoke成功，日志DefaultSimulation-8a58ee…88c6f4.log；裁决为本轮功能通过，不代表实测精度。
 
 ## 最近里程碑
-- 尾部热更新建立新branch/hash，同参数补片身份不变；旧1000秒不能使新390秒预测过期，旧档案保留。
-- 510.1秒起点评分显示与ledger一致；300秒成功Seek保持ID/branch；False/0及双端插值质量校验、179/−179环绕候选选择通过。
-- 修复前包已复制至 `Builds/UnderwaterGliderTwin.pre-p2-20261008`，DLL hash8B3742…72C5B；更早pre-prediction旧包保留。
+- 尾部热更新与自动补片身份区分；分支时钟隔离；非整数起点显示评分、300秒成功Seek保持档案身份。
+- false/0、双端插值有效性、±179°候选选择，以及CLI129同/异分支目标、缺branch拒绝、导航跨branch评分回归通过。
+- 导航12预测/387点、合成64/2064报告重生成并核对代码hash。新包SHA52AB98…F13F1；pre-p2旧包SHA8B3742…72C5B及pre-prediction更早包保留。
 
 ## 活跃阻塞
-无实施阻塞；最终裁决待追加修复的全量验收。两份CSV缺接收时间、独立位置与海流元数据，残差未实训、实测精度未验收，CFD/视觉不在范围。scratch删除曾被环境拦截，保留勿绕过。
+本轮无未解决Important或实施阻塞。实测精度和真实残差训练未完成：两份CSV缺独立位置、接收时间及海流元数据，训练重叠未知。CFD/视觉不在范围。scratch清理曾被拦截，保留忽略目录不绕过。
 
 ## 下一步
-完成Task5：提交追加修复，重新全量验收及报告，保存最终裁决/证据和确认规则并提交；不要重做Task1–4或重派审核。
+等待用户审阅验收证据，明确独立真值与航次清单后才能授权后续算法训练；不自动合并/推送或复做本轮修复。
 
 ## 关键文件
 - `docs/superpowers/plans/2026-10-08-forecast-p2-repair.md`
-- `.superpowers/sdd/2026-10-08-forecast-p2-repair/progress.md`
 - `docs/audits/2026-10-08-prediction-p2-repair.md`
-- `docs/audits/2026-10-08-prediction-validation-independent-review.md`
+- `docs/audits/2026-10-08-prediction-p2-final-review.md`
 - `DECISIONS.md`
+- `Builds/UnderwaterGliderTwin/UnderwaterGliderTwin.exe`

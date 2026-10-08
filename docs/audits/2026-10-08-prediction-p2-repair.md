@@ -25,7 +25,9 @@ Averroes只读审核发现3项Important、无Critical/Minor；原始裁决见 `2
 | F2 显式仿真无branch仍评分 | `test_csv_explicit_simulation_grade_requires_branch_column`、`test_direct_simulation_truth_without_branch_identity_cannot_score`失败后通过，57/57；导入和直接评分入口均拒绝缺身份的显式仿真数据 |
 | F3 默认仿真等级覆盖明确导航 | `test_explicit_navigation_truth_can_score_foreign_branch_under_simulation_default`失败后通过，58/58；navigation_reference在两种默认等级下均可跨branch评分，明确仿真仍隔离 |
 
-8dbf130之后的五项验收及报告重生成正在执行，最终功能验收裁决尚未发布。该裁决由实现者依据回归作出，不宣称审核人再次批准或独立运行验收。
+8dbf130之后在eed3fef上重新执行五项验收：Python58/58、EditMode525/525、PlayMode21/21，Windows构建成功，默认Player烟测Exit=0/source=simulation、PNG存在。日志 `TestResults/DefaultSimulation-8a58ee4471cd43e08647cb563888c6f4.log`；Edit时间12:48:57Z–12:49:21Z，Play12:49:31Z–12:49:39Z；构建日志 `TestResults/WindowsBuild.log`明确Result: Success。
+
+最终裁决：本轮R1–R5及追加F1–F3的功能修复验收通过，计划五任务完成。所有新缺陷都有先失败后通过证据，一次集中修复后的全量套件全绿；旧报告保留历史范围。裁决由实现者依据回归作出，不宣称审核人再次批准或独立运行验收。提交后保留隔离分支/工作树，不自动合并或推送，不代表独立实测精度验收。
 
 ## 重新生成的交付
 
@@ -67,4 +69,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-player-default-
 
 独立实测精度、真实残差训练和部署模型替换仍未完成；成功功能回归不能替代独立位置真值。原复审报告保留为历史发现证据，后续裁决以本轮修复与验收记录为准。
 本轮修复前包保留 `Builds/UnderwaterGliderTwin.pre-p2-20261008`，Runtime.dll SHA-256 `8B3742A89099B72CF0071235ECFE7D6B415103484F13E9F053F00A00C5E72C5B`；原更早包 `Builds/UnderwaterGliderTwin.pre-prediction-20261008`亦保留。
-fd52c1a构建的新包 Runtime.dll SHA-256 `52AB98AE15F37216C9FDA177ACEC3144CCA19DDC1792E2A415ECFB63CDFF13F1`；运行包目录 `Builds/UnderwaterGliderTwin`。
+eed3fef重新构建的新包 Runtime.dll SHA-256 `52AB98AE15F37216C9FDA177ACEC3144CCA19DDC1792E2A415ECFB63CDFF13F1`；与fd52c1a相同，因为追加修复仅修改Python而非Unity实现。运行包目录 `Builds/UnderwaterGliderTwin`。两份JSONL均核对当前validate_forecasts.py代码hash；导航12/387、合成64/2064，两次CLI退出码0。`git diff 0b9df2a -- Models`为空，场景没有本轮遗留改动。
