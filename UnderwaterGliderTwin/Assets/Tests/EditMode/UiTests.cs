@@ -1554,6 +1554,22 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void StatusPanelView_PublishedButUnscoredForecastShowsDashesNotNaNOrConfidence()
+        {
+            var playback = CreatePlayback(Frames(2));
+            var prediction = new GameObject("Prediction").AddComponent<PredictionController>();
+            typeof(PredictionController).GetProperty("CurrentSnapshot").SetValue(prediction,
+                new PredictionSnapshot(Vector3.zero, new[] { Vector3.zero, Vector3.one },
+                    System.Array.Empty<Vector3>(), float.NaN, float.NaN, float.NaN, float.NaN,
+                    float.NaN, 0, 1, "awaiting observations", 5f));
+            var panel = new GameObject("Status").AddComponent<StatusPanelView>();
+            panel.Initialize(playback, new AlarmEvaluator(1000f, 1f, 90f), null, prediction);
+            foreach (var name in new[] { "DriftValue", "RmseValue", "MaeValue", "ConfidenceValue" })
+                Assert.That(FindText(name).text, Is.EqualTo("—"), name);
+            Assert.That(FindText("PredictionTimeValue").text, Is.EqualTo("5.00 ms"));
+        }
+
+        [Test]
         public void StatusPanelView_LiveMotionFollowsFractionalPlaybackAndKeepsUnavailableDiagnosticsExplicit()
         {
             var playback = CreatePlayback(Frames(2));

@@ -69,6 +69,24 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(error, Does.Contain("fake load failed"));
         }
 
+        [Test]
+        public void Controller_RepeatedSeekPreservesPublishedForecastIdentity()
+        {
+            var controller = CreateController(new FakePredictorFactory(succeeds: true));
+            var ledgerProperty = typeof(PredictionController).GetProperty("Ledger");
+            Assert.That(ledgerProperty, Is.Not.Null, "controller must own frozen forecast ledger");
+            var ledger = ledgerProperty.GetValue(controller);
+            var records = ledger.GetType().GetProperty("Forecasts").GetValue(ledger) as System.Collections.IList;
+            var before = records.Count;
+            var first = records[0];
+            var playback = objects[0].GetComponent<PlaybackController>();
+            playback.Seek(0f);
+            playback.Seek(0f);
+            records = ledger.GetType().GetProperty("Forecasts").GetValue(ledger) as System.Collections.IList;
+            Assert.That(records.Count, Is.EqualTo(before));
+            Assert.That(records[0], Is.SameAs(first));
+        }
+
         private PredictionController CreateController(IPredictorFactory factory)
         {
             var frames = Frames(12);

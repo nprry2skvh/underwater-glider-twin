@@ -297,12 +297,13 @@ namespace UnderwaterGliderTwin.UI
             predictionStatusValue.text = FormatPredictionStatus(snapshot);
             predictionStatusValue.color = snapshot.SampleCount > 1 ? new Color(0.74f, 0.95f, 1f) : new Color(1f, 0.72f, 0.32f);
             batteryValue.text = $"{frame.BatteryPercent:0} %";
-            var hasPredictionMetrics = snapshot.SampleCount > 1;
+            var hasPredictionMetrics = snapshot.HasScoredMetrics;
             driftValue.text = hasPredictionMetrics ? $"{snapshot.CurrentErrorMeters:0.00} m" : "—";
             rmseValue.text = hasPredictionMetrics ? $"{snapshot.RmseMeters:0.00} m" : "—";
             maeValue.text = hasPredictionMetrics ? $"{snapshot.MaeMeters:0.00} m" : "—";
-            confidenceValue.text = hasPredictionMetrics ? $"{snapshot.Confidence01 * 100f:0} %" : "—";
-            predictionTimeValue.text = hasPredictionMetrics ? $"{snapshot.ComputeMilliseconds:0.00} ms" : "—";
+            confidenceValue.text = hasPredictionMetrics && !float.IsNaN(snapshot.Confidence01) && !float.IsInfinity(snapshot.Confidence01)
+                ? $"{snapshot.Confidence01 * 100f:0} %" : "—";
+            predictionTimeValue.text = snapshot.SampleCount > 1 ? $"{snapshot.ComputeMilliseconds:0.00} ms" : "—";
 
             var validation = MissionValidationEvaluator.Evaluate(
                 RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation

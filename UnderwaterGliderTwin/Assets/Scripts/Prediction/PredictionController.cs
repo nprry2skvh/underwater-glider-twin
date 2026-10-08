@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using UnderwaterGliderTwin.Bootstrap;
 using UnderwaterGliderTwin.Mapping;
 using UnderwaterGliderTwin.Playback;
@@ -18,6 +19,15 @@ namespace UnderwaterGliderTwin.Prediction
         private GeoCoordinateMapper mapper;
         private PlaybackController playback;
         private SimulationTrajectoryTimeline timeline;
+        private readonly Dictionary<string, PredictionResult> frozenResults = new Dictionary<string, PredictionResult>();
+        private readonly Dictionary<int, string> profileBranches = new Dictionary<int, string>();
+        private string branchId = "branch-0";
+        private string modelHash = "unavailable";
+        private string currentVersion = "not_provided";
+        private int branchRevision;
+        private int observedThroughIndex = -1;
+
+        public ForecastLedger Ledger { get; } = new ForecastLedger(Guid.NewGuid().ToString("N"));
 
         public event Action<PredictionSnapshot> SnapshotUpdated;
 
@@ -113,7 +123,17 @@ namespace UnderwaterGliderTwin.Prediction
 
         private void OnFramesReplaced(IReadOnlyList<TelemetryFrame> replacement, int preservedIndex)
         {
-            frames = timeline != null ? timeline.CommittedSnapshot.Frames : replacement;
+            var next = timeline != null ? timeline.CommittedSnapshot.Frames : replacement;
+            var appendOnly = next.Count >= frames.Count;
+            for (var index = 0; appendOnly && index < frames.Count; index++)
+                appendOnly = frames[index].Equals(next[index]);
+            if (!appendOnly)
+            {
+                branchId = "branch-" + (++branchRevision);
+                observedThroughIndex = Math.Min(observedThroughIndex, preservedIndex);
+                currentVersion = ForecastLineage.HashCurrent(RuntimeDataSourceState.SimulationProfile);
+            }
+            frames = next;
             Recompute(preservedIndex);
         }
 
@@ -127,6 +147,16 @@ namespace UnderwaterGliderTwin.Prediction
 
             currentIndex = Mathf.Clamp(currentIndex, 0, frames.Count - 1);
             var currentFrame = frames[currentIndex];
+            for (var index = observedThroughIndex + 1; index <= currentIndex; index++)
+            {
+                var observed = frames[index];
+                if (!profileBranches.TryGetValue(observed.ProfileSequence, out var observedBranch)) observedBranch = branchId;
+                Ledger.Observe(observed, observed.ElapsedSeconds, observedBranch,
+                    RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation,
+                    TelemetryPositionUtility.HasUsableCoordinates(observed),
+                    RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation ? "simulation_branch" : "navigation_record_unverified");
+            }
+            observedThroughIndex = Math.Max(observedThroughIndex, currentIndex);
             if (!TelemetryPositionUtility.HasUsableCoordinates(currentFrame))
             {
                 Publish(new PredictionSnapshot(Vector3.zero, Array.Empty<Vector3>(), Array.Empty<Vector3>(), 0f, 0f, 0f, 0f, 0f, currentIndex, currentIndex, "Awaiting valid telemetry position", 0f));
@@ -141,7 +171,28 @@ namespace UnderwaterGliderTwin.Prediction
                 return;
             }
 
-            var result = predictor.Predict(new PredictionContext(window.WindowFrames, mapper, window));
+            var key = branchId + ":" + ModelKind + ":" + modelHash + ":"
+                + currentFrame.ElapsedSeconds.ToString("R", CultureInfo.InvariantCulture) + ":"
+                + HorizonSeconds.ToString("R", CultureInfo.InvariantCulture);
+            if (!frozenResults.TryGetValue(key, out var result))
+            {
+                result = predictor.Predict(new PredictionContext(window.WindowFrames, mapper, window));
+                if (result == null) { Publish(PredictionSnapshot.Empty); return; }
+                var sequence = currentFrame.ProfileSequence;
+                if (timeline != null && timeline.CommittedSnapshot.Segments.Count > 0)
+                    sequence = timeline.CommittedSnapshot.Segments[timeline.CommittedSnapshot.Segments.Count - 1].ProfileSequence;
+                profileBranches[sequence] = branchId;
+                var record = Ledger.Publish(key, currentFrame, result.ForecastFrames, branchId,
+                    RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation, sequence,
+                    modelHash, ForecastLineage.HashHistory(window.WindowFrames), currentVersion,
+                    result.ForecastFrames.Length == 0 ? result.Status : string.Empty);
+                // Predictor-owned arrays cannot mutate the frozen display output later.
+                result = new PredictionResult(result.PredictorName, result.Status,
+                    (Vector3[])result.PredictedPoints.Clone(), Array.Empty<Vector3>(), result.StartIndex,
+                    result.EndIndex, result.Metrics, new List<TelemetryFrame>(record.Frames).ToArray(),
+                    (float[])result.TargetElapsedSeconds.Clone());
+                frozenResults.Add(key, result);
+            }
             Publish(ToSnapshot(mapper.Map(currentFrame), result));
         }
 
@@ -150,6 +201,8 @@ namespace UnderwaterGliderTwin.Prediction
             predictors.Clear();
             modelErrors.Clear();
             var modelRoot = RuntimePathResolver.ResolveModelsDirectory();
+            modelHash = ForecastLineage.HashModelDirectory(Path.Combine(modelRoot, "XGBoost"));
+            currentVersion = ForecastLineage.HashCurrent(RuntimeDataSourceState.SimulationProfile);
             RegisterPredictor(PredictionModelKind.XGBoost, Path.Combine(modelRoot, "XGBoost"));
         }
 
@@ -180,25 +233,37 @@ namespace UnderwaterGliderTwin.Prediction
             SnapshotUpdated?.Invoke(CurrentSnapshot);
         }
 
-        private static PredictionSnapshot ToSnapshot(Vector3 originPoint, PredictionResult result)
+        private PredictionSnapshot ToSnapshot(Vector3 originPoint, PredictionResult result)
         {
             if (result == null)
             {
                 return PredictionSnapshot.Empty;
             }
 
+            var metrics = new PredictionMetrics(float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, result.Metrics.ComputeMilliseconds);
+            var status = result.Status;
+            for (var index = Ledger.Forecasts.Count - 1; index >= 0; index--)
+            {
+                var record = Ledger.Forecasts[index];
+                if (record.ModelHash != modelHash) continue;
+                var delayed = Ledger.GetMetrics(record.ForecastId, result.Metrics.ComputeMilliseconds);
+                if (float.IsNaN(delayed.RmseMeters)) continue;
+                metrics = delayed;
+                status += "; delayed score origin " + record.Origin.ElapsedSeconds.ToString("0.0", CultureInfo.InvariantCulture);
+                break;
+            }
             return new PredictionSnapshot(
                 originPoint,
                 result.PredictedPoints,
                 result.ActualPoints,
-                result.Metrics.RmseMeters,
-                result.Metrics.MaeMeters,
-                result.Metrics.CurrentErrorMeters,
-                result.Metrics.MaximumErrorMeters,
-                result.Metrics.Confidence01,
+                metrics.RmseMeters,
+                metrics.MaeMeters,
+                metrics.CurrentErrorMeters,
+                metrics.MaximumErrorMeters,
+                float.NaN,
                 result.StartIndex,
                 result.EndIndex,
-                result.Status,
+                status,
                 result.Metrics.ComputeMilliseconds);
         }
 
