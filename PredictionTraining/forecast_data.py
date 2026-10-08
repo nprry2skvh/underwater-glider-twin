@@ -34,6 +34,7 @@ def causal_history(frame: pd.DataFrame, issued_seconds: float, window_size: int 
     history = history.sort_values(sort, kind='stable').drop_duplicates('elapsed_seconds', keep='last')
     grid = issued_seconds - np.arange(window_size - 1, -1, -1) * sample_interval_seconds
     grid = grid[grid >= float(history.elapsed_seconds.iloc[0])]
+    history['_sampled_at_seconds'] = history['elapsed_seconds'].astype(float)
     indexed = history.set_index('elapsed_seconds').replace([np.inf, -np.inf], np.nan)
     # ffill on the union includes only samples already received at issue time.
     result = indexed.reindex(indexed.index.union(grid)).sort_index().ffill().reindex(grid)

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "source_path": "E:\\upan\\digital twin\\2.csv",
+  "source_sha256": "d5f890b2004528d3cc2643fdcc7de3f9207f9443fe275cfa87ac10cff09af8da",
+  "source_kind": "navigation",
+  "row_count": 236163,
+  "continuous_segment_count": 1,
+  "verified_mission_count": null,
+  "replay_mode": "sample_time_replay",
+  "truth_grade": "navigation_record_unverified",
+  "current_provenance": "absent",
+  "split_status": "insufficient_independent_segments",
+  "eligible_for_independent_operational_acceptance": false,
+  "limitations": [
+    "receive timestamps absent; replay is ordered by sample time only",
+    "ocean-current product issue/version/valid-time metadata absent",
+    "fewer than three independent continuous segments; no final-test claim",
+    "position provenance is unverified; errors mean consistency with navigation record only"
+  ],
+  "cleaned_row_count": 38605,
+  "rejected_navigation_row_count": 197558,
+  "scoring_config": {
+    "time_tolerance_seconds": 0.5,
+    "maximum_interpolation_gap_seconds": 20.0,
+    "wait_deadline_seconds": 60.0,
+    "metric_version": "physical-local-end-v1"
+  },
+  "cleaning_max_horizontal_speed_mps": 3.0,
+  "cleaning_max_gap_seconds": 60.0,
+  "model_training_overlap": "unknown_for_previously_deployed_artifact"
+}

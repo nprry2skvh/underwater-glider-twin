@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "truth_grade": "synthetic_simulation",
+  "verified_mission_count": null,
+  "continuous_segment_count": 20,
+  "split_status": "fixed_three_way_manifest",
+  "independent_final_test": false,
+  "model_training_overlap": "unknown_for_previously_deployed_artifact",
+  "interpretation": "synthetic_functional_validation_only",
+  "methods": {
+    "constant_velocity": {
+      "attempted_count": 32,
+      "scored_count": 32,
+      "failure_count": 0,
+      "unscored_count": 0,
+      "success_rate": 1.0,
+      "prediction_success_rate": 1.0,
+      "scoring_success_rate": 1.0,
+      "failure_rate": 0.0,
+      "unscored_fraction": 0.0,
+      "horizontal_mae_m": 4.698754297687051,
+      "position_rmse_m": 13.736889448686773,
+      "prediction_region_90_coverage": null,
+      "probability_note": "not_applicable_model_does_not_emit_independently_calibrated_region",
+      "eligible_point_count": 1032,
+      "scored_point_count": 1032,
+      "missing_point_count": 0,
+      "awaiting_point_count": 0,
+      "depth_mae_m": 9.368410852713176,
+      "heading_mae_deg": 20.420251937984368,
+      "pitch_mae_deg": 31.343023255813954,
+      "roll_mae_deg": 22.722868217054263,
+      "by_horizon": {
+        "30": {
+          "scored_point_count": 24,
+          "horizontal_mae_m": 0.3681482552715467,
+          "endpoint_horizontal_mae_m": 0.5535906279140481
+        },
+        "60": {
+          "scored_point_count": 48,
+          "horizontal_mae_m": 0.5719878336213525,
+          "endpoint_horizontal_mae_m": 0.9812950761871384
+        },
+        "300": {
+          "scored_point_count": 240,
+          "horizontal_mae_m": 2.820126567795159,
+          "endpoint_horizontal_mae_m": 6.346914779533524
+        },
+        "900": {
+          "scored_point_count": 720,
+          "horizontal_mae_m": 15.034754534060145,
+          "endpoint_horizontal_mae_m": 39.42306052560835
+        }
+      }
+    },
+    "current_deployed_xgboost_with_hold_fallback": {
+      "attempted_count": 32,
+      "scored_count": 32,
+      "failure_count": 0,
+      "unscored_count": 0,
+      "success_rate": 1.0,
+      "prediction_success_rate": 1.0,
+      "scoring_success_rate": 1.0,
+      "failure_rate": 0.0,
+      "unscored_fraction": 0.0,
+      "horizontal_mae_m": 12.863666219209684,
+      "position_rmse_m": 22.65477978618039,
+      "prediction_region_90_coverage": null,
+      "probability_note": "not_applicable_model_does_not_emit_independently_calibrated_region",
+      "eligible_point_count": 1032,
+      "scored_point_count": 1032,
+      "missing_point_count": 0,
+      "awaiting_point_count": 0,
+      "depth_mae_m": 0.5424418604651168,
+      "heading_mae_deg": 0.737596899224806,
+      "pitch_mae_deg": 0.8852360891902556,
+      "roll_mae_deg": 0.529250347592348,
+      "by_horizon": {
+        "30": {
+          "scored_point_count": 24,
+          "horizontal_mae_m": 7.429431972777358,
+          "endpoint_horizontal_mae_m": 11.090888032960418
+        },
+        "60": {
+          "scored_point_count": 48,
+          "horizontal_mae_m": 7.6160494245304475,
+          "endpoint_horizontal_mae_m": 6.315730813317163
+        },
+        "300": {
+          "scored_point_count": 240,
+          "horizontal_mae_m": 8.804252383218587,
+          "endpoint_horizontal_mae_m": 14.491225828321262
+        },
+        "900": {
+          "scored_point_count": 720,
+          "horizontal_mae_m": 27.604931096312338,
+          "endpoint_horizontal_mae_m": 77.86841301924761
+        }
+      }
+    },
+    "event_driven_physics_with_current": {
+      "status": "unavailable",
+      "reason": "requires paired SimulationStateSnapshot/profile or equivalent observed state"
+    },
+    "physics_plus_residual_candidate": {
+      "status": "not_trained",
+      "reason": "requires paired frozen physical baseline residuals and three-way data manifest"
+    }
+  },
+  "run_id": "synthetic-20261008",
+  "evaluated_partition": "final_test",
+  "evaluated_segment_count": 4,
+  "scoring_config": {
+    "time_tolerance_seconds": 0.5,
+    "maximum_interpolation_gap_seconds": 20.0,
+    "wait_deadline_seconds": 60.0,
+    "metric_version": "physical-local-end-v1"
+  }
+}

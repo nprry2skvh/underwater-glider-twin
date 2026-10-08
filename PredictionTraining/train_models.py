@@ -234,6 +234,8 @@ def load_frame_table(csv_path: Path) -> pd.DataFrame:
     frame = pd.DataFrame()
     for name, index in CSV_COLUMNS.items():
         frame[name] = raw.iloc[:, index]
+    if "received_seconds" in raw.columns:
+        frame["received_seconds"] = pd.to_numeric(raw["received_seconds"], errors="coerce")
 
     for name in frame.columns:
         if name not in {"raw_time", "work_mode", "run_state"}:
@@ -244,7 +246,10 @@ def load_frame_table(csv_path: Path) -> pd.DataFrame:
     frame = frame.dropna(subset=["longitude_deg", "latitude_deg", "depth_m", "heading_deg", "pitch_deg", "roll_deg", "elapsed_seconds"])
     frame = frame[(frame["longitude_deg"].abs() > 0.01) & (frame["latitude_deg"].abs() > 0.01)].reset_index(drop=True)
     frame = add_derived_features(frame)
-    frame = frame.ffill()
+    # With receipt metadata, only causal_history may fill values after filtering
+    # availability. Filling here could copy a late row into an on-time row.
+    if "received_seconds" not in frame:
+        frame = frame.ffill()
     return frame
 
 
