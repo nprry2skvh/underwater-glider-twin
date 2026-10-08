@@ -501,7 +501,11 @@ namespace UnderwaterGliderTwin.Tests
 
             model.ReplaceFrames(replacement, model.CurrentIndex);
 
-            Assert.That(predictor.LastFrames, Is.SameAs(replacement));
+            Assert.That(predictor.LastFrames, Has.Count.EqualTo(8), "unseen replacement future cannot enter inference");
+            Assert.That(predictor.LastFrames[7].ElapsedSeconds, Is.EqualTo(original[7].ElapsedSeconds));
+            controller.Seek(1f);
+            Assert.That(predictor.LastFrames, Has.Count.EqualTo(10));
+            Assert.That(predictor.LastFrames[9].ElapsedSeconds, Is.EqualTo(replacement[9].ElapsedSeconds));
             UnityEngine.Object.DestroyImmediate(prediction.gameObject);
             UnityEngine.Object.DestroyImmediate(controller.gameObject);
         }

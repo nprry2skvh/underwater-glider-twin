@@ -13,7 +13,7 @@ namespace UnderwaterGliderTwin.Prediction
 
         public static void SetHorizonSeconds(float seconds)
         {
-            HorizonSeconds = UnityEngine.Mathf.Clamp(seconds, 30f, 7200f);
+            HorizonSeconds = seconds;
         }
 
         public static void SetEnabled(bool enabled)

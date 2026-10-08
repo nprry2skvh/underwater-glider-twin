@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnderwaterGliderTwin.Telemetry;
 
 namespace UnderwaterGliderTwin.Prediction
 {
@@ -11,7 +12,9 @@ namespace UnderwaterGliderTwin.Prediction
             Vector3[] actualPoints,
             int startIndex,
             int endIndex,
-            PredictionMetrics metrics)
+            PredictionMetrics metrics,
+            TelemetryFrame[] forecastFrames = null,
+            float[] targetElapsedSeconds = null)
         {
             PredictorName = predictorName ?? string.Empty;
             Status = status ?? string.Empty;
@@ -20,6 +23,8 @@ namespace UnderwaterGliderTwin.Prediction
             StartIndex = startIndex;
             EndIndex = endIndex;
             Metrics = metrics;
+            ForecastFrames = forecastFrames ?? System.Array.Empty<TelemetryFrame>();
+            TargetElapsedSeconds = targetElapsedSeconds ?? System.Array.Empty<float>();
         }
 
         public string PredictorName { get; }
@@ -29,5 +34,7 @@ namespace UnderwaterGliderTwin.Prediction
         public int StartIndex { get; }
         public int EndIndex { get; }
         public PredictionMetrics Metrics { get; }
+        public TelemetryFrame[] ForecastFrames { get; }
+        public float[] TargetElapsedSeconds { get; }
     }
 }

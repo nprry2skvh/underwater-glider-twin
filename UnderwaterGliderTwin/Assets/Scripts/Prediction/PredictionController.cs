@@ -80,7 +80,7 @@ namespace UnderwaterGliderTwin.Prediction
 
         public void SetHorizonSeconds(float seconds)
         {
-            HorizonSeconds = Mathf.Clamp(seconds, 30f, 7200f);
+            HorizonSeconds = seconds;
             RuntimePredictionState.SetHorizonSeconds(HorizonSeconds);
             Recompute(playback != null ? playback.Model.CurrentIndex : 0);
         }
@@ -133,14 +133,7 @@ namespace UnderwaterGliderTwin.Prediction
                 return;
             }
 
-            var averageDeltaSeconds = EstimateAverageDeltaSeconds(currentIndex);
-            var horizonPoints = Mathf.Max(10, Mathf.RoundToInt(HorizonSeconds / Mathf.Max(averageDeltaSeconds, 1f)));
-            var window = PredictionWindowBuilder.Build(frames, new PredictionRequest(currentIndex, DefaultWindowSize, horizonPoints, HorizonSeconds));
-            if (window.FutureFrames.Count == 0)
-            {
-                Publish(new PredictionSnapshot(mapper.Map(currentFrame), Array.Empty<Vector3>(), Array.Empty<Vector3>(), 0f, 0f, 0f, 0f, 0f, currentIndex, currentIndex, "Prediction window exhausted", 0f));
-                return;
-            }
+            var window = PredictionWindowBuilder.BuildForecast(frames, new PredictionRequest(currentIndex, DefaultWindowSize, 90, HorizonSeconds));
 
             if (!predictors.TryGetValue(ModelKind, out var predictor))
             {
@@ -148,7 +141,7 @@ namespace UnderwaterGliderTwin.Prediction
                 return;
             }
 
-            var result = predictor.Predict(new PredictionContext(frames, mapper, window));
+            var result = predictor.Predict(new PredictionContext(window.WindowFrames, mapper, window));
             Publish(ToSnapshot(mapper.Map(currentFrame), result));
         }
 
