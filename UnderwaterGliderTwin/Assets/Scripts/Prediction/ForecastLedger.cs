@@ -47,7 +47,8 @@ namespace UnderwaterGliderTwin.Prediction
                 lastTime = point.ElapsedSeconds;
             }
             var record = new FrozenForecast(RunId, requestKey, origin, predicted, branchId, isSimulation,
-                profileSequence, modelHash, inputDigest, currentVersion, failure);
+                profileSequence, modelHash, inputDigest, currentVersion, failure,
+                TimeToleranceSeconds, MaximumInterpolationGapSeconds, WaitDeadlineSeconds);
             requests.Add(requestKey, record);
             forecasts.Add(record);
             return record;
@@ -56,6 +57,10 @@ namespace UnderwaterGliderTwin.Prediction
         public bool TryGet(string requestKey, out FrozenForecast forecast) => requests.TryGetValue(requestKey, out forecast);
 
         public PredictionMetrics GetMetrics(string forecastId, float computeMilliseconds)
+            => GetMetricsThrough(forecastId, computeMilliseconds, float.PositiveInfinity);
+
+        public PredictionMetrics GetMetricsThrough(string forecastId, float computeMilliseconds,
+            float throughTargetSeconds)
         {
             var count = 0;
             var square = 0d;
@@ -64,7 +69,8 @@ namespace UnderwaterGliderTwin.Prediction
             var maximum = 0d;
             foreach (var score in scores)
             {
-                if (score.ForecastId != forecastId || score.Status != "scored") continue;
+                if (score.ForecastId != forecastId || score.Status != "scored"
+                    || score.TargetElapsedSeconds > throughTargetSeconds) continue;
                 if (count == 0) first = score.PositionErrorMeters;
                 count++;
                 square += score.PositionErrorMeters * score.PositionErrorMeters;

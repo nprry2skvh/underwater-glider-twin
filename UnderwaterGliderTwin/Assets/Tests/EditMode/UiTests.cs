@@ -1539,6 +1539,23 @@ namespace UnderwaterGliderTwin.Tests
             Assert.That(FindText("AlarmValue").text, Is.EqualTo("运行正常"));
         }
 
+        [TestCase("45")]
+        [TestCase("7200")]
+        public void DataInputView_UnsupportedPredictionHorizonPreservesPreviousSetting(string value)
+        {
+            var previous = RuntimePredictionState.HorizonSeconds;
+            try
+            {
+                RuntimePredictionState.SetHorizonSeconds(60f);
+                var view = new GameObject("DataInput").AddComponent<DataInputView>();
+                view.Initialize(CreateTempCsv(), SimulationProfile.Default, null);
+                GameObject.Find("PredictionHorizonInput").GetComponent<InputField>().text = value;
+                GameObject.Find("ApplyPredictionConfigButton").GetComponent<Button>().onClick.Invoke();
+                Assert.That(RuntimePredictionState.HorizonSeconds, Is.EqualTo(60f));
+            }
+            finally { RuntimePredictionState.SetHorizonSeconds(previous); }
+        }
+
         [Test]
         public void StatusPanelView_ShowsUnavailablePredictionMetricsWithoutFalseZeroes()
         {

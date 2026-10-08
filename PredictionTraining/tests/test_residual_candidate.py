@@ -73,6 +73,15 @@ class ResidualCandidateTests(unittest.TestCase):
             report = self.api().train_candidate(pd.DataFrame(), {}, Path(directory), ['speed_mps'])
             self.assertEqual(report['status'], 'not_trained')
 
+    def test_missing_final_test_labels_cannot_block_or_alter_candidate_fitting(self):
+        rows, manifest = self.fixtures()
+        changed = rows.copy()
+        changed.loc[changed.partition == 'final_test', 'actual_east_m'] = float('nan')
+        with tempfile.TemporaryDirectory() as directory:
+            first = self.api().train_candidate(rows, manifest, Path(directory) / 'one', ['speed_mps'])
+            second = self.api().train_candidate(changed, manifest, Path(directory) / 'two', ['speed_mps'])
+            self.assertEqual(first, second)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -47,8 +47,10 @@ def _validate(rows: pd.DataFrame, manifest: dict, features: list[str]) -> None:
                 row.target_elapsed_seconds <= row.origin_elapsed_seconds or
                 row.horizon_seconds != row.target_elapsed_seconds - row.origin_elapsed_seconds):
             raise ValueError('history/target crosses partition boundary or has inconsistent time axis')
-    columns = features + ['physics_' + name for name in OUTPUTS] + ['actual_' + name for name in OUTPUTS]
-    if not np.isfinite(rows[columns].to_numpy(dtype=float)).all():
+    columns = features + ['physics_' + name for name in OUTPUTS]
+    fit_rows = rows[rows.partition.isin(('train', 'development'))]
+    if (not np.isfinite(rows[columns].to_numpy(dtype=float)).all() or
+            not np.isfinite(fit_rows[['actual_' + name for name in OUTPUTS]].to_numpy(dtype=float)).all()):
         raise ValueError('paired features and labels must be finite')
 
 

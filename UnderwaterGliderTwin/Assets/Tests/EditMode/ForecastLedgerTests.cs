@@ -54,6 +54,17 @@ namespace UnderwaterGliderTwin.Tests
         }
 
         [Test]
+        public void FrozenRecordRetainsNondefaultScoringConfigurationAndInputMode()
+        {
+            var ledger = new ForecastLedger("custom", 1f, 15f, 120f);
+            var record = Publish(ledger, "custom", new[] { Point(30f) });
+            Assert.That(Value<float>(record, "TimeToleranceSeconds"), Is.EqualTo(1f));
+            Assert.That(Value<float>(record, "MaximumInterpolationGapSeconds"), Is.EqualTo(15f));
+            Assert.That(Value<float>(record, "WaitDeadlineSeconds"), Is.EqualTo(120f));
+            Assert.That(Value<string>(record, "InputMode"), Is.EqualTo("sample_time_replay"));
+        }
+
+        [Test]
         public void RepeatedObservationScoresOnlyOnceInPhysicalMetersWithWrappedAngles()
         {
             var ledger = Ledger();

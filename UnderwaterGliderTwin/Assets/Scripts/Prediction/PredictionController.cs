@@ -21,6 +21,7 @@ namespace UnderwaterGliderTwin.Prediction
         private SimulationTrajectoryTimeline timeline;
         private readonly Dictionary<string, PredictionResult> frozenResults = new Dictionary<string, PredictionResult>();
         private readonly Dictionary<int, string> profileBranches = new Dictionary<int, string>();
+        private readonly List<ForecastBranch> branchStarts = new List<ForecastBranch>();
         private string branchId = "branch-0";
         private string modelHash = "unavailable";
         private string currentVersion = "not_provided";
@@ -131,7 +132,15 @@ namespace UnderwaterGliderTwin.Prediction
             {
                 branchId = "branch-" + (++branchRevision);
                 observedThroughIndex = Math.Min(observedThroughIndex, preservedIndex);
-                currentVersion = ForecastLineage.HashCurrent(RuntimeDataSourceState.SimulationProfile);
+                var sequence = next[Math.Min(preservedIndex + 1, next.Count - 1)].ProfileSequence;
+                var profile = timeline != null && timeline.CommittedSnapshot.Segments.Count > 0
+                    ? timeline.CommittedSnapshot.Segments[timeline.CommittedSnapshot.Segments.Count - 1].Profile
+                    : RuntimeDataSourceState.SimulationProfile;
+                currentVersion = ForecastLineage.HashCurrent(profile);
+                var startRow = next[preservedIndex].RowIndex;
+                branchStarts.RemoveAll(branch => branch.StartRow >= startRow);
+                branchStarts.Add(new ForecastBranch(startRow, branchId, sequence, currentVersion));
+                profileBranches[sequence] = branchId;
             }
             frames = next;
             Recompute(preservedIndex);
@@ -139,7 +148,7 @@ namespace UnderwaterGliderTwin.Prediction
 
         private void Recompute(int currentIndex)
         {
-            if (!PredictionEnabled || frames == null || mapper == null || playback == null || frames.Count < 3)
+            if (frames == null || mapper == null || playback == null || frames.Count == 0)
             {
                 Publish(PredictionSnapshot.Empty);
                 return;
@@ -157,6 +166,11 @@ namespace UnderwaterGliderTwin.Prediction
                     RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation ? "simulation_branch" : "navigation_record_unverified");
             }
             observedThroughIndex = Math.Max(observedThroughIndex, currentIndex);
+            if (!PredictionEnabled || frames.Count < 3)
+            {
+                Publish(PredictionSnapshot.Empty);
+                return;
+            }
             if (!TelemetryPositionUtility.HasUsableCoordinates(currentFrame))
             {
                 Publish(new PredictionSnapshot(Vector3.zero, Array.Empty<Vector3>(), Array.Empty<Vector3>(), 0f, 0f, 0f, 0f, 0f, currentIndex, currentIndex, "Awaiting valid telemetry position", 0f));
@@ -171,21 +185,35 @@ namespace UnderwaterGliderTwin.Prediction
                 return;
             }
 
-            var key = branchId + ":" + ModelKind + ":" + modelHash + ":"
+            var issueBranch = branchStarts[0];
+            foreach (var branch in branchStarts)
+                if (branch.StartRow <= currentFrame.RowIndex) issueBranch = branch;
+            var key = issueBranch.Id + ":" + ModelKind + ":" + modelHash + ":"
                 + currentFrame.ElapsedSeconds.ToString("R", CultureInfo.InvariantCulture) + ":"
                 + HorizonSeconds.ToString("R", CultureInfo.InvariantCulture);
             if (!frozenResults.TryGetValue(key, out var result))
             {
-                result = predictor.Predict(new PredictionContext(window.WindowFrames, mapper, window));
-                if (result == null) { Publish(PredictionSnapshot.Empty); return; }
-                var sequence = currentFrame.ProfileSequence;
-                if (timeline != null && timeline.CommittedSnapshot.Segments.Count > 0)
-                    sequence = timeline.CommittedSnapshot.Segments[timeline.CommittedSnapshot.Segments.Count - 1].ProfileSequence;
-                profileBranches[sequence] = branchId;
-                var record = Ledger.Publish(key, currentFrame, result.ForecastFrames, branchId,
-                    RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation, sequence,
-                    modelHash, ForecastLineage.HashHistory(window.WindowFrames), currentVersion,
-                    result.ForecastFrames.Length == 0 ? result.Status : string.Empty);
+                FrozenForecast record;
+                var digest = ForecastLineage.HashHistory(window.WindowFrames);
+                try
+                {
+                    result = predictor.Predict(new PredictionContext(window.WindowFrames, mapper, window));
+                    if (result == null) throw new InvalidOperationException("Predictor returned no result");
+                    record = Ledger.Publish(key, currentFrame, result.ForecastFrames, issueBranch.Id,
+                        RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation, issueBranch.Sequence,
+                        modelHash, digest, issueBranch.CurrentVersion,
+                        result.ForecastFrames.Length == 0 ? result.Status : string.Empty);
+                }
+                catch (Exception exception)
+                {
+                    var failure = "Prediction failed: " + exception.Message;
+                    record = Ledger.Publish(key, currentFrame, Array.Empty<TelemetryFrame>(), issueBranch.Id,
+                        RuntimeDataSourceState.CurrentMode == RuntimeDataSourceMode.Simulation, issueBranch.Sequence,
+                        modelHash, digest, issueBranch.CurrentVersion, failure);
+                    result = new PredictionResult(predictor.GetName(), failure, Array.Empty<Vector3>(),
+                        Array.Empty<Vector3>(), currentIndex, currentIndex,
+                        new PredictionMetrics(float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, 0f));
+                }
                 // Predictor-owned arrays cannot mutate the frozen display output later.
                 result = new PredictionResult(result.PredictorName, result.Status,
                     (Vector3[])result.PredictedPoints.Clone(), Array.Empty<Vector3>(), result.StartIndex,
@@ -193,7 +221,7 @@ namespace UnderwaterGliderTwin.Prediction
                     (float[])result.TargetElapsedSeconds.Clone());
                 frozenResults.Add(key, result);
             }
-            Publish(ToSnapshot(mapper.Map(currentFrame), result));
+            Publish(ToSnapshot(mapper.Map(currentFrame), result, issueBranch.Id, currentFrame.ElapsedSeconds));
         }
 
         private void BuildPredictorRegistry()
@@ -203,6 +231,8 @@ namespace UnderwaterGliderTwin.Prediction
             var modelRoot = RuntimePathResolver.ResolveModelsDirectory();
             modelHash = ForecastLineage.HashModelDirectory(Path.Combine(modelRoot, "XGBoost"));
             currentVersion = ForecastLineage.HashCurrent(RuntimeDataSourceState.SimulationProfile);
+            profileBranches[frames[0].ProfileSequence] = branchId;
+            branchStarts.Add(new ForecastBranch(frames[0].RowIndex, branchId, frames[0].ProfileSequence, currentVersion));
             RegisterPredictor(PredictionModelKind.XGBoost, Path.Combine(modelRoot, "XGBoost"));
         }
 
@@ -233,7 +263,7 @@ namespace UnderwaterGliderTwin.Prediction
             SnapshotUpdated?.Invoke(CurrentSnapshot);
         }
 
-        private PredictionSnapshot ToSnapshot(Vector3 originPoint, PredictionResult result)
+        private PredictionSnapshot ToSnapshot(Vector3 originPoint, PredictionResult result, string issueBranch, float now)
         {
             if (result == null)
             {
@@ -245,8 +275,10 @@ namespace UnderwaterGliderTwin.Prediction
             for (var index = Ledger.Forecasts.Count - 1; index >= 0; index--)
             {
                 var record = Ledger.Forecasts[index];
-                if (record.ModelHash != modelHash) continue;
-                var delayed = Ledger.GetMetrics(record.ForecastId, result.Metrics.ComputeMilliseconds);
+                if (record.ModelHash != modelHash || record.BranchId != issueBranch
+                    || record.Origin.ElapsedSeconds > now || record.Frames.Count == 0
+                    || record.Frames[record.Frames.Count - 1].ElapsedSeconds - record.Origin.ElapsedSeconds != HorizonSeconds) continue;
+                var delayed = Ledger.GetMetricsThrough(record.ForecastId, result.Metrics.ComputeMilliseconds, now);
                 if (float.IsNaN(delayed.RmseMeters)) continue;
                 metrics = delayed;
                 status += "; delayed score origin " + record.Origin.ElapsedSeconds.ToString("0.0", CultureInfo.InvariantCulture);
@@ -278,6 +310,16 @@ namespace UnderwaterGliderTwin.Prediction
             }
 
             return samples > 0 ? seconds / samples : 1f;
+        }
+
+        private readonly struct ForecastBranch
+        {
+            public ForecastBranch(int row, string id, int sequence, string current)
+            { StartRow = row; Id = id; Sequence = sequence; CurrentVersion = current; }
+            public int StartRow { get; }
+            public string Id { get; }
+            public int Sequence { get; }
+            public string CurrentVersion { get; }
         }
     }
 }

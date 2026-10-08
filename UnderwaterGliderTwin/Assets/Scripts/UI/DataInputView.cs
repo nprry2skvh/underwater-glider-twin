@@ -476,6 +476,11 @@ namespace UnderwaterGliderTwin.UI
             {
                 return;
             }
+            if (!PredictionWindow.IsSupportedHorizon(horizonSeconds))
+            {
+                SetStatus("预测时域仅支持 30、60、300、900 秒", new Color(1f, 0.58f, 0.58f));
+                return;
+            }
 
             RuntimePredictionState.SetHorizonSeconds(horizonSeconds);
             predictionController?.SetHorizonSeconds(horizonSeconds);
