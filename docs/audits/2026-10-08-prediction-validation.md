@@ -95,3 +95,5 @@ JSONL 使用 UTF-8、严格有限数值；缺失误差为 null。工程默认时
 仅在隔离分支提交，不合并/推送；部署 Models 与动力学默认值保持不变。上一运行包已保存在 `Builds/UnderwaterGliderTwin.pre-prediction-20261008`，新包发布在 `Builds/UnderwaterGliderTwin`。
 
 保存版本的 `UnderwaterGliderTwin.Runtime.dll` SHA-256 为 `AD725B0771C167AD529618BDFFF7F459BDC383239875C277E0458FEA971088E5`，最终新包为 `8B3742A89099B72CF0071235ECFE7D6B415103484F13E9F053F00A00C5E72C5B`。可用该 DLL 确认运行时版本，不能用相同的 Unity launcher exe hash 判定功能未更新。
+
+收尾清理：执行环境拒绝删除本计划临时目录 `.superpowers/sdd/2026-10-08-causal-forecast-validation/`，因此保留已忽略的验收日志、brief及ledger；未绕过限制。代码、已提交证据、工作树和新旧运行包均保留，此项不影响实现或验收结果。
